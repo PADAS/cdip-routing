@@ -8,10 +8,9 @@ from fastapi import Depends
 from fastapi import FastAPI
 from google.cloud import pubsub_v1
 
-import core
 import settings
-import utils
-from core import utils
+from core.utils import get_redis_db
+from transform_service.services import get_all_outbound_configs_for_id, transform_observation
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
 
@@ -43,13 +42,13 @@ app = FastAPI()
 
 @app.post("/streaming/position", status_code=201)
 async def transform_data(position: schemas.Position,
-                         db: walrus.Database = Depends(core.utils.get_redis_db)):
+                         db: walrus.Database = Depends(get_redis_db)):
 
     int_id = position.integration_id
-    destinations = utils.get_all_outbound_configs_for_id(db, int_id)
+    destinations = get_all_outbound_configs_for_id(db, int_id)
 
     for destination in destinations:
-        transformed_position = utils.process(schemas.StreamPrefixEnum.position, destination, position)
+        transformed_position = transform_observation(schemas.StreamPrefixEnum.position, destination, position)
         print(transformed_position)
         msg = Message(data=json.dumps(transformed_position),
                       attributes={'observation_type': schemas.StreamPrefixEnum.position.value,

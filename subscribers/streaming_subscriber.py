@@ -3,10 +3,9 @@ import logging
 import os
 import sys
 
-import requests
-from cdip_connector.core import schemas
 from google.cloud import pubsub_v1
 
+import services
 import settings
 
 logger = logging.getLogger(__name__)
@@ -15,24 +14,9 @@ logger = logging.getLogger(__name__)
 def callback(message):
     try:
         observation_type = message.attributes['observation_type']
-        # send message to transform service and wait for reply
         observation = json.loads(message.data.decode('utf8'))
-        print(f"Received observation: {observation}")
-        if observation_type == schemas.StreamPrefixEnum.position:
-            response = requests.post(settings.TRANSFORM_SERVICE_POSITIONS_ENDPOINT, json=observation)
-        else:
-            logger.warning(f'Observation: {observation} type: {observation_type} is not supported')
-            # TODO how to handle unsupported observation types
-            message.ack()
-        if response.ok:
-            print(f"message {message.message_id} ack'd")
-            message.ack()
-        else:
-            # TODO how to handle bad Transform Service responses ?
-            logger.error(f"Transform Service Error response: {response} "
-                         f"while processing: {message.message_id} "
-                         f"observation: {observation}")
-            message.ack()
+        services.post_message_to_transform_service(observation_type, observation, message.message_id)
+        message.ack()
     except:
         # TODO how to handle exceptions ?
         e = sys.exc_info()[0]
@@ -63,4 +47,5 @@ def execute():
 
 
 if __name__ == "__main__":
+    sys.path.append('code')
     execute()

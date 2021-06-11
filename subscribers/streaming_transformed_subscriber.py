@@ -6,8 +6,8 @@ import sys
 from cdip_connector.core import schemas
 from google.cloud import pubsub_v1
 
+import services
 import settings
-import utils
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ def callback(message):
         observation = json.loads(message.data.decode('utf8'))
         observation_type = schemas.StreamPrefixEnum(message.attributes['observation_type'])
         outbound_config_id = message.attributes['outbound_config_id']
-        utils.dispatch_transformed_observation(observation_type, outbound_config_id, observation)
+        services.dispatch_transformed_observation(observation_type, outbound_config_id, observation)
         message.ack()
     except:
         # TODO how to handle exceptions ?
