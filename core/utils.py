@@ -2,6 +2,7 @@ import logging
 from typing import Dict
 
 import requests
+from hashlib import md5
 import walrus
 from cdip_connector.core import schemas
 
@@ -14,6 +15,11 @@ def get_redis_db():
     return walrus.Database(host=settings.REDIS_HOST,
                            port=settings.REDIS_PORT,
                            db=settings.REDIS_DB)
+
+
+def create_cache_key(hashable_string):
+    return md5(str(hashable_string).encode('utf-8')).hexdigest()
+
 
 def get_access_token(token_url: str,
                      client_id: str,

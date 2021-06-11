@@ -1,7 +1,5 @@
 import json
 import logging
-import sys
-from hashlib import md5
 from uuid import UUID
 
 import requests
@@ -9,17 +7,13 @@ from cdip_connector.core import schemas
 from requests import HTTPError
 
 import settings
-from core.utils import get_auth_header, get_redis_db
+from core.utils import get_auth_header, get_redis_db, create_cache_key
 
 logger = logging.getLogger(__name__)
 
 
 class DispatcherNotFound(Exception):
     pass
-
-
-def create_outbound_config_cache_key(endpoint):
-    return md5(str(endpoint).encode('utf-8')).hexdigest()
 
 
 def post_message_to_transform_service(observation_type, observation, message_id):
@@ -37,25 +31,23 @@ def post_message_to_transform_service(observation_type, observation, message_id)
 
 
 def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfiguration:
+
     outbound_integrations_endpoint = f'{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}'
-    headers = get_auth_header()
-    try:
-        outboundconfig_detail_cache_db = get_redis_db()
-        stream_key = create_outbound_config_cache_key(outbound_integrations_endpoint)
-        resp_json_bytes = outboundconfig_detail_cache_db.get(stream_key)
-    except:
-        e = sys.exc_info()[0]
-        logger.exception(f'exception: {e} occurred while interacting with REDIS')
+    cache_key = create_cache_key(outbound_integrations_endpoint)
+    cdip_portal_api_cache_db = get_redis_db()
+    resp_json_bytes = cdip_portal_api_cache_db.get(cache_key)
+
     if resp_json_bytes:
         resp_json_str = resp_json_bytes.decode('utf-8')
     else:
         try:
+            headers = get_auth_header()
             resp = requests.get(url=outbound_integrations_endpoint,
                                 headers=headers)
             resp.raise_for_status()
             resp_json = resp.json()
             resp_json_str = json.dumps(resp_json)
-            outboundconfig_detail_cache_db.setex(stream_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
+            cdip_portal_api_cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
         except HTTPError:
             logger.error(f"Bad response from portal API {resp} obtaining configuration detail for id: {outbound_id}")
     if resp_json_str:
