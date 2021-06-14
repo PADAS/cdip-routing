@@ -40,8 +40,7 @@ class GoogleSubscriber(Subscriber):
                 print(f"subscribing cancelled")
 
     def callback(self, message):
-        message.ack()
-        # raise NotImplementedError
+        raise NotImplementedError
 
 
 class GooglePublisher(Publisher):
