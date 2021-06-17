@@ -23,13 +23,19 @@ Pip install -r requirements.txt
 * Ensure REDIS instance is running and configurations set correctly
 * Ensure Portal API instance is running and configurations set correctly
 
-### Running Subscribers
+### Running Google PubSub Subscribers
 ```bash
 PYTHONPATH=$(pwd)  python3 subscribers/streaming_subscriber.py
 PYTHONPATH=$(pwd)  python3 subscribers/streaming_transformed_subscriber.py
 ```
 
-### Running Transform Service
+### Running Google PubSub Transform Service
 ```bash
 uvicorn transform_service.main:app --port=8200 --reload
 ```
+
+### Running Kafka Subscribers
+```bash
+faust -A subscribers.kafka_subscriber worker -l info
+```
+
