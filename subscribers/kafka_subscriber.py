@@ -4,12 +4,27 @@ import sys
 
 import faust
 from cdip_connector.core import schemas
+from enum import Enum
 
 from core.utils import get_redis_db
 from subscribers.services import dispatch_transformed_observation
 from transform_service.services import get_all_outbound_configs_for_id, transform_observation
 
 logger = logging.getLogger(__name__)
+
+APP_NAME = 'sintegrate'
+
+
+# Todo: refactor this class into module that both sensors and routing can reference
+class TopicEnum(str, Enum):
+    positions_unprocessed = f'{APP_NAME}.positions.unprocessed'
+    positions_transformed = f'{APP_NAME}.positions.transformed'
+    geoevent_unprocessed = f'{APP_NAME}.geoevent.unprocessed'
+    geoevent_transformed = f'{APP_NAME}.geoevent.transformed'
+    message_unprocessed = f'{APP_NAME}.message.unprocessed'
+    message_transformed = f'{APP_NAME}.message.transformed'
+    cameratrap_unprocessed = f'{APP_NAME}.cameratrap.unprocessed'
+    cameratrap_transformed = f'{APP_NAME}.cameratrap.transformed'
 
 
 app = faust.App(
@@ -18,8 +33,8 @@ app = faust.App(
         value_serializer='raw',
     )
 
-streaming_topic = app.topic('streaming-topic')
-streaming_transformed_topic = app.topic('streaming-transformed-topic')
+positions_unprocessed_topic = app.topic(TopicEnum.positions_unprocessed.value)
+positions_transformed_topic = app.topic(TopicEnum.positions_transformed.value)
 
 
 def convert_observation_to_position(position):
@@ -40,7 +55,7 @@ def create_message(attributes, observation):
 
 def create_transformed_message(position, destination):
     transformed_position = transform_observation(schemas.StreamPrefixEnum.position, destination, position)
-    print(f'Transformed observation: {transformed_position}')
+    logger.debug(f'Transformed observation: {transformed_position}')
 
     attributes = {'observation_type': schemas.StreamPrefixEnum.position.value,
                   'outbound_config_id': str(destination.id)}
@@ -62,10 +77,11 @@ def extract_fields_from_message(message):
     return observation, attributes
 
 
-@app.agent(streaming_topic)
+@app.agent(positions_unprocessed_topic)
 async def process_data(streaming_data):
-    async for message in streaming_data:
+    async for key, message in streaming_data.items():
         try:
+            print(f'received unprocessed position with key: {key}')
             logger.debug(f'message received: {message}')
             observation, attributes = extract_fields_from_message(message)
             logger.debug(f'observation: {observation}')
@@ -82,19 +98,19 @@ async def process_data(streaming_data):
 
                     for destination in destinations:
                         jsonified_data = create_transformed_message(position, destination)
-                        await streaming_transformed_topic.send(value=jsonified_data)
+                        await positions_transformed_topic.send(key=key, value=jsonified_data)
         # we want to catch all exceptions and repost to a topic to avoid data loss
         except:
             e = sys.exc_info()[0]
             logger.exception(f'Exception {e} occurred processing {message}')
-            await streaming_topic.send(value=message)
+            await positions_unprocessed_topic.send(value=message)
 
 
-
-@app.agent(streaming_transformed_topic)
+@app.agent(positions_transformed_topic)
 async def process_transformed_data(streaming_transformed_data):
-    async for transformed_message in streaming_transformed_data:
+    async for key, transformed_message in streaming_transformed_data.items():
         try:
+            print(f'received transformed position with key: {key}')
             logger.debug(f'message received: {transformed_message}')
             observation, attributes = extract_fields_from_message(transformed_message)
             logger.debug(f'observation: {observation}')
@@ -113,8 +129,8 @@ async def process_transformed_data(streaming_transformed_data):
         except:
             e = sys.exc_info()[0]
             logger.exception(f'Exception {e} occurred processing {transformed_message}')
-            await streaming_transformed_topic.send(value=transformed_message)
+            await positions_transformed_topic.send(value=transformed_message)
 
 if __name__ == '__main__':
-    print("Application getting started")
+    logger.info("Application getting started")
     app.main()

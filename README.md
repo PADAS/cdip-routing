@@ -36,6 +36,6 @@ uvicorn transform_service.main:app --port=8200 --reload
 
 ### Running Kafka Subscribers
 ```bash
-faust -A subscribers.kafka_subscriber worker -l info
+faust -A subscribers.kafka_subscriber worker --without-web -l info
 ```
 
