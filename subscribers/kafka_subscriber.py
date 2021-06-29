@@ -5,6 +5,7 @@ import sys
 import faust
 from cdip_connector.core import schemas
 from enum import Enum
+from uuid import UUID
 
 from core.utils import get_redis_db
 from subscribers.services import dispatch_transformed_observation
@@ -77,8 +78,16 @@ def extract_fields_from_message(message):
     return observation, attributes
 
 
+def get_key_for_transformed_position(current_key: bytes, destination_id: UUID):
+    if current_key is None or destination_id is None:
+        return current_key
+    else:
+        new_key = f"{current_key.decode('utf-8')}.{str(destination_id)}"
+        return new_key.encode('utf-8')
+
+
 @app.agent(positions_unprocessed_topic)
-async def process_data(streaming_data):
+async def process_position(streaming_data):
     async for key, message in streaming_data.items():
         try:
             print(f'received unprocessed position with key: {key}')
@@ -86,28 +95,30 @@ async def process_data(streaming_data):
             observation, attributes = extract_fields_from_message(message)
             logger.debug(f'observation: {observation}')
             logger.debug(f'attributes: {attributes}')
-            observation_type = attributes.get('observation_type')
+
             db = get_redis_db()
 
-            if observation_type == schemas.StreamPrefixEnum.position.value:
-                position = convert_observation_to_position(observation)
+            position = convert_observation_to_position(observation)
 
-                if position:
-                    int_id = position.integration_id
-                    destinations = get_all_outbound_configs_for_id(db, int_id)
+            if position:
+                int_id = position.integration_id
+                destinations = get_all_outbound_configs_for_id(db, int_id)
 
-                    for destination in destinations:
-                        jsonified_data = create_transformed_message(position, destination)
-                        await positions_transformed_topic.send(key=key, value=jsonified_data)
+                for destination in destinations:
+                    jsonified_data = create_transformed_message(position, destination)
+
+                    if destination.id:
+                        key = get_key_for_transformed_position(key, destination.id)
+                    await positions_transformed_topic.send(key=key, value=jsonified_data)
         # we want to catch all exceptions and repost to a topic to avoid data loss
         except:
             e = sys.exc_info()[0]
             logger.exception(f'Exception {e} occurred processing {message}')
-            await positions_unprocessed_topic.send(value=message)
+            await positions_unprocessed_topic.send(key=key, value=message)
 
 
 @app.agent(positions_transformed_topic)
-async def process_transformed_data(streaming_transformed_data):
+async def process_transformed_position(streaming_transformed_data):
     async for key, transformed_message in streaming_transformed_data.items():
         try:
             print(f'received transformed position with key: {key}')
@@ -129,7 +140,7 @@ async def process_transformed_data(streaming_transformed_data):
         except:
             e = sys.exc_info()[0]
             logger.exception(f'Exception {e} occurred processing {transformed_message}')
-            await positions_transformed_topic.send(value=transformed_message)
+            await positions_transformed_topic.send(key=key, value=transformed_message)
 
 if __name__ == '__main__':
     logger.info("Application getting started")
