@@ -19,8 +19,8 @@ RUN pip3 install --upgrade pip
 RUN pip3 install -r /workspace/requirements.txt --no-cache-dir
 
 # Add your app files and scripts here
-#ADD ./app /var/www/app
+ADD ./app /var/app
 
-#WORKDIR /var/www
+WORKDIR /var
 
-#CMD ["/var/www/app/start_scripts/start_app.sh"]
+CMD ["/var/app/start_scripts/start_app.sh"]
