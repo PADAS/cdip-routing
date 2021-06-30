@@ -6,18 +6,15 @@ import requests
 from cdip_connector.core import schemas
 from requests import HTTPError
 
-import settings
-from core.utils import get_auth_header, get_redis_db, create_cache_key
+from app import settings
+from app.core.utils import get_auth_header, get_redis_db, create_cache_key
+from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher
 
 logger = logging.getLogger(__name__)
 
 
-class DispatcherNotFound(Exception):
-    pass
-
-
 def post_message_to_transform_service(observation_type, observation, message_id):
-    print(f"Received observation: {observation}")
+    logger.debug(f"Received observation: {observation}")
     if observation_type == schemas.StreamPrefixEnum.position:
         response = requests.post(settings.TRANSFORM_SERVICE_POSITIONS_ENDPOINT, json=observation)
     else:
@@ -67,17 +64,20 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
 def dispatch_transformed_observation(stream_type: schemas.StreamPrefixEnum,
                                      outbound_config_id: str,
                                      observation) -> dict:
+
     config = get_outbound_config_detail(outbound_config_id)
     if stream_type == schemas.StreamPrefixEnum.position:
-        print(f'observation: {observation}')
-        print(f'config: {config}')
+        logger.debug(f'observation: {observation}')
+        logger.debug(f'config: {config}')
 
-    # TODO: Refactor this section once Chris completes metadata on device group
-    # if stream_type == schemas.StreamPrefixEnum.position:
-    #     dispatcher = dispatchers.ERPositionDispatcher(config)
-    # elif stream_type == schemas.StreamPrefixEnum.geoevent:
-    #     dispatcher = dispatchers.ERGeoEventDispatcher(config)
-    # if dispatcher:
-    #     dispatcher.send(observation)
-    # else:
-    #     raise DispatcherNotFound(f'No dispatcher found for {stream_type} dest: {config.type_slug}')
+    if config:
+        if stream_type == schemas.StreamPrefixEnum.position:
+            dispatcher = ERPositionDispatcher(config)
+        elif stream_type == schemas.StreamPrefixEnum.geoevent:
+            dispatcher = ERGeoEventDispatcher(config)
+        if dispatcher:
+            dispatcher.send(observation)
+        else:
+            logger.error(f'No dispatcher found for {stream_type} dest: {config.type_slug}')
+    else:
+        logger.error(f'No config detail found for {outbound_config_id}')

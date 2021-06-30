@@ -1,17 +1,12 @@
-import json
-import os
-
 import uvicorn
 import walrus
 from cdip_connector.core import schemas
 from fastapi import Depends
 from fastapi import FastAPI
-from google.cloud import pubsub_v1
 
-import settings
-from core.pubsub import Publisher, GooglePublisher
-from core.utils import get_redis_db
-from transform_service.services import get_all_outbound_configs_for_id, transform_observation
+from app.core.pubsub import Publisher, GooglePublisher
+from app.core.utils import get_redis_db
+from app.transform_service.services import get_all_outbound_configs_for_id, transform_observation
 
 app = FastAPI()
 

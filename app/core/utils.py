@@ -6,7 +6,8 @@ from hashlib import md5
 import walrus
 from cdip_connector.core import schemas
 
-import settings
+from app import settings
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -46,3 +47,9 @@ def get_auth_header() -> Dict[str, str]:
     return {
         "authorization": f"{token_object.token_type} {token_object.access_token}"
     }
+
+
+def generate_random_execption():
+    num = random.random()
+    if num > .66:
+        raise Exception()

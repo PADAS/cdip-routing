@@ -1,11 +1,8 @@
 from abc import ABC, abstractmethod
-import settings
+from app import settings
 import os
 from google.cloud import pubsub_v1
-from cdip_connector.core import schemas
 import json
-from typing import Any
-from enum import Enum
 
 
 class Subscriber(ABC):

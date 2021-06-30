@@ -3,8 +3,8 @@ import logging
 import sys
 
 import services
-import settings
-from core.pubsub import GoogleSubscriber
+from app import settings
+from app.core.pubsub import GoogleSubscriber
 
 logger = logging.getLogger(__name__)
 

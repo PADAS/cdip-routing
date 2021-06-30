@@ -1,15 +1,16 @@
 import json
 import logging
 import sys
+from app import settings
 
 import faust
 from cdip_connector.core import schemas
 from enum import Enum
 from uuid import UUID
 
-from core.utils import get_redis_db
-from subscribers.services import dispatch_transformed_observation
-from transform_service.services import get_all_outbound_configs_for_id, transform_observation
+from app.core.utils import get_redis_db
+from app.subscribers.services import dispatch_transformed_observation
+from app.transform_service.services import get_all_outbound_configs_for_id, transform_observation
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class TopicEnum(str, Enum):
 
 app = faust.App(
         'cdip-routing',
-        broker='kafka://localhost:9092',
+        broker=f'{settings.KAFKA_BROKER}',
         value_serializer='raw',
     )
 
@@ -90,7 +91,7 @@ def get_key_for_transformed_position(current_key: bytes, destination_id: UUID):
 async def process_position(streaming_data):
     async for key, message in streaming_data.items():
         try:
-            print(f'received unprocessed position with key: {key}')
+            logger.info(f'received unprocessed position with key: {key}')
             logger.debug(f'message received: {message}')
             observation, attributes = extract_fields_from_message(message)
             logger.debug(f'observation: {observation}')
@@ -114,14 +115,15 @@ async def process_position(streaming_data):
         except:
             e = sys.exc_info()[0]
             logger.exception(f'Exception {e} occurred processing {message}')
-            await positions_unprocessed_topic.send(key=key, value=message)
+            # TODO: determine what we want to do with failed observations
+            # await positions_unprocessed_topic.send(key=key, value=message)
 
 
 @app.agent(positions_transformed_topic)
 async def process_transformed_position(streaming_transformed_data):
     async for key, transformed_message in streaming_transformed_data.items():
         try:
-            print(f'received transformed position with key: {key}')
+            logger.info(f'received transformed position with key: {key}')
             logger.debug(f'message received: {transformed_message}')
             observation, attributes = extract_fields_from_message(transformed_message)
             logger.debug(f'observation: {observation}')
@@ -140,7 +142,8 @@ async def process_transformed_position(streaming_transformed_data):
         except:
             e = sys.exc_info()[0]
             logger.exception(f'Exception {e} occurred processing {transformed_message}')
-            await positions_transformed_topic.send(key=key, value=transformed_message)
+            # TODO: determine what we want to do with failed observations
+            # await positions_transformed_topic.send(key=key, value=transformed_message)
 
 if __name__ == '__main__':
     logger.info("Application getting started")
