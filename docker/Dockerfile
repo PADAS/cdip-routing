@@ -23,4 +23,6 @@ ADD ./app /var/app
 
 WORKDIR /var
 
+RUN chmod +x /var/app/start_scripts/start_app.sh
+
 CMD ["/var/app/start_scripts/start_app.sh"]
