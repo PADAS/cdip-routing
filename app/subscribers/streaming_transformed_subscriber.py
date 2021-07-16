@@ -5,8 +5,8 @@ import sys
 from cdip_connector.core import schemas
 
 import services
-import settings
-from core.pubsub import GoogleSubscriber
+from app import settings
+from app.core.pubsub import GoogleSubscriber
 
 logger = logging.getLogger(__name__)
 
