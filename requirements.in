@@ -1,0 +1,10 @@
+environs==9.3.2
+fastapi==0.65.1
+faust==1.10.4
+google-cloud-pubsub==2.5.0
+pydantic==1.8.2
+requests==2.25.1
+uvicorn==0.13.4
+walrus==0.8.2
+https://github.com/PADAS/das-clients/releases/download/v1.0.9/dasclient-1.0.9-py3-none-any.whl
+https://github.com/PADAS/smart-integrate-sdk/releases/download/v0.6.4/cdip_connector-0.6.4-py3-none-any.whl
