@@ -1,0 +1,57 @@
+version: 2.1
+commands:
+  configure_git_for_commit_and_push:
+    steps:
+      - run: 'git config user.email "circleci@vulcan.com"'
+      - run: 'git config user.name "circleci"'
+      - run: 'git config push.default current'
+      - add_ssh_keys:
+          fingerprints:
+            - '4d:c3:5b:e3:96:ff:a4:fb:7e:02:ce:ef:fe:fc:11:6d'
+  activate_google_service_account:
+    steps:
+      - run: 'gcloud auth activate-service-account --key-file=<(echo "$ENCODED_GCR_KEY" | base64 --decode)'
+  docker_login:
+    steps:
+      - run: 'echo "$ENCODED_GCR_KEY" | base64 --decode | docker login --username _json_key --password-stdin https://gcr.io'
+
+  trigger_downstream_builds:
+    parameters:
+      target_project_slug:
+        type: string
+        default: "unknown"
+    steps:
+      - run: 'ci-helpers/trigger-downstream.sh << parameters.target_project_slug >> ${CIRCLE_BRANCH}'
+
+executors:
+  gcloud:
+    docker:
+      - image: 'google/cloud-sdk:269.0.0'
+        auth:
+          username: sintegrate
+          password: $DOCKERHUB_PASSWORD
+
+jobs:
+  build_cdip_routing_image:
+    executor: 'gcloud'
+    steps:
+      - 'setup_remote_docker'
+      - 'docker_login'
+      - 'checkout'
+      - run:
+          name: "Build and Push Image"
+          command: 'make build_and_push descriptive_gcr_path_stem="$CIRCLE_BRANCH" unique_gcr_tag="$CIRCLE_WORKFLOW_ID"'
+
+#  trigger_downstream:
+#    executor: 'gcloud'
+#    steps:
+#      - checkout
+#      - trigger_downstream_builds:
+#        name: "Trigger downstream builds"
+
+workflows:
+  version: 2
+  docker_build_workflow:
+    jobs:
+      - build_cdip_routing_image
+
