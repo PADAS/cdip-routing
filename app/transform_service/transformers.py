@@ -47,3 +47,16 @@ class ERGeoEventTransformer(Transformer):
                     location=dict(longitude=geo_event.location.x,
                                   latitude=geo_event.location.y)
                     )
+
+
+class ERCameraTrapTransformer(Transformer):
+    @staticmethod
+    def transform(payload: schemas.CameraTrap) -> dict:
+        return dict(image_uri=payload.image_uri,
+                    camera_name=payload.camera_name,
+                    camera_description=payload.camera_description,
+                    group_id=payload.integration_id,
+                    time=payload.recorded_at,
+                    location=dict(longitude=payload.location.x,
+                                  latitude=payload.location.y)
+                    )

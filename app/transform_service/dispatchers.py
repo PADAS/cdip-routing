@@ -81,3 +81,20 @@ class ERGeoEventDispatcher(ERDispatcher):
                 logger.exception(f'exception raised sending to dest {ex}')
 
         return results
+
+
+class ERCameraTrapDispatcher(ERDispatcher):
+
+    def __init__(self, config):
+        super(ERCameraTrapDispatcher, self).__init__(config)
+
+    def send(self, camera_trap_payload: dict):
+        result = None
+        try:
+            # TODO: create new method in das client for posting to ER ?
+            result = self.das_client.post_sensor_observation(camera_trap_payload)
+        except Exception as ex:
+            # todo: propagate exceptions back to caller
+            logger.exception(f'exception raised sending to dest {ex}')
+        return result
+
