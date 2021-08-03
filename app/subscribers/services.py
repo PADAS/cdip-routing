@@ -8,7 +8,8 @@ from requests import HTTPError
 
 from app import settings
 from app.core.utils import get_auth_header, get_redis_db, create_cache_key
-from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher
+from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher, ERCameraTrapDispatcher
+from app.transform_service.services import transform_observation
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,6 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
     if resp_json_str:
         resp_json = json.loads(resp_json_str)
         resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
-        # TODO: Figure out why package is expecting inbound_type_slug when not preset in portal response
         configs, errors = schemas.get_validated_objects(resp_json, schemas.OutboundConfiguration)
     if errors:
         logger.warning(f'{len(errors)} outbound configs have validation errors. {errors}')
@@ -60,24 +60,138 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
         logger.warning(f'No destinations were found for outbound config id: {str(outbound_id)}')
         return None
 
+def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationInformation:
+
+    inbound_integrations_endpoint = f'{settings.PORTAL_INBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}'
+    cache_key = create_cache_key(inbound_integrations_endpoint)
+    cdip_portal_api_cache_db = get_redis_db()
+    resp_json_bytes = cdip_portal_api_cache_db.get(cache_key)
+
+    if resp_json_bytes:
+        resp_json_str = resp_json_bytes.decode('utf-8')
+    else:
+        try:
+            headers = get_auth_header()
+            resp = requests.get(url=inbound_integrations_endpoint,
+                                headers=headers)
+            resp.raise_for_status()
+            resp_json = resp.json()
+            resp_json_str = json.dumps(resp_json)
+            cdip_portal_api_cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
+        except HTTPError:
+            logger.error(f"Bad response from portal API {resp} obtaining integration detail for id: {integration_id}")
+    if resp_json_str:
+        resp_json = json.loads(resp_json_str)
+        resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
+        configs, errors = schemas.get_validated_objects(resp_json, schemas.IntegrationInformation)
+    if errors:
+        logger.warning(f'{len(errors)} inbound integrations have validation errors. {errors}')
+    if len(configs) > 0:
+        return configs[0]
+    else:
+        logger.warning(f'No integrations were found for inbound integration id: {str(integration_id)}')
+        return None
+
 
 def dispatch_transformed_observation(stream_type: schemas.StreamPrefixEnum,
                                      outbound_config_id: str,
+                                     inbound_int_id: str,
                                      observation) -> dict:
 
     config = get_outbound_config_detail(outbound_config_id)
+    inbound_integration = get_inbound_integration_detail(inbound_int_id)
+    provider = inbound_integration.provider
+
     if stream_type == schemas.StreamPrefixEnum.position:
         logger.debug(f'observation: {observation}')
         logger.debug(f'config: {config}')
 
+    # TODO: Consider how to make creation of dispatcher lighter as this will be done for every observation
     if config:
         if stream_type == schemas.StreamPrefixEnum.position:
-            dispatcher = ERPositionDispatcher(config)
+            dispatcher = ERPositionDispatcher(config, provider)
         elif stream_type == schemas.StreamPrefixEnum.geoevent:
-            dispatcher = ERGeoEventDispatcher(config)
+            dispatcher = ERGeoEventDispatcher(config, provider)
+        elif stream_type == schemas.StreamPrefixEnum.camera_trap:
+            dispatcher = ERCameraTrapDispatcher(config, provider)
+            # todo: remove after figure out path forward for transformed observations
+            # observation['group_id'] = UUID(observation['group_id'])
         if dispatcher:
             dispatcher.send(observation)
         else:
             logger.error(f'No dispatcher found for {stream_type} dest: {config.type_slug}')
     else:
         logger.error(f'No config detail found for {outbound_config_id}')
+
+def convert_observation_to_cdip_schema(observation, schema: schemas):
+    # method requires a list
+    observations = [observation]
+    observations, errors = schemas.get_validated_objects(observations, schema)
+    if len(observations) > 0:
+        return observations[0]
+    else:
+        logger.warning(f'unable to validate position: {observation} errors: {errors}')
+        return None
+
+def convert_observation_to_position(observation):
+    positions = [observation]
+    positions, errors = schemas.get_validated_objects(positions, schemas.Position)
+    if len(positions) > 0:
+        return positions[0]
+    else:
+        logger.warning(f'unable to validate position: {observation} errors: {errors}')
+        return None
+
+
+def convert_observation_to_cameratrap(observation):
+    payloads = [observation]
+    cameratrap_payloads, errors = schemas.get_validated_objects(payloads, schemas.CameraTrap)
+    if len(cameratrap_payloads) > 0:
+        return cameratrap_payloads[0]
+    else:
+        logger.warning(f'unable to validate position: {observation} errors: {errors}')
+        return None
+
+
+def create_message(attributes, observation):
+    message = {'attributes': attributes,
+               'data': observation}
+    return message
+
+
+def create_transformed_message(observation, destination, prefix: schemas.StreamPrefixEnum):
+    transformed_observation = transform_observation(prefix, destination, observation)
+    logger.debug(f'Transformed observation: {transformed_observation}')
+
+    # observation_type may no longer be needed as topics are now specific to observation type
+    attributes = {'observation_type': prefix.value,
+                  'outbound_config_id': str(destination.id),
+                  'integration_id': observation.integration_id}
+
+    transformed_message = create_message(attributes, transformed_observation)
+
+    jsonified_data = json.dumps(transformed_message, default=str)
+    return jsonified_data
+
+
+def extract_fields_from_message(message):
+    decoded_message = json.loads(message.decode('utf-8'))
+    if decoded_message:
+        observation = decoded_message.get('data')
+        attributes = decoded_message.get('attributes')
+    else:
+        logger.warning(f'message: {message} contained no payload')
+        return None, None
+    return observation, attributes
+
+
+def get_key_for_transformed_observation(current_key: bytes, destination_id: UUID):
+    # caller must provide key and destination_id must be present in order to create for transformed observation
+    if current_key is None or destination_id is None:
+        return current_key
+    else:
+        new_key = f"{current_key.decode('utf-8')}.{str(destination_id)}"
+        return new_key.encode('utf-8')
+
+
+
