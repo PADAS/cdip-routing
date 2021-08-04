@@ -28,69 +28,48 @@ def post_message_to_transform_service(observation_type, observation, message_id)
                      f"observation: {observation}")
 
 
-def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfiguration:
-
-    outbound_integrations_endpoint = f'{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}'
-    cache_key = create_cache_key(outbound_integrations_endpoint)
+def post_to_admin_portal(endpoint, response_schema: schemas.BaseModel):
+    cache_key = create_cache_key(endpoint)
     cdip_portal_api_cache_db = get_redis_db()
     resp_json_bytes = cdip_portal_api_cache_db.get(cache_key)
+    resp_json_str = None
 
     if resp_json_bytes:
         resp_json_str = resp_json_bytes.decode('utf-8')
     else:
         try:
             headers = get_auth_header()
-            resp = requests.get(url=outbound_integrations_endpoint,
+            resp = requests.get(url=endpoint,
                                 headers=headers)
             resp.raise_for_status()
             resp_json = resp.json()
             resp_json_str = json.dumps(resp_json)
             cdip_portal_api_cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
         except HTTPError:
-            logger.error(f"Bad response from portal API {resp} obtaining configuration detail for id: {outbound_id}")
+            logger.error(f"Bad response from portal API {resp} for endpoint: {endpoint}")
     if resp_json_str:
         resp_json = json.loads(resp_json_str)
         resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
-        configs, errors = schemas.get_validated_objects(resp_json, schemas.OutboundConfiguration)
+        configs, errors = schemas.get_validated_objects(resp_json, response_schema)
     if errors:
         logger.warning(f'{len(errors)} outbound configs have validation errors. {errors}')
     if len(configs) > 0:
         return configs[0]
     else:
-        logger.warning(f'No destinations were found for outbound config id: {str(outbound_id)}')
+        logger.warning(f'No valid response objects received from endpoint: {endpoint}')
         return None
+
+
+def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfiguration:
+
+    outbound_integrations_endpoint = f'{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}'
+    return post_to_admin_portal(outbound_integrations_endpoint, schemas.OutboundConfiguration)
+
 
 def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationInformation:
 
     inbound_integrations_endpoint = f'{settings.PORTAL_INBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}'
-    cache_key = create_cache_key(inbound_integrations_endpoint)
-    cdip_portal_api_cache_db = get_redis_db()
-    resp_json_bytes = cdip_portal_api_cache_db.get(cache_key)
-
-    if resp_json_bytes:
-        resp_json_str = resp_json_bytes.decode('utf-8')
-    else:
-        try:
-            headers = get_auth_header()
-            resp = requests.get(url=inbound_integrations_endpoint,
-                                headers=headers)
-            resp.raise_for_status()
-            resp_json = resp.json()
-            resp_json_str = json.dumps(resp_json)
-            cdip_portal_api_cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
-        except HTTPError:
-            logger.error(f"Bad response from portal API {resp} obtaining integration detail for id: {integration_id}")
-    if resp_json_str:
-        resp_json = json.loads(resp_json_str)
-        resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
-        configs, errors = schemas.get_validated_objects(resp_json, schemas.IntegrationInformation)
-    if errors:
-        logger.warning(f'{len(errors)} inbound integrations have validation errors. {errors}')
-    if len(configs) > 0:
-        return configs[0]
-    else:
-        logger.warning(f'No integrations were found for inbound integration id: {str(integration_id)}')
-        return None
+    return  post_to_admin_portal(inbound_integrations_endpoint, schemas.IntegrationInformation)
 
 
 def dispatch_transformed_observation(stream_type: schemas.StreamPrefixEnum,
@@ -106,7 +85,6 @@ def dispatch_transformed_observation(stream_type: schemas.StreamPrefixEnum,
         logger.debug(f'observation: {observation}')
         logger.debug(f'config: {config}')
 
-    # TODO: Consider how to make creation of dispatcher lighter as this will be done for every observation
     if config:
         if stream_type == schemas.StreamPrefixEnum.position:
             dispatcher = ERPositionDispatcher(config, provider)
@@ -114,14 +92,13 @@ def dispatch_transformed_observation(stream_type: schemas.StreamPrefixEnum,
             dispatcher = ERGeoEventDispatcher(config, provider)
         elif stream_type == schemas.StreamPrefixEnum.camera_trap:
             dispatcher = ERCameraTrapDispatcher(config, provider)
-            # todo: remove after figure out path forward for transformed observations
-            # observation['group_id'] = UUID(observation['group_id'])
         if dispatcher:
             dispatcher.send(observation)
         else:
             logger.error(f'No dispatcher found for {stream_type} dest: {config.type_slug}')
     else:
         logger.error(f'No config detail found for {outbound_config_id}')
+
 
 def convert_observation_to_cdip_schema(observation, schema: schemas):
     # method requires a list
@@ -132,6 +109,7 @@ def convert_observation_to_cdip_schema(observation, schema: schemas):
     else:
         logger.warning(f'unable to validate position: {observation} errors: {errors}')
         return None
+
 
 def convert_observation_to_position(observation):
     positions = [observation]

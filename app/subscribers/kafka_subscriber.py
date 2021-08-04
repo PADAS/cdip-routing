@@ -70,7 +70,7 @@ async def process_transformed_observation(key, transformed_message, schema: sche
     logger.debug(f'observation: {raw_observation}')
     logger.debug(f'attributes: {attributes}')
 
-    # TODO: Create a different schema for the outbound schema
+    # TODO: May need to create a different schema for the transformed schema since we only have string dict at this point
     # observation = convert_observation_to_cdip_schema(raw_observation, schema)
 
     if not raw_observation:

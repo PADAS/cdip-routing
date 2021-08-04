@@ -50,8 +50,6 @@ class ERDispatcher(Dispatcher, ABC):
 
 
 class ERPositionDispatcher(ERDispatcher):
-    # stream_type = schemas.StreamPrefixEnum.position
-    # destination_type = schemas.DestinationTypes.EarthRanger
 
     def __init__(self, config, provider):
         super(ERPositionDispatcher, self).__init__(config, provider)
@@ -61,14 +59,12 @@ class ERPositionDispatcher(ERDispatcher):
         try:
             result = self.das_client.post_sensor_observation(position)
         except Exception as ex:
-            # todo: propagate exceptions back to caller
             logger.exception(f'exception raised sending to dest {ex}')
+            raise ex
         return result
 
 
 class ERGeoEventDispatcher(ERDispatcher):
-    # stream_type = schemas.StreamPrefixEnum.position
-    # destination_type = schemas.DestinationTypes.EarthRanger
 
     def __init__(self, config, provider):
         super(ERGeoEventDispatcher, self).__init__(config, provider)
@@ -79,9 +75,8 @@ class ERGeoEventDispatcher(ERDispatcher):
             try:
                 results.append(self.das_client.post_report(m))
             except Exception as ex:
-                # todo: propagate exceptions back to caller
                 logger.exception(f'exception raised sending to dest {ex}')
-
+                raise ex
         return results
 
 
@@ -95,7 +90,7 @@ class ERCameraTrapDispatcher(ERDispatcher):
         try:
             result = self.das_client.post_camera_trap_report(camera_trap_payload)
         except Exception as ex:
-            # todo: propagate exceptions back to caller
             logger.exception(f'exception raised sending to dest {ex}')
+            raise ex
         return result
 
