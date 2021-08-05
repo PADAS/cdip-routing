@@ -5,6 +5,7 @@ from typing import Any
 from cdip_connector.core import schemas
 from dasclient.dasclient import DasClient
 from urllib.parse import urlparse
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -92,5 +93,7 @@ class ERCameraTrapDispatcher(ERDispatcher):
         except Exception as ex:
             logger.exception(f'exception raised sending to dest {ex}')
             raise ex
+        finally:
+            os.remove(camera_trap_payload.get("file"))
         return result
 
