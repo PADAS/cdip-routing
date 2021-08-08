@@ -17,7 +17,7 @@ attrs==21.2.0
     # via aiohttp
 cachetools==4.2.2
     # via google-auth
-https://github.com/PADAS/smart-integrate-sdk/releases/download/v0.6.4/cdip_connector-0.6.4-py3-none-any.whl
+https://github.com/PADAS/smart-integrate-sdk/releases/download/v0.8.1/cdip_connector-0.8.1-py3-none-any.whl
     # via -r requirements.in
 certifi==2021.5.30
     # via requests
@@ -35,8 +35,10 @@ colorlog==5.0.1
     # via mode
 croniter==1.0.13
     # via faust
-https://github.com/PADAS/das-clients/releases/download/v1.0.9/dasclient-1.0.9-py3-none-any.whl
+https://github.com/PADAS/das-clients/releases/download/v1.0.22/dasclient-1.0.22-py3-none-any.whl
     # via -r requirements.in
+dateparser==1.0.0
+    # via dasclient
 environs==9.3.2
     # via
     #   -r requirements.in
@@ -113,6 +115,7 @@ python-dateutil==2.8.1
     # via
     #   cdip-connector
     #   croniter
+    #   dateparser
 python-dotenv==0.17.1
     # via environs
 python-json-logger==2.0.1
@@ -120,11 +123,15 @@ python-json-logger==2.0.1
 pytz==2021.1
     # via
     #   cdip-connector
+    #   dateparser
     #   google-api-core
+    #   tzlocal
 pyyaml==5.4.1
     # via libcst
 redis==3.5.3
     # via walrus
+regex==2021.8.3
+    # via dateparser
 requests==2.25.1
     # via
     #   -r requirements.in
@@ -152,15 +159,16 @@ typing-extensions==3.10.0.0
     # via
     #   aiohttp
     #   libcst
-    #   mode
     #   pydantic
     #   typing-inspect
-    #   uvicorn
-    #   yarl
 typing-inspect==0.7.1
     # via libcst
+tzlocal==2.1
+    # via dateparser
 urllib3==1.26.5
-    # via requests
+    # via
+    #   -r requirements.in
+    #   requests
 uvicorn==0.13.4
     # via -r requirements.in
 venusian==1.2.0

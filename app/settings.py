@@ -13,6 +13,7 @@ OAUTH_TOKEN_URL = f'{KEYCLOAK_ISSUER}/protocol/openid-connect/token'
 PORTAL_ENDPOINT = env.str('PORTAL_ENDPOINT')
 PORTAL_API_ENDPOINT = f'{PORTAL_ENDPOINT}/api/v1.0'
 PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT = f'{PORTAL_API_ENDPOINT}/integrations/outbound/configurations'
+PORTAL_INBOUND_INTEGRATIONS_ENDPOINT = f'{PORTAL_API_ENDPOINT}/integrations/inbound/configurations'
 
 # Settings for caching admin portal request/responses
 REDIS_HOST = env.str('REDIS_HOST')

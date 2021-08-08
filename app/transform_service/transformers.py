@@ -1,6 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from typing import Any
+import json
 
 from cdip_connector.core import schemas
 
@@ -46,4 +47,16 @@ class ERGeoEventTransformer(Transformer):
                     time=geo_event.recorded_at,
                     location=dict(longitude=geo_event.location.x,
                                   latitude=geo_event.location.y)
+                    )
+
+
+class ERCameraTrapTransformer(Transformer):
+    @staticmethod
+    def transform(payload: schemas.CameraTrap) -> dict:
+        return dict(file=payload.image_uri,
+                    camera_name=payload.camera_name,
+                    camera_description=payload.camera_description,
+                    time=payload.recorded_at,
+                    location=json.dumps(dict(longitude=payload.location.x,
+                                             latitude=payload.location.y))
                     )

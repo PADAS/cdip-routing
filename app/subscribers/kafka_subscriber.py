@@ -1,16 +1,14 @@
-import json
 import logging
-import sys
-from app import settings
+from enum import Enum
 
 import faust
 from cdip_connector.core import schemas
-from enum import Enum
-from uuid import UUID
 
+from app import settings
 from app.core.utils import get_redis_db
-from app.subscribers.services import dispatch_transformed_observation
-from app.transform_service.services import get_all_outbound_configs_for_id, transform_observation
+from app.subscribers.services import extract_fields_from_message, convert_observation_to_cdip_schema, \
+    create_transformed_message, get_key_for_transformed_observation, dispatch_transformed_observation
+from app.transform_service.services import get_all_outbound_configs_for_id
 
 logger = logging.getLogger(__name__)
 
@@ -38,82 +36,63 @@ app = faust.App(
 positions_unprocessed_topic = app.topic(TopicEnum.positions_unprocessed.value)
 positions_transformed_topic = app.topic(TopicEnum.positions_transformed.value)
 
-
-def convert_observation_to_position(position):
-    positions = [position]
-    positions, errors = schemas.get_validated_objects(positions, schemas.Position)
-    if len(positions) > 0:
-        return positions[0]
-    else:
-        logger.warning(f'unable to validate position: {position} errors: {errors}')
-        return None
+cameratrap_unprocessed_topic = app.topic(TopicEnum.cameratrap_unprocessed.value)
+cameratrap_transformed_topic = app.topic(TopicEnum.cameratrap_transformed.value)
 
 
-def create_message(attributes, observation):
-    message = {'attributes': attributes,
-               'data': observation}
-    return message
+async def process_observation(key, message, schema: schemas, prefix: schemas.StreamPrefixEnum, transformed_topic):
+    logger.info(f'received unprocessed observation with key: {key}')
+    logger.debug(f'message received: {message}')
+    raw_observation, attributes = extract_fields_from_message(message)
+    logger.debug(f'observation: {raw_observation}')
+    logger.debug(f'attributes: {attributes}')
+
+    db = get_redis_db()
+
+    observation = convert_observation_to_cdip_schema(raw_observation, schema)
+
+    if observation:
+        int_id = observation.integration_id
+        destinations = get_all_outbound_configs_for_id(db, int_id)
+
+        for destination in destinations:
+            jsonified_data = create_transformed_message(observation, destination, prefix)
+
+            if destination.id:
+                key = get_key_for_transformed_observation(key, destination.id)
+            await transformed_topic.send(key=key, value=jsonified_data)
 
 
-def create_transformed_message(position, destination):
-    transformed_position = transform_observation(schemas.StreamPrefixEnum.position, destination, position)
-    logger.debug(f'Transformed observation: {transformed_position}')
+async def process_transformed_observation(key, transformed_message, schema: schemas):
+    logger.info(f'received transformed observation with key: {key}')
+    logger.debug(f'message received: {transformed_message}')
+    raw_observation, attributes = extract_fields_from_message(transformed_message)
+    logger.debug(f'observation: {raw_observation}')
+    logger.debug(f'attributes: {attributes}')
 
-    attributes = {'observation_type': schemas.StreamPrefixEnum.position.value,
-                  'outbound_config_id': str(destination.id)}
+    # TODO: May need to create a different schema for the transformed schema since we only have string dict at this point
+    # observation = convert_observation_to_cdip_schema(raw_observation, schema)
 
-    transformed_message = create_message(attributes, transformed_position)
+    if not raw_observation:
+        logger.warning(f'No observation was obtained from {transformed_message}')
+        return
+    if not attributes:
+        logger.warning(f'No attributes were obtained from {transformed_message}')
+        return
+    observation_type = attributes.get('observation_type')
+    integration_id = attributes.get('integration_id')
+    outbound_config_id = attributes.get('outbound_config_id')
 
-    jsonified_data = json.dumps(transformed_message, default=str)
-    return jsonified_data
-
-
-def extract_fields_from_message(message):
-    decoded_message = json.loads(message.decode('utf-8'))
-    if decoded_message:
-        observation = decoded_message.get('data')
-        attributes = decoded_message.get('attributes')
-    else:
-        logger.warning(f'message: {message} contained no payload')
-        return None, None
-    return observation, attributes
-
-
-def get_key_for_transformed_position(current_key: bytes, destination_id: UUID):
-    if current_key is None or destination_id is None:
-        return current_key
-    else:
-        new_key = f"{current_key.decode('utf-8')}.{str(destination_id)}"
-        return new_key.encode('utf-8')
+    dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, raw_observation)
 
 
 @app.agent(positions_unprocessed_topic)
 async def process_position(streaming_data):
     async for key, message in streaming_data.items():
         try:
-            logger.info(f'received unprocessed position with key: {key}')
-            logger.debug(f'message received: {message}')
-            observation, attributes = extract_fields_from_message(message)
-            logger.debug(f'observation: {observation}')
-            logger.debug(f'attributes: {attributes}')
-
-            db = get_redis_db()
-
-            position = convert_observation_to_position(observation)
-
-            if position:
-                int_id = position.integration_id
-                destinations = get_all_outbound_configs_for_id(db, int_id)
-
-                for destination in destinations:
-                    jsonified_data = create_transformed_message(position, destination)
-
-                    if destination.id:
-                        key = get_key_for_transformed_position(key, destination.id)
-                    await positions_transformed_topic.send(key=key, value=jsonified_data)
+            await process_observation(key, message, schemas.Position, schemas.StreamPrefixEnum.position, positions_transformed_topic)
         # we want to catch all exceptions and repost to a topic to avoid data loss
-        except:
-            e = sys.exc_info()[0]
+        except Exception as e:
             logger.exception(f'Exception {e} occurred processing {message}')
             # TODO: determine what we want to do with failed observations
             # await positions_unprocessed_topic.send(key=key, value=message)
@@ -123,24 +102,32 @@ async def process_position(streaming_data):
 async def process_transformed_position(streaming_transformed_data):
     async for key, transformed_message in streaming_transformed_data.items():
         try:
-            logger.info(f'received transformed position with key: {key}')
-            logger.debug(f'message received: {transformed_message}')
-            observation, attributes = extract_fields_from_message(transformed_message)
-            logger.debug(f'observation: {observation}')
-            logger.debug(f'attributes: {attributes}')
-            observation, attributes = extract_fields_from_message(transformed_message)
-            if not observation:
-                logger.warning(f'No observation was obtained from {transformed_message}')
-                return
-            if not attributes:
-                logger.warning(f'No attributes were obtained from {transformed_message}')
-                return
-            observation_type = attributes.get('observation_type')
-            outbound_config_id = attributes.get('outbound_config_id')
-            dispatch_transformed_observation(observation_type, outbound_config_id, observation)
+            process_transformed_observation(key, transformed_message)
         # we want to catch all exceptions and repost to a topic to avoid data loss
-        except:
-            e = sys.exc_info()[0]
+        except Exception as e:
+            logger.exception(f'Exception {e} occurred processing {transformed_message}')
+            # TODO: determine what we want to do with failed observations
+            # await positions_transformed_topic.send(key=key, value=transformed_message)
+
+
+@app.agent(cameratrap_unprocessed_topic)
+async def process_cameratrap(streaming_data):
+    async for key, message in streaming_data.items():
+        try:
+            await process_observation(key, message, schemas.CameraTrap, schemas.StreamPrefixEnum.camera_trap, cameratrap_transformed_topic)
+        # we want to catch all exceptions and repost to a topic to avoid data loss
+        except Exception as e:
+            logger.exception(f'Exception {e} occurred processing {message}')
+            # TODO: determine what we want to do with failed observations
+
+
+@app.agent(cameratrap_transformed_topic)
+async def process_transformed_cameratrap(streaming_transformed_data):
+    async for key, transformed_message in streaming_transformed_data.items():
+        try:
+            await process_transformed_observation(key, transformed_message, schemas.CameraTrap)
+        # we want to catch all exceptions and repost to a topic to avoid data loss
+        except Exception as e:
             logger.exception(f'Exception {e} occurred processing {transformed_message}')
             # TODO: determine what we want to do with failed observations
             # await positions_transformed_topic.send(key=key, value=transformed_message)

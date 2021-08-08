@@ -9,7 +9,7 @@ from cdip_connector.core import schemas
 
 from app import settings
 from app.core.utils import get_auth_header, create_cache_key
-from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer
+from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer, ERCameraTrapTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,9 @@ def transform_observation(stream_type: schemas.StreamPrefixEnum,
     elif (stream_type == schemas.StreamPrefixEnum.geoevent
           and config.type_slug == schemas.DestinationTypes.EarthRanger.value):
         transformer = ERGeoEventTransformer
+    elif (stream_type == schemas.StreamPrefixEnum.camera_trap
+          and config.type_slug == schemas.DestinationTypes.EarthRanger.value):
+        transformer = ERCameraTrapTransformer
     if transformer:
         return transformer.transform(observation)
     else:
