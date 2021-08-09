@@ -27,7 +27,7 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
         headers = get_auth_header()
         resp = requests.get(url=f'{outbound_integrations_endpoint}',
                             params=dict(inbound_id=inbound_id),
-                            headers=headers)
+                            headers=headers, verify=settings.PORTAL_SSL_VERIFY)
         resp.raise_for_status()
         resp_json = resp.json()
         resp_json_str = json.dumps(resp_json)
@@ -53,7 +53,7 @@ def transform_observation(stream_type: schemas.StreamPrefixEnum,
 
     # todo: need a better way than this to build the correct components.
     if (stream_type == schemas.StreamPrefixEnum.position
-            and config.type_slug == schemas.DestinationTypes.EarthRanger.value):
+            and config.type_slug in (schemas.DestinationTypes.EarthRanger.value, 'earthranger')):
         transformer = ERPositionTransformer
     elif (stream_type == schemas.StreamPrefixEnum.geoevent
           and config.type_slug == schemas.DestinationTypes.EarthRanger.value):

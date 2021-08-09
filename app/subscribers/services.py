@@ -40,7 +40,7 @@ def post_to_admin_portal(endpoint, response_schema: schemas.BaseModel):
         try:
             headers = get_auth_header()
             resp = requests.get(url=endpoint,
-                                headers=headers)
+                                headers=headers, verify=settings.PORTAL_SSL_VERIFY)
             resp.raise_for_status()
             resp_json = resp.json()
             resp_json_str = json.dumps(resp_json)
@@ -63,13 +63,29 @@ def post_to_admin_portal(endpoint, response_schema: schemas.BaseModel):
 def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfiguration:
 
     outbound_integrations_endpoint = f'{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}'
-    return post_to_admin_portal(outbound_integrations_endpoint, schemas.OutboundConfiguration)
+
+    headers = get_auth_header()
+    response = requests.get(url=outbound_integrations_endpoint, verify=settings.PORTAL_SSL_VERIFY, headers=headers)
+
+    if response.ok:
+        return schemas.OutboundConfiguration.parse_obj(response.json())
+    else:
+        raise Exception(f'No Outbound configuration found for id: {outbound_id}')
+
+    # return post_to_admin_portal(outbound_integrations_endpoint, schemas.OutboundConfiguration)
 
 
 def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationInformation:
 
     inbound_integrations_endpoint = f'{settings.PORTAL_INBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}'
-    return  post_to_admin_portal(inbound_integrations_endpoint, schemas.IntegrationInformation)
+    headers = get_auth_header()
+    response = requests.get(url=inbound_integrations_endpoint, verify=settings.PORTAL_SSL_VERIFY, headers=headers)
+
+    if response.ok:
+        return schemas.IntegrationInformation.parse_obj(response.json())
+    else:
+        raise Exception(f'No Inbound configuration found for id: {integration_id}')
+    # return  post_to_admin_portal(inbound_integrations_endpoint, schemas.IntegrationInformation)
 
 
 def dispatch_transformed_observation(stream_type: schemas.StreamPrefixEnum,

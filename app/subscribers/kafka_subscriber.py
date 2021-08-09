@@ -63,7 +63,7 @@ async def process_observation(key, message, schema: schemas, prefix: schemas.Str
             await transformed_topic.send(key=key, value=jsonified_data)
 
 
-async def process_transformed_observation(key, transformed_message, schema: schemas):
+async def process_transformed_observation(key, transformed_message, schema: schemas = None):
     logger.info(f'received transformed observation with key: {key}')
     logger.debug(f'message received: {transformed_message}')
     raw_observation, attributes = extract_fields_from_message(transformed_message)
@@ -102,7 +102,7 @@ async def process_position(streaming_data):
 async def process_transformed_position(streaming_transformed_data):
     async for key, transformed_message in streaming_transformed_data.items():
         try:
-            process_transformed_observation(key, transformed_message)
+            await process_transformed_observation(key, transformed_message)
         # we want to catch all exceptions and repost to a topic to avoid data loss
         except Exception as e:
             logger.exception(f'Exception {e} occurred processing {transformed_message}')

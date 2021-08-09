@@ -14,9 +14,10 @@ PORTAL_ENDPOINT = env.str('PORTAL_ENDPOINT')
 PORTAL_API_ENDPOINT = f'{PORTAL_ENDPOINT}/api/v1.0'
 PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT = f'{PORTAL_API_ENDPOINT}/integrations/outbound/configurations'
 PORTAL_INBOUND_INTEGRATIONS_ENDPOINT = f'{PORTAL_API_ENDPOINT}/integrations/inbound/configurations'
+PORTAL_SSL_VERIFY = env.bool('PORTAL_SSL_VERIFY', True)
 
 # Settings for caching admin portal request/responses
-REDIS_HOST = env.str('REDIS_HOST')
+REDIS_HOST = env.str('REDIS_HOST', 'localhost')
 REDIS_PORT = env.int('REDIS_PORT', 6739)
 REDIS_DB = env.int('REDIS_DB', 3)
 # N-seconds window to keep hash of portal api response
