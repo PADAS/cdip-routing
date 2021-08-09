@@ -23,6 +23,9 @@ REDIS_DB = env.int('REDIS_DB', 3)
 # N-seconds window to keep hash of portal api response
 REDIS_CHECK_SECONDS = env.int('REDIS_CHECK_SECONDS', 120)
 
+# N-seconds to cache portal responses for configuration objects.
+PORTAL_CONFIG_OBJECT_CACHE_TTL = env.int('PORTAL_CONFIG_OBJECT_CACHE_TTL', 60)
+
 # Providing defaults so that this does not break application if not defined when kafka is used
 GOOGLE_PUB_SUB_PROJECT_ID = env.str('GOOGLE_PUB_SUB_PROJECT_ID', 'string')
 GOOGLE_APPLICATION_CREDENTIALS = env.str('GOOGLE_APPLICATION_CREDENTIALS', 'string')
