@@ -27,7 +27,7 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
         headers = get_auth_header()
         resp = requests.get(url=f'{outbound_integrations_endpoint}',
                             params=dict(inbound_id=inbound_id),
-                            headers=headers)
+                            headers=headers, verify=settings.PORTAL_SSL_VERIFY)
         resp.raise_for_status()
         resp_json = resp.json()
         resp_json_str = json.dumps(resp_json)

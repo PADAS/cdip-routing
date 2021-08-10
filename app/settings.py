@@ -14,13 +14,17 @@ PORTAL_ENDPOINT = env.str('PORTAL_ENDPOINT')
 PORTAL_API_ENDPOINT = f'{PORTAL_ENDPOINT}/api/v1.0'
 PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT = f'{PORTAL_API_ENDPOINT}/integrations/outbound/configurations'
 PORTAL_INBOUND_INTEGRATIONS_ENDPOINT = f'{PORTAL_API_ENDPOINT}/integrations/inbound/configurations'
+PORTAL_SSL_VERIFY = env.bool('PORTAL_SSL_VERIFY', True)
 
 # Settings for caching admin portal request/responses
-REDIS_HOST = env.str('REDIS_HOST')
+REDIS_HOST = env.str('REDIS_HOST', 'localhost')
 REDIS_PORT = env.int('REDIS_PORT', 6739)
 REDIS_DB = env.int('REDIS_DB', 3)
 # N-seconds window to keep hash of portal api response
 REDIS_CHECK_SECONDS = env.int('REDIS_CHECK_SECONDS', 120)
+
+# N-seconds to cache portal responses for configuration objects.
+PORTAL_CONFIG_OBJECT_CACHE_TTL = env.int('PORTAL_CONFIG_OBJECT_CACHE_TTL', 60)
 
 # Providing defaults so that this does not break application if not defined when kafka is used
 GOOGLE_PUB_SUB_PROJECT_ID = env.str('GOOGLE_PUB_SUB_PROJECT_ID', 'string')
