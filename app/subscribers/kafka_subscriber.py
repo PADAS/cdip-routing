@@ -1,7 +1,9 @@
 import logging
 from enum import Enum
 
+import certifi
 import faust
+from aiokafka.helpers import create_ssl_context
 from cdip_connector.core import schemas
 
 from app import settings
@@ -12,23 +14,46 @@ from app.transform_service.services import get_all_outbound_configs_for_id
 
 logger = logging.getLogger(__name__)
 
-APP_NAME = 'sintegrate'
+TOPIC_PREFIX = 'sintegrate'
+APP_ID = 'cdip-routing'
 
 
 # Todo: refactor this class into module that both sensors and routing can reference
 class TopicEnum(str, Enum):
-    positions_unprocessed = f'{APP_NAME}.positions.unprocessed'
-    positions_transformed = f'{APP_NAME}.positions.transformed'
-    geoevent_unprocessed = f'{APP_NAME}.geoevent.unprocessed'
-    geoevent_transformed = f'{APP_NAME}.geoevent.transformed'
-    message_unprocessed = f'{APP_NAME}.message.unprocessed'
-    message_transformed = f'{APP_NAME}.message.transformed'
-    cameratrap_unprocessed = f'{APP_NAME}.cameratrap.unprocessed'
-    cameratrap_transformed = f'{APP_NAME}.cameratrap.transformed'
+    positions_unprocessed = f'{TOPIC_PREFIX}.positions.unprocessed'
+    positions_transformed = f'{TOPIC_PREFIX}.positions.transformed'
+    geoevent_unprocessed = f'{TOPIC_PREFIX}.geoevent.unprocessed'
+    geoevent_transformed = f'{TOPIC_PREFIX}.geoevent.transformed'
+    message_unprocessed = f'{TOPIC_PREFIX}.message.unprocessed'
+    message_transformed = f'{TOPIC_PREFIX}.message.transformed'
+    cameratrap_unprocessed = f'{TOPIC_PREFIX}.cameratrap.unprocessed'
+    cameratrap_transformed = f'{TOPIC_PREFIX}.cameratrap.transformed'
 
 
-app = faust.App(
-        'cdip-routing',
+cloud_enabled = settings.CONFLUENT_CLOUD_ENABLED
+if cloud_enabled:
+    cert_path = certifi.where()
+    ssl_context = create_ssl_context(cafile=cert_path)
+
+    ''' Currently there are limitations on the basic Confluent Cloud account. Automatic topic creation is restricted
+        which requires the disabling of the leader topic. This may have repercussions regarding the durability of this
+        process. Any topics that are specified in code and utilized in the flow must be created ahead of time in the
+        cloud.
+    '''
+    app = faust.App(
+            APP_ID,
+            broker=f'{settings.KAFKA_BROKER}',
+            broker_credentials=faust.SASLCredentials(
+                username=settings.CONFLUENT_CLOUD_USERNAME,
+                password=settings.CONFLUENT_CLOUD_PASSWORD,
+                ssl_context=ssl_context
+            ),
+            value_serializer='raw',
+            topic_disable_leader=True,
+        )
+else:
+    app = faust.App(
+        APP_ID,
         broker=f'{settings.KAFKA_BROKER}',
         value_serializer='raw',
     )
@@ -102,7 +127,8 @@ async def process_position(streaming_data):
 async def process_transformed_position(streaming_transformed_data):
     async for key, transformed_message in streaming_transformed_data.items():
         try:
-            await process_transformed_observation(key, transformed_message)
+            await process_transformed_observation(key, transformed_message, schemas.Position)
+
         # we want to catch all exceptions and repost to a topic to avoid data loss
         except Exception as e:
             logger.exception(f'Exception {e} occurred processing {transformed_message}')
