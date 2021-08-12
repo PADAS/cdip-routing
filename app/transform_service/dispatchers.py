@@ -6,9 +6,6 @@ from urllib.parse import urlparse
 from cdip_connector.core import schemas
 from dasclient.dasclient import DasClient
 
-from app.core.local_logging import LocalLogging
-
-LocalLogging()
 logger = logging.getLogger(__name__)
 
 

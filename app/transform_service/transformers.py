@@ -5,9 +5,6 @@ from typing import Any
 
 from cdip_connector.core import schemas
 
-from app.core.local_logging import LocalLogging
-
-LocalLogging()
 logger = logging.getLogger(__name__)
 
 
