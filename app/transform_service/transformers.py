@@ -1,7 +1,7 @@
+import json
 import logging
 from abc import ABC, abstractmethod
 from typing import Any
-import json
 
 from cdip_connector.core import schemas
 

@@ -1,13 +1,13 @@
 import logging
+import random
+from hashlib import md5
 from typing import Dict
 
 import requests
-from hashlib import md5
 import walrus
 from cdip_connector.core import schemas
 
 from app import settings
-import random
 
 logger = logging.getLogger(__name__)
 

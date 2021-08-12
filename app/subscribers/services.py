@@ -4,7 +4,6 @@ from uuid import UUID
 
 import requests
 from cdip_connector.core import schemas
-from requests import HTTPError
 
 from app import settings
 from app.core.utils import get_auth_header, get_redis_db, create_cache_key
