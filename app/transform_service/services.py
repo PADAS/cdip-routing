@@ -8,9 +8,11 @@ import walrus
 from cdip_connector.core import schemas
 
 from app import settings
+from app.core.local_logging import LocalLogging
 from app.core.utils import get_auth_header, create_cache_key
 from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer, ERCameraTrapTransformer
 
+LocalLogging()
 logger = logging.getLogger(__name__)
 
 

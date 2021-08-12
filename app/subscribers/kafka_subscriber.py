@@ -5,6 +5,7 @@ import certifi
 import faust
 from aiokafka.helpers import create_ssl_context
 from cdip_connector.core import schemas
+from app.core.local_logging import LocalLogging
 
 from app import settings
 from app.core.utils import get_redis_db
@@ -12,6 +13,7 @@ from app.subscribers.services import extract_fields_from_message, convert_observ
     create_transformed_message, get_key_for_transformed_observation, dispatch_transformed_observation
 from app.transform_service.services import get_all_outbound_configs_for_id
 
+LocalLogging()
 logger = logging.getLogger(__name__)
 
 TOPIC_PREFIX = 'sintegrate'

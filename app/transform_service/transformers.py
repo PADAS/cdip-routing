@@ -1,10 +1,13 @@
+import json
 import logging
 from abc import ABC, abstractmethod
 from typing import Any
-import json
 
 from cdip_connector.core import schemas
 
+from app.core.local_logging import LocalLogging
+
+LocalLogging()
 logger = logging.getLogger(__name__)
 
 

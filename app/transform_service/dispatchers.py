@@ -1,12 +1,14 @@
 import logging
+import os
 from abc import ABC, abstractmethod
-from typing import Any
+from urllib.parse import urlparse
 
 from cdip_connector.core import schemas
 from dasclient.dasclient import DasClient
-from urllib.parse import urlparse
-import os
 
+from app.core.local_logging import LocalLogging
+
+LocalLogging()
 logger = logging.getLogger(__name__)
 
 
