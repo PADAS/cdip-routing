@@ -3,6 +3,8 @@ from environs import Env
 env = Env()
 env.read_env()
 
+LOGGING_LEVEL = env.str('LOGGING_LEVEL', 'INFO')
+
 KEYCLOAK_ISSUER = env.str('KEYCLOAK_ISSUER')
 KEYCLOAK_CLIENT_ID = env.str('KEYCLOAK_CLIENT_ID')
 KEYCLOAK_CLIENT_SECRET = env.str('KEYCLOAK_CLIENT_SECRET')

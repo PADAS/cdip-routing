@@ -34,7 +34,9 @@ class TopicEnum(str, Enum):
 
 cloud_enabled = settings.CONFLUENT_CLOUD_ENABLED
 if cloud_enabled:
+    logger.debug(f'Entering Confluent Cloud Enabled Flow')
     cert_path = certifi.where()
+    logger.debug(f'cert path: {cert_path}')
     ssl_context = create_ssl_context(cafile=cert_path)
 
     ''' Currently there are limitations on the basic Confluent Cloud account. Automatic topic creation is restricted
