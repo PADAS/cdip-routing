@@ -1,4 +1,5 @@
 import sys
+import logging
 import logging.config
 from app import settings
 

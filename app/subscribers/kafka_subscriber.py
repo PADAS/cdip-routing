@@ -44,13 +44,16 @@ if cloud_enabled:
         process. Any topics that are specified in code and utilized in the flow must be created ahead of time in the
         cloud.
     '''
+    logger.debug(f'username: {settings.CONFLUENT_CLOUD_USERNAME}, pw: {settings.CONFLUENT_CLOUD_PASSWORD}')
+
     app = faust.App(
             APP_ID,
             broker=f'{settings.KAFKA_BROKER}',
             broker_credentials=faust.SASLCredentials(
                 username=settings.CONFLUENT_CLOUD_USERNAME,
                 password=settings.CONFLUENT_CLOUD_PASSWORD,
-                ssl_context=ssl_context
+                ssl_context=ssl_context,
+                mechanism="PLAIN",
             ),
             value_serializer='raw',
             topic_disable_leader=True,
