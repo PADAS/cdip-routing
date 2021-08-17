@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_redis_db():
+    logger.debug(f"Connecting to REDIS DB :{settings.REDIS_DB} at {settings.REDIS_HOST}:{settings.REDIS_PORT}")
     return walrus.Database(host=settings.REDIS_HOST,
                            port=settings.REDIS_PORT,
                            db=settings.REDIS_DB)
