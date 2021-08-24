@@ -1,10 +1,11 @@
 import logging
-import os
 from abc import ABC, abstractmethod
 from urllib.parse import urlparse
 
 from cdip_connector.core import schemas
 from dasclient.dasclient import DasClient
+
+from app.core.cloudstorage import get_cloud_storage
 
 logger = logging.getLogger(__name__)
 
@@ -84,15 +85,18 @@ class ERCameraTrapDispatcher(ERDispatcher):
 
     def __init__(self, config, provider):
         super(ERCameraTrapDispatcher, self).__init__(config, provider)
+        self.cloud_storage = get_cloud_storage()
 
     def send(self, camera_trap_payload: dict):
         result = None
         try:
-            result = self.das_client.post_camera_trap_report(camera_trap_payload)
+            file_name = camera_trap_payload.get('file')
+            file = self.cloud_storage.download(file_name)
+            result = self.das_client.post_camera_trap_report(camera_trap_payload, file)
         except Exception as ex:
             logger.exception(f'exception raised sending to dest {ex}')
             raise ex
         finally:
-            os.remove(camera_trap_payload.get("file"))
+            self.cloud_storage.remove(file)
         return result
 
