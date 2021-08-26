@@ -4,6 +4,7 @@ import pathlib
 import tempfile
 from io import BytesIO
 from abc import ABC, abstractmethod
+from cdip_connector.core.routing import CloudStorageTypeEnum
 
 from google.cloud import storage
 
@@ -38,40 +39,20 @@ class GoogleCouldStorage(CloudStorage):
         file = None
         blob = self.bucket.get_blob(file_name)
         if blob:
-            file_extension = pathlib.Path(file_name).suffix
-            temp_file = tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix=file_extension)
-            image_uri = temp_file.name
-
-            with open(image_uri, "wb") as img:
-                blob.download_to_file(img)
-            file = open(image_uri, 'rb')
+            file = BytesIO()
+            blob.download_to_file(file)
+            file.seek(0)
+            file.name = file_name
         else:
             logger.warning(f'{file_name} not found in cloud storage')
         return file
 
     def remove(self, file):
+        # TODO: remove from cloud storage? Or upload with TTL setting?
         try:
             file.close()
-            os.remove(file.name)
         except Exception as e:
-            logger.warning(f'failed to remove {file} with exception: {e}')
-
-    # TODO: Get in memory file like object working
-    # def download(self, file_name) -> bytes:
-    #     file = None
-    #     blob = self.bucket.get_blob(file_name)
-    #     if blob:
-    #         file = BytesIO(blob.download_as_bytes())
-    #     else:
-    #         logger.warning(f'{file_name} not found in cloud storage')
-    #     return file
-
-    # def remove(self, file_name, file):
-    #     # TODO: remove from cloud storage? Or upload with TTL setting?
-    #     try:
-    #         file.close()
-    #     except Exception as e:
-    #         logger.warning(f'failed to close file with exception: {e}')
+            logger.warning(f'failed to close file with exception: {e}')
 
 
 class LocalStorage(CloudStorage):
@@ -88,7 +69,7 @@ class LocalStorage(CloudStorage):
 
 
 def get_cloud_storage():
-    if str.lower(settings.CLOUD_STORAGE_TYPE) == 'google':
+    if str.lower(settings.CLOUD_STORAGE_TYPE) == CloudStorageTypeEnum.google.value:
         return GoogleCouldStorage()
     else:
         return LocalStorage()
