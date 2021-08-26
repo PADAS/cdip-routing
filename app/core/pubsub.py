@@ -3,6 +3,8 @@ from app import settings
 import os
 from google.cloud import pubsub_v1
 import json
+# This was a first attempt at implementing cdip-routing using Google Pub Sub
+# This is obsolete and the functionality has been implemented with kafka
 
 
 class Subscriber(ABC):
@@ -21,7 +23,6 @@ class Publisher(ABC):
 
 class GoogleSubscriber(Subscriber):
     def __init__(self, subscription_name):
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = settings.GOOGLE_APPLICATION_CREDENTIALS
         project_id = settings.GOOGLE_PUB_SUB_PROJECT_ID
         sub_name = subscription_name
         self.subscriber = pubsub_v1.SubscriberClient()
