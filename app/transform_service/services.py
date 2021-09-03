@@ -38,6 +38,8 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
     configs, errors = schemas.get_validated_objects(resp_json, schemas.OutboundConfiguration)
     if errors:
         logger.warning(f'{len(errors)} outbound configs have validation errors. {errors}')
+    if not configs:
+        logger.warning(f'No destinations were found for inbound integration: {inbound_id}')
     return configs
 
 

@@ -17,10 +17,12 @@ attrs==21.2.0
     # via aiohttp
 cachetools==4.2.2
     # via google-auth
-https://github.com/PADAS/smart-integrate-sdk/releases/download/v0.8.1/cdip_connector-0.8.1-py3-none-any.whl
+https://github.com/PADAS/smart-integrate-sdk/releases/download/v0.8.4/cdip_connector-0.8.4-py3-none-any.whl
     # via -r requirements.in
 certifi==2021.5.30
     # via requests
+cffi==1.14.6
+    # via google-crc32c
 chardet==4.0.0
     # via
     #   aiohttp
@@ -35,7 +37,7 @@ colorlog==5.0.1
     # via mode
 croniter==1.0.13
     # via faust
-https://github.com/PADAS/das-clients/releases/download/v1.0.22/dasclient-1.0.22-py3-none-any.whl
+https://github.com/PADAS/das-clients/releases/download/v1.0.23/dasclient-1.0.23-py3-none-any.whl
     # via -r requirements.in
 dateparser==1.0.0
     # via dasclient
@@ -48,11 +50,25 @@ fastapi==0.65.1
 faust==1.10.4
     # via -r requirements.in
 google-api-core[grpc]==1.30.0
-    # via google-cloud-pubsub
+    # via
+    #   google-cloud-core
+    #   google-cloud-pubsub
+    #   google-cloud-storage
 google-auth==1.30.2
-    # via google-api-core
+    # via
+    #   google-api-core
+    #   google-cloud-core
+    #   google-cloud-storage
+google-cloud-core==2.0.0
+    # via google-cloud-storage
 google-cloud-pubsub==2.5.0
     # via -r requirements.in
+google-cloud-storage==1.42.0
+    # via -r requirements.in
+google-crc32c==1.1.2
+    # via google-resumable-media
+google-resumable-media==2.0.0
+    # via google-cloud-storage
 googleapis-common-protos[grpc]==1.53.0
     # via
     #   google-api-core
@@ -104,6 +120,8 @@ pyasn1==0.4.8
     # via
     #   pyasn1-modules
     #   rsa
+pycparser==2.20
+    # via cffi
 pydantic==1.8.2
     # via
     #   -r requirements.in
@@ -138,6 +156,7 @@ requests==2.25.1
     #   cdip-connector
     #   dasclient
     #   google-api-core
+    #   google-cloud-storage
 robinhood-aiokafka==1.1.6
     # via faust
 rsa==4.7.2
@@ -159,8 +178,11 @@ typing-extensions==3.10.0.0
     # via
     #   aiohttp
     #   libcst
+    #   mode
     #   pydantic
     #   typing-inspect
+    #   uvicorn
+    #   yarl
 typing-inspect==0.7.1
     # via libcst
 tzlocal==2.1

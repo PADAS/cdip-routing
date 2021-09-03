@@ -3,6 +3,8 @@ from environs import Env
 env = Env()
 env.read_env()
 
+LOGGING_LEVEL = env.str('LOGGING_LEVEL', 'INFO')
+
 KEYCLOAK_ISSUER = env.str('KEYCLOAK_ISSUER')
 KEYCLOAK_CLIENT_ID = env.str('KEYCLOAK_CLIENT_ID')
 KEYCLOAK_CLIENT_SECRET = env.str('KEYCLOAK_CLIENT_SECRET')
@@ -18,7 +20,7 @@ PORTAL_SSL_VERIFY = env.bool('PORTAL_SSL_VERIFY', True)
 
 # Settings for caching admin portal request/responses
 REDIS_HOST = env.str('REDIS_HOST', 'localhost')
-REDIS_PORT = env.int('REDIS_PORT', 6739)
+REDIS_PORT = env.int('REDIS_PORT', 6379)
 REDIS_DB = env.int('REDIS_DB', 3)
 # N-seconds window to keep hash of portal api response
 REDIS_CHECK_SECONDS = env.int('REDIS_CHECK_SECONDS', 120)
@@ -34,6 +36,8 @@ STREAMING_TRANSFORMED_SUBSCRIPTION_NAME = env.str('STREAMING_TRANSFORMED_SUBSCRI
 STREAMING_TRANSFORMED_TOPIC_NAME = env.str('STREAMING_TRANSFORMED_TOPIC_NAME', 'streaming-transformed-topic')
 TRANSFORM_SERVICE_ENDPOINT = env.str('TRANSFORM_SERVICE_ENDPOINT', 'http://127.0.0.1:8200')
 TRANSFORM_SERVICE_POSITIONS_ENDPOINT = f'{TRANSFORM_SERVICE_ENDPOINT}/streaming/position'
+CLOUD_STORAGE_TYPE = env.str('CLOUD_STORAGE_TYPE', 'google')
+BUCKET_NAME = env.str('BUCKET_NAME', 'cdip-dev-cameratrap')
 
 KAFKA_BROKER = env.str('KAFKA_BROKER')
 

@@ -1,10 +1,10 @@
 import logging
-from enum import Enum
 
 import certifi
 import faust
 from aiokafka.helpers import create_ssl_context
 from cdip_connector.core import schemas
+from cdip_connector.core.routing import TopicEnum
 
 from app import settings
 from app.core import local_logging
@@ -16,25 +16,13 @@ from app.transform_service.services import get_all_outbound_configs_for_id
 local_logging.init()
 logger = logging.getLogger(__name__)
 
-TOPIC_PREFIX = 'sintegrate'
 APP_ID = 'cdip-routing'
-
-
-# Todo: refactor this class into module that both sensors and routing can reference
-class TopicEnum(str, Enum):
-    positions_unprocessed = f'{TOPIC_PREFIX}.positions.unprocessed'
-    positions_transformed = f'{TOPIC_PREFIX}.positions.transformed'
-    geoevent_unprocessed = f'{TOPIC_PREFIX}.geoevent.unprocessed'
-    geoevent_transformed = f'{TOPIC_PREFIX}.geoevent.transformed'
-    message_unprocessed = f'{TOPIC_PREFIX}.message.unprocessed'
-    message_transformed = f'{TOPIC_PREFIX}.message.transformed'
-    cameratrap_unprocessed = f'{TOPIC_PREFIX}.cameratrap.unprocessed'
-    cameratrap_transformed = f'{TOPIC_PREFIX}.cameratrap.transformed'
-
 
 cloud_enabled = settings.CONFLUENT_CLOUD_ENABLED
 if cloud_enabled:
+    logger.debug(f'Entering Confluent Cloud Enabled Flow')
     cert_path = certifi.where()
+    logger.debug(f'cert path: {cert_path}')
     ssl_context = create_ssl_context(cafile=cert_path)
 
     ''' Currently there are limitations on the basic Confluent Cloud account. Automatic topic creation is restricted
@@ -42,13 +30,16 @@ if cloud_enabled:
         process. Any topics that are specified in code and utilized in the flow must be created ahead of time in the
         cloud.
     '''
+    logger.debug(f'username: {settings.CONFLUENT_CLOUD_USERNAME}, pw: {settings.CONFLUENT_CLOUD_PASSWORD}')
+
     app = faust.App(
             APP_ID,
             broker=f'{settings.KAFKA_BROKER}',
             broker_credentials=faust.SASLCredentials(
                 username=settings.CONFLUENT_CLOUD_USERNAME,
                 password=settings.CONFLUENT_CLOUD_PASSWORD,
-                ssl_context=ssl_context
+                ssl_context=ssl_context,
+                mechanism="PLAIN",
             ),
             value_serializer='raw',
             topic_disable_leader=True,

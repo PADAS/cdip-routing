@@ -1,5 +1,9 @@
 import sys
+import logging
 import logging.config
+from app import settings
+
+logging_level = settings.LOGGING_LEVEL
 
 DEFAULT_LOGGING = {
     'version': 1,
@@ -12,7 +16,7 @@ DEFAULT_LOGGING = {
     },
     'handlers': {
         'console': {
-            'level': 'INFO',
+            'level': logging_level,
             'class': 'logging.StreamHandler',
             'stream': sys.stdout,
             'formatter': 'json'
@@ -21,7 +25,7 @@ DEFAULT_LOGGING = {
     'loggers': {
         '': {
             'handlers': ['console'],
-            'level': 'INFO',
+            'level': logging_level,
         },
 
     }
