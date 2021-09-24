@@ -57,6 +57,9 @@ positions_transformed_topic = app.topic(TopicEnum.positions_transformed.value)
 cameratrap_unprocessed_topic = app.topic(TopicEnum.cameratrap_unprocessed.value)
 cameratrap_transformed_topic = app.topic(TopicEnum.cameratrap_transformed.value)
 
+geoevents_unprocessed_topic = app.topic(TopicEnum.geoevent_unprocessed.value)
+geoevents_transformed_topic = app.topic(TopicEnum.geoevent_transformed.value)
+
 
 async def process_observation(key, message, schema: schemas, prefix: schemas.StreamPrefixEnum, transformed_topic):
     logger.info(f'received unprocessed observation with key: {key}')
@@ -149,7 +152,28 @@ async def process_transformed_cameratrap(streaming_transformed_data):
         except Exception as e:
             logger.exception(f'Exception {e} occurred processing {transformed_message}')
             # TODO: determine what we want to do with failed observations
-            # await positions_transformed_topic.send(key=key, value=transformed_message)
+
+
+@app.agent(geoevents_unprocessed_topic)
+async def process_geoevents(streaming_data):
+    async for key, message in streaming_data.items():
+        try:
+            await process_observation(key, message, schemas.GeoEvent, schemas.StreamPrefixEnum.geoevent, geoevents_transformed_topic)
+        # we want to catch all exceptions and repost to a topic to avoid data loss
+        except Exception as e:
+            logger.exception(f'Exception {e} occurred processing {message}')
+            # TODO: determine what we want to do with failed observations
+
+
+@app.agent(geoevents_transformed_topic)
+async def process_transformed_geoevents(streaming_transformed_data):
+    async for key, transformed_message in streaming_transformed_data.items():
+        try:
+            await process_transformed_observation(key, transformed_message, schemas.GeoEvent)
+        # we want to catch all exceptions and repost to a topic to avoid data loss
+        except Exception as e:
+            logger.exception(f'Exception {e} occurred processing {transformed_message}')
+            # TODO: determine what we want to do with failed observations
 
 if __name__ == '__main__':
     logger.info("Application getting started")
