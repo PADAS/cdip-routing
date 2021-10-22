@@ -40,7 +40,9 @@ croniter==1.0.13
 https://github.com/PADAS/das-clients/releases/download/v1.0.23/dasclient-1.0.23-py3-none-any.whl
     # via -r requirements.in
 dateparser==1.0.0
-    # via dasclient
+    # via
+    #   dasclient
+    #   smartconnect-client
 environs==9.3.2
     # via
     #   -r requirements.in
@@ -103,6 +105,8 @@ mypy-extensions==0.4.3
     #   faust
     #   mode
     #   typing-inspect
+numpy==1.21.2
+    # via timezonefinder
 opentracing==1.3.0
     # via faust
 packaging==20.9
@@ -127,6 +131,7 @@ pydantic==1.8.2
     #   -r requirements.in
     #   cdip-connector
     #   fastapi
+    #   smartconnect-client
 pyparsing==2.4.7
     # via packaging
 python-dateutil==2.8.1
@@ -136,18 +141,23 @@ python-dateutil==2.8.1
     #   dateparser
 python-dotenv==0.17.1
     # via environs
-python-json-logger==2.0.1
-    # via cdip-connector
+python-json-logger==2.0.2
+    # via
+    #   cdip-connector
+    #   smartconnect-client
 pytz==2021.1
     # via
     #   cdip-connector
     #   dateparser
     #   google-api-core
+    #   smartconnect-client
     #   tzlocal
 pyyaml==5.4.1
     # via libcst
 redis==3.5.3
-    # via walrus
+    # via
+    #   smartconnect-client
+    #   walrus
 regex==2021.8.3
     # via dateparser
 requests==2.25.1
@@ -157,6 +167,7 @@ requests==2.25.1
     #   dasclient
     #   google-api-core
     #   google-cloud-storage
+    #   smartconnect-client
 robinhood-aiokafka==1.1.6
     # via faust
 rsa==4.7.2
@@ -168,12 +179,16 @@ six==1.16.0
     #   grpcio
     #   protobuf
     #   python-dateutil
+https://github.com/PADAS/smartconnect-client/releases/download/v1.0.2/smartconnect_client-1.0.2-py3-none-any.whl
+    # via -r requirements.in
 starlette==0.14.2
     # via fastapi
 statsd==3.3.0
     # via cdip-connector
 terminaltables==3.1.0
     # via faust
+timezonefinder==5.2.0
+    # via smartconnect-client
 typing-extensions==3.10.0.0
     # via
     #   aiohttp
@@ -187,6 +202,8 @@ typing-inspect==0.7.1
     # via libcst
 tzlocal==2.1
     # via dateparser
+untangle==1.1.1
+    # via smartconnect-client
 urllib3==1.26.5
     # via
     #   -r requirements.in

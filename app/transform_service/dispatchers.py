@@ -5,6 +5,9 @@ from urllib.parse import urlparse
 from cdip_connector.core import schemas
 from dasclient.dasclient import DasClient
 
+from smartconnect import SmartClient
+from smartconnect.models import IndependentIncident
+
 from app.core.cloudstorage import get_cloud_storage
 
 logger = logging.getLogger(__name__)
@@ -100,3 +103,14 @@ class ERCameraTrapDispatcher(ERDispatcher):
             self.cloud_storage.remove(file)
         return result
 
+
+class SmartConnectEREventDispatcher:
+    def __init__(self, config: schemas.OutboundConfiguration):
+        self.config = config
+
+    def send(self, item: dict):
+
+        item = IndependentIncident.parse_obj(item)
+        smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
+        smartclient.add_independent_incident(incident=item, ca_uuid=self.config.additional.get('ca_uuid'))
+        return 

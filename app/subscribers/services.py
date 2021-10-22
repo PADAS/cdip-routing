@@ -7,7 +7,8 @@ from cdip_connector.core import schemas
 
 from app import settings
 from app.core.utils import get_auth_header, get_redis_db, create_cache_key
-from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher, ERCameraTrapDispatcher
+from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher, ERCameraTrapDispatcher, \
+    SmartConnectEREventDispatcher
 from app.transform_service.services import transform_observation
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,28 @@ def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationI
         else:
             raise Exception(f'No Inbound configuration found for id: {integration_id}')
 
+# class SmartConnectEREventLoader(ERLoader):
+
+#     def __init__(self, config:schemas.OutboundConfiguration):
+#         super().__init__(config)
+#         self.smartconnect_client = SmartClient(api=config.endpoint, username=config.login, password=config.password)
+
+#         self.ca_uuid = config.additional.get('ca_uuid', None)
+#     def send(self, messages: List[IndependentIncident]):
+#         results = []
+#         for m in messages:
+#             try:
+
+#                 result = self.smartconnect_client.add_independent_incident(incident=m, ca_uuid=self.ca_uuid)
+#                 logger.info(f'Posted IndependentIncident {m} to Smart Connect. Result is: {result}')
+
+#             except Exception as ex:
+#                 # todo: propagate exceptions back to caller
+#                 logger.exception(f'exception raised sending to dest {ex}')
+
+#         return results
+
+
 
 def dispatch_transformed_observation(stream_type: str,
                                      outbound_config_id: str,
@@ -122,10 +145,14 @@ def dispatch_transformed_observation(stream_type: str,
     if config:
         if stream_type == schemas.StreamPrefixEnum.position or stream_type == schemas.StreamPrefixEnum.observation:
             dispatcher = ERPositionDispatcher(config, provider)
+        elif stream_type == schemas.StreamPrefixEnum.geoevent and \
+            config.type_slug == schemas.DestinationTypes.SmartConnect.value:
+                dispatcher = SmartConnectEREventDispatcher(config)
         elif stream_type == schemas.StreamPrefixEnum.geoevent:
             dispatcher = ERGeoEventDispatcher(config, provider)
         elif stream_type == schemas.StreamPrefixEnum.camera_trap:
             dispatcher = ERCameraTrapDispatcher(config, provider)
+
         if dispatcher:
             dispatcher.send(observation)
         else:
