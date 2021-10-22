@@ -17,7 +17,7 @@ attrs==21.2.0
     # via aiohttp
 cachetools==4.2.2
     # via google-auth
-https://github.com/PADAS/smart-integrate-sdk/releases/download/v0.8.4/cdip_connector-0.8.4-py3-none-any.whl
+https://github.com/PADAS/smart-integrate-sdk/releases/download/v0.9.6/cdip_connector-0.9.6-py3-none-any.whl
     # via -r requirements.in
 certifi==2021.5.30
     # via requests

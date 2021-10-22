@@ -47,14 +47,14 @@ class TransformerNotFound(Exception):
     pass
 
 
-def transform_observation(stream_type: schemas.StreamPrefixEnum,
+def transform_observation(stream_type: str,
             config: schemas.OutboundConfiguration,
             observation) -> dict:
 
     transformer = None
 
     # todo: need a better way than this to build the correct components.
-    if (stream_type == schemas.StreamPrefixEnum.position
+    if ((stream_type == schemas.StreamPrefixEnum.position or stream_type == schemas.StreamPrefixEnum.observation)
             and config.type_slug == schemas.DestinationTypes.EarthRanger.value):
         transformer = ERPositionTransformer
     elif (stream_type == schemas.StreamPrefixEnum.geoevent
