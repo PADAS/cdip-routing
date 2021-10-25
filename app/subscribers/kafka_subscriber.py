@@ -18,6 +18,13 @@ logger = logging.getLogger(__name__)
 
 APP_ID = 'cdip-routing'
 
+observation_type_map = {
+    schemas.StreamPrefixEnum.observation: schemas.Observation,
+    schemas.StreamPrefixEnum.position: schemas.Position,
+    schemas.StreamPrefixEnum.geoevent: schemas.GeoEvent,
+    schemas.StreamPrefixEnum.camera_trap: schemas.CameraTrap
+}
+
 cloud_enabled = settings.CONFLUENT_CLOUD_ENABLED
 if cloud_enabled:
     logger.debug(f'Entering Confluent Cloud Enabled Flow')
@@ -51,17 +58,11 @@ else:
         value_serializer='raw',
     )
 
-positions_unprocessed_topic = app.topic(TopicEnum.positions_unprocessed.value)
-positions_transformed_topic = app.topic(TopicEnum.positions_transformed.value)
-
-cameratrap_unprocessed_topic = app.topic(TopicEnum.cameratrap_unprocessed.value)
-cameratrap_transformed_topic = app.topic(TopicEnum.cameratrap_transformed.value)
-
-geoevents_unprocessed_topic = app.topic(TopicEnum.geoevent_unprocessed.value)
-geoevents_transformed_topic = app.topic(TopicEnum.geoevent_transformed.value)
+observations_unprocessed_topic = app.topic(TopicEnum.observations_unprocessed.value)
+observations_transformed_topic = app.topic(TopicEnum.observations_transformed.value)
 
 
-async def process_observation(key, message, schema: schemas, prefix: schemas.StreamPrefixEnum, transformed_topic):
+async def process_observation(key, message):
     logger.info(f'received unprocessed observation with key: {key}')
     logger.debug(f'message received: {message}')
     raw_observation, attributes = extract_fields_from_message(message)
@@ -70,6 +71,8 @@ async def process_observation(key, message, schema: schemas, prefix: schemas.Str
 
     db = get_redis_db()
 
+    observation_type = attributes.get('observation_type')
+    schema = observation_type_map[observation_type]
     observation = convert_observation_to_cdip_schema(raw_observation, schema)
 
     if observation:
@@ -77,24 +80,21 @@ async def process_observation(key, message, schema: schemas, prefix: schemas.Str
         destinations = get_all_outbound_configs_for_id(db, int_id)
 
         for destination in destinations:
-            jsonified_data = create_transformed_message(observation, destination, prefix)
+            jsonified_data = create_transformed_message(observation, destination, schema.stream_prefix())
 
             if destination.id:
                 key = get_key_for_transformed_observation(key, destination.id)
-            await transformed_topic.send(key=key, value=jsonified_data)
+            await observations_transformed_topic.send(key=key, value=jsonified_data)
 
 
-async def process_transformed_observation(key, transformed_message, schema: schemas = None):
+async def process_transformed_observation(key, transformed_message):
     logger.info(f'received transformed observation with key: {key}')
     logger.debug(f'message received: {transformed_message}')
-    raw_observation, attributes = extract_fields_from_message(transformed_message)
-    logger.debug(f'observation: {raw_observation}')
+    transformed_observation, attributes = extract_fields_from_message(transformed_message)
+    logger.debug(f'observation: {transformed_observation}')
     logger.debug(f'attributes: {attributes}')
 
-    # TODO: May need to create a different schema for the transformed schema since we only have string dict at this point
-    # observation = convert_observation_to_cdip_schema(raw_observation, schema)
-
-    if not raw_observation:
+    if not transformed_observation:
         logger.warning(f'No observation was obtained from {transformed_message}')
         return
     if not attributes:
@@ -104,72 +104,24 @@ async def process_transformed_observation(key, transformed_message, schema: sche
     integration_id = attributes.get('integration_id')
     outbound_config_id = attributes.get('outbound_config_id')
 
-    dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, raw_observation)
+    dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, transformed_observation)
 
-
-@app.agent(positions_unprocessed_topic)
-async def process_position(streaming_data):
+@app.agent(observations_unprocessed_topic)
+async def process_observations(streaming_data):
     async for key, message in streaming_data.items():
         try:
-            await process_observation(key, message, schemas.Position, schemas.StreamPrefixEnum.position, positions_transformed_topic)
-        # we want to catch all exceptions and repost to a topic to avoid data loss
-        except Exception as e:
-            logger.exception(f'Exception {e} occurred processing {message}')
-            # TODO: determine what we want to do with failed observations
-            # await positions_unprocessed_topic.send(key=key, value=message)
-
-
-@app.agent(positions_transformed_topic)
-async def process_transformed_position(streaming_transformed_data):
-    async for key, transformed_message in streaming_transformed_data.items():
-        try:
-            await process_transformed_observation(key, transformed_message, schemas.Position)
-
-        # we want to catch all exceptions and repost to a topic to avoid data loss
-        except Exception as e:
-            logger.exception(f'Exception {e} occurred processing {transformed_message}')
-            # TODO: determine what we want to do with failed observations
-            # await positions_transformed_topic.send(key=key, value=transformed_message)
-
-
-@app.agent(cameratrap_unprocessed_topic)
-async def process_cameratrap(streaming_data):
-    async for key, message in streaming_data.items():
-        try:
-            await process_observation(key, message, schemas.CameraTrap, schemas.StreamPrefixEnum.camera_trap, cameratrap_transformed_topic)
+            await process_observation(key, message)
         # we want to catch all exceptions and repost to a topic to avoid data loss
         except Exception as e:
             logger.exception(f'Exception {e} occurred processing {message}')
             # TODO: determine what we want to do with failed observations
 
 
-@app.agent(cameratrap_transformed_topic)
-async def process_transformed_cameratrap(streaming_transformed_data):
+@app.agent(observations_transformed_topic)
+async def process_transformed_observations(streaming_transformed_data):
     async for key, transformed_message in streaming_transformed_data.items():
         try:
-            await process_transformed_observation(key, transformed_message, schemas.CameraTrap)
-        # we want to catch all exceptions and repost to a topic to avoid data loss
-        except Exception as e:
-            logger.exception(f'Exception {e} occurred processing {transformed_message}')
-            # TODO: determine what we want to do with failed observations
-
-
-@app.agent(geoevents_unprocessed_topic)
-async def process_geoevents(streaming_data):
-    async for key, message in streaming_data.items():
-        try:
-            await process_observation(key, message, schemas.GeoEvent, schemas.StreamPrefixEnum.geoevent, geoevents_transformed_topic)
-        # we want to catch all exceptions and repost to a topic to avoid data loss
-        except Exception as e:
-            logger.exception(f'Exception {e} occurred processing {message}')
-            # TODO: determine what we want to do with failed observations
-
-
-@app.agent(geoevents_transformed_topic)
-async def process_transformed_geoevents(streaming_transformed_data):
-    async for key, transformed_message in streaming_transformed_data.items():
-        try:
-            await process_transformed_observation(key, transformed_message, schemas.GeoEvent)
+            await process_transformed_observation(key, transformed_message)
         # we want to catch all exceptions and repost to a topic to avoid data loss
         except Exception as e:
             logger.exception(f'Exception {e} occurred processing {transformed_message}')

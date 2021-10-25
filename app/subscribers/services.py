@@ -106,7 +106,6 @@ def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationI
         else:
             raise Exception(f'No Inbound configuration found for id: {integration_id}')
 
-
 # class SmartConnectEREventLoader(ERLoader):
 
 #     def __init__(self, config:schemas.OutboundConfiguration):
@@ -121,7 +120,7 @@ def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationI
 
 #                 result = self.smartconnect_client.add_independent_incident(incident=m, ca_uuid=self.ca_uuid)
 #                 logger.info(f'Posted IndependentIncident {m} to Smart Connect. Result is: {result}')
-                
+
 #             except Exception as ex:
 #                 # todo: propagate exceptions back to caller
 #                 logger.exception(f'exception raised sending to dest {ex}')
@@ -129,7 +128,8 @@ def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationI
 #         return results
 
 
-def dispatch_transformed_observation(stream_type: schemas.StreamPrefixEnum,
+
+def dispatch_transformed_observation(stream_type: str,
                                      outbound_config_id: str,
                                      inbound_int_id: str,
                                      observation) -> dict:
@@ -143,7 +143,7 @@ def dispatch_transformed_observation(stream_type: schemas.StreamPrefixEnum,
         logger.debug(f'config: {config}')
 
     if config:
-        if stream_type == schemas.StreamPrefixEnum.position:
+        if stream_type == schemas.StreamPrefixEnum.position or stream_type == schemas.StreamPrefixEnum.observation:
             dispatcher = ERPositionDispatcher(config, provider)
         elif stream_type == schemas.StreamPrefixEnum.geoevent and \
             config.type_slug == schemas.DestinationTypes.SmartConnect.value:
@@ -172,38 +172,18 @@ def convert_observation_to_cdip_schema(observation, schema: schemas):
         return None
 
 
-def convert_observation_to_position(observation):
-    positions = [observation]
-    positions, errors = schemas.get_validated_objects(positions, schemas.Position)
-    if len(positions) > 0:
-        return positions[0]
-    else:
-        logger.warning(f'unable to validate position: {observation} errors: {errors}')
-        return None
-
-
-def convert_observation_to_cameratrap(observation):
-    payloads = [observation]
-    cameratrap_payloads, errors = schemas.get_validated_objects(payloads, schemas.CameraTrap)
-    if len(cameratrap_payloads) > 0:
-        return cameratrap_payloads[0]
-    else:
-        logger.warning(f'unable to validate position: {observation} errors: {errors}')
-        return None
-
-
 def create_message(attributes, observation):
     message = {'attributes': attributes,
                'data': observation}
     return message
 
 
-def create_transformed_message(observation, destination, prefix: schemas.StreamPrefixEnum):
+def create_transformed_message(observation, destination, prefix: str):
     transformed_observation = transform_observation(prefix, destination, observation)
     logger.debug(f'Transformed observation: {transformed_observation}')
 
     # observation_type may no longer be needed as topics are now specific to observation type
-    attributes = {'observation_type': prefix.value,
+    attributes = {'observation_type': prefix,
                   'outbound_config_id': str(destination.id),
                   'integration_id': observation.integration_id}
 
