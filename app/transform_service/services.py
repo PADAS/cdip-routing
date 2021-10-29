@@ -66,7 +66,11 @@ def get_device_detail(integration_id : UUID, device_id: UUID) -> schemas.Device:
         headers = get_auth_header()
         resp = requests.get(url=f'{integration_device_list_endpoint}',
                             headers=headers, verify=settings.PORTAL_SSL_VERIFY)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except Exception as e:
+            logger.warning(f'Portal API returned error: {e} for request: {integration_device_list_endpoint}')
+            return None
         resp_json = resp.json()
         resp_json_str = json.dumps(resp_json)
         cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
