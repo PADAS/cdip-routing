@@ -15,6 +15,8 @@ from app.transform_service.transformers import ERPositionTransformer, ERGeoEvent
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
+
 
 def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbound_id: UUID) -> List[schemas.OutboundConfiguration]:
 
@@ -53,9 +55,10 @@ def get_device_detail(integration_id : UUID, device_id: UUID) -> schemas.Device:
     :return: device
     '''
     cache_db = get_redis_db()
-    integration_device_list_endpoint = f'{settings.PORTAL_API_ENDPOINT}/devices/{str(integration_id)}'
+    integration_device_list_endpoint = f'{settings.PORTAL_API_ENDPOINT}/integrations/inbound/{str(integration_id)}/devices?external_id={device_id}'
     cache_key = create_cache_key(integration_device_list_endpoint)
-    resp_json_bytes = cache_db.get(cache_key)
+    # resp_json_bytes = cache_db.get(cache_key)
+    resp_json_bytes = None
 
     if resp_json_bytes:
         resp_json_str = resp_json_bytes.decode('utf-8')
@@ -69,19 +72,13 @@ def get_device_detail(integration_id : UUID, device_id: UUID) -> schemas.Device:
         cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
 
     resp_json = json.loads(resp_json_str)
-    resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
-    devices = parse_obj_as(List[schemas.Device], resp_json)
-    matching_devices = [d for d in devices if d.external_id == device_id]
-    device = None
-    if len(matching_devices) > 0:
-        # assume only one match on external_id
-        device = matching_devices[0]
+    device = schemas.Device.parse_obj(resp_json)
     return device
 
 
 def apply_pre_transformation_rules(observation):
     # query portal for configured location if observation location is set to default_location
-    if hasattr(observation, 'location') and observation.location == schemas.Location.default_location():
+    if hasattr(observation, 'location') and observation.location == DEFAULT_LOCATION:
         device = get_device_detail(observation.integration_id, observation.device_id)
         if device:
             default_location = device.additional.location
