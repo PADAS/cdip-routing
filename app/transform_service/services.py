@@ -57,8 +57,8 @@ def get_device_detail(integration_id : UUID, device_id: UUID) -> schemas.Device:
     cache_db = get_redis_db()
     integration_device_list_endpoint = f'{settings.PORTAL_API_ENDPOINT}/integrations/inbound/{str(integration_id)}/devices?external_id={device_id}'
     cache_key = create_cache_key(integration_device_list_endpoint)
-    # resp_json_bytes = cache_db.get(cache_key)
-    resp_json_bytes = None
+    resp_json_bytes = cache_db.get(cache_key)
+    device = None
 
     if resp_json_bytes:
         resp_json_str = resp_json_bytes.decode('utf-8')
@@ -74,9 +74,12 @@ def get_device_detail(integration_id : UUID, device_id: UUID) -> schemas.Device:
         resp_json = resp.json()
         resp_json_str = json.dumps(resp_json)
         cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
+    try:
+        resp_json = json.loads(resp_json_str)
+        device = schemas.Device.parse_obj(resp_json)
+    except Exception as e:
+        logger.warning(f"Exception occurred parsing response from {integration_device_list_endpoint} \n {e}")
 
-    resp_json = json.loads(resp_json_str)
-    device = schemas.Device.parse_obj(resp_json)
     return device
 
 
@@ -84,9 +87,11 @@ def apply_pre_transformation_rules(observation):
     # query portal for configured location if observation location is set to default_location
     if hasattr(observation, 'location') and observation.location == DEFAULT_LOCATION:
         device = get_device_detail(observation.integration_id, observation.device_id)
-        if device:
+        if device and device.additional and device.additional.location:
             default_location = device.additional.location
             observation.location = default_location
+        else:
+            logger.warning(f"No default location found for device {observation.device_id} with unspecified location")
     return observation
 
 
