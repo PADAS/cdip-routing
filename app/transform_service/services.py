@@ -6,13 +6,16 @@ from uuid import UUID
 import requests
 import walrus
 from cdip_connector.core import schemas
+from pydantic import parse_obj_as
 
 from app import settings
-from app.core.utils import get_auth_header, create_cache_key
-from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer, ERCameraTrapTransformer
+from app.core.utils import get_auth_header, create_cache_key, get_redis_db
 from app.transform_service.smartconnect_transformers import SmartEREventTransformer
+from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer, ERCameraTrapTransformer
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
 
 
 def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbound_id: UUID) -> List[schemas.OutboundConfiguration]:
@@ -44,6 +47,54 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
     return configs
 
 
+def get_device_detail(integration_id : UUID, device_id: UUID) -> schemas.Device:
+    '''
+    Get device detail based on inbound integration id and external_id when device.id not available
+    :param integration_id: inbound integration configruation id
+    :param device_id: external device id
+    :return: device
+    '''
+    cache_db = get_redis_db()
+    integration_device_list_endpoint = f'{settings.PORTAL_API_ENDPOINT}/integrations/inbound/{str(integration_id)}/devices?external_id={device_id}'
+    cache_key = create_cache_key(integration_device_list_endpoint)
+    resp_json_bytes = cache_db.get(cache_key)
+    device = None
+
+    if resp_json_bytes:
+        resp_json_str = resp_json_bytes.decode('utf-8')
+    else:
+        headers = get_auth_header()
+        resp = requests.get(url=f'{integration_device_list_endpoint}',
+                            headers=headers, verify=settings.PORTAL_SSL_VERIFY)
+        try:
+            resp.raise_for_status()
+        except Exception as e:
+            logger.warning(f'Portal API returned error: {e} for request: {integration_device_list_endpoint}')
+            return None
+        resp_json = resp.json()
+        resp_json_str = json.dumps(resp_json)
+        cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
+    try:
+        resp_json = json.loads(resp_json_str)
+        device = schemas.Device.parse_obj(resp_json)
+    except Exception as e:
+        logger.warning(f"Exception occurred parsing response from {integration_device_list_endpoint} \n {e}")
+
+    return device
+
+
+def apply_pre_transformation_rules(observation):
+    # query portal for configured location if observation location is set to default_location
+    if hasattr(observation, 'location') and observation.location == DEFAULT_LOCATION:
+        device = get_device_detail(observation.integration_id, observation.device_id)
+        if device and device.additional and device.additional.location:
+            default_location = device.additional.location
+            observation.location = default_location
+        else:
+            logger.warning(f"No default location found for device {observation.device_id} with unspecified location")
+    return observation
+
+
 class TransformerNotFound(Exception):
     pass
 
@@ -67,9 +118,9 @@ def transform_observation(stream_type: str,
     elif (stream_type == schemas.StreamPrefixEnum.geoevent
         and config.type_slug == schemas.DestinationTypes.SmartConnect.value):
         transformer = SmartEREventTransformer(config=config, ca_datamodel=None)
-                            
 
     if transformer:
+        observation = apply_pre_transformation_rules(observation)
         return transformer.transform(observation)
     else:
         raise TransformerNotFound(f'No dispatcher found for {stream_type} dest: {config.type_slug}')
