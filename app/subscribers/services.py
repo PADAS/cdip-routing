@@ -143,7 +143,7 @@ def dispatch_transformed_observation(stream_type: str,
         logger.debug(f'config: {config}')
 
     if config:
-        if stream_type == schemas.StreamPrefixEnum.position or stream_type == schemas.StreamPrefixEnum.observation:
+        if stream_type == schemas.StreamPrefixEnum.position:
             dispatcher = ERPositionDispatcher(config, provider)
         elif stream_type == schemas.StreamPrefixEnum.geoevent and \
             config.type_slug == schemas.DestinationTypes.SmartConnect.value:

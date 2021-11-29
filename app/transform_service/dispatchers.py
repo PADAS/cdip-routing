@@ -1,10 +1,10 @@
 import logging
 from abc import ABC, abstractmethod
+from typing import Union
 from urllib.parse import urlparse
 
 from cdip_connector.core import schemas
 from dasclient.dasclient import DasClient
-
 from smartconnect import SmartClient
 from smartconnect.models import IndependentIncident
 
@@ -73,8 +73,10 @@ class ERGeoEventDispatcher(ERDispatcher):
     def __init__(self, config, provider):
         super(ERGeoEventDispatcher, self).__init__(config, provider)
 
-    def send(self, messages: list):
+    def send(self, messages: Union[list, dict]):
         results = []
+        if isinstance(messages, dict):
+            messages = [messages]
         for m in messages:
             try:
                 results.append(self.das_client.post_report(m))

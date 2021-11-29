@@ -3,7 +3,7 @@ import logging
 import certifi
 import faust
 from aiokafka.helpers import create_ssl_context
-from cdip_connector.core import schemas
+from cdip_connector.core.schemas import models_by_stream_type
 from cdip_connector.core.routing import TopicEnum
 
 from app import settings
@@ -17,13 +17,6 @@ local_logging.init()
 logger = logging.getLogger(__name__)
 
 APP_ID = 'cdip-routing'
-
-observation_type_map = {
-    schemas.StreamPrefixEnum.observation: schemas.Observation,
-    schemas.StreamPrefixEnum.position: schemas.Position,
-    schemas.StreamPrefixEnum.geoevent: schemas.GeoEvent,
-    schemas.StreamPrefixEnum.camera_trap: schemas.CameraTrap
-}
 
 cloud_enabled = settings.CONFLUENT_CLOUD_ENABLED
 if cloud_enabled:
@@ -63,7 +56,8 @@ observations_transformed_topic = app.topic(TopicEnum.observations_transformed.va
 
 
 async def process_observation(key, message):
-    logger.info(f'received unprocessed observation with key: {key}')
+    if key:
+        logger.info(f'received unprocessed observation with key: {key}')
     logger.debug(f'message received: {message}')
     raw_observation, attributes = extract_fields_from_message(message)
     logger.debug(f'observation: {raw_observation}')
@@ -72,7 +66,7 @@ async def process_observation(key, message):
     db = get_redis_db()
 
     observation_type = attributes.get('observation_type')
-    schema = observation_type_map[observation_type]
+    schema = models_by_stream_type[observation_type]
     observation = convert_observation_to_cdip_schema(raw_observation, schema)
 
     if observation:
@@ -126,6 +120,24 @@ async def process_transformed_observations(streaming_transformed_data):
         except Exception as e:
             logger.exception(f'Exception {e} occurred processing {transformed_message}')
             # TODO: determine what we want to do with failed observations
+
+
+@app.timer(interval=120.0)
+async def log_metrics(app):
+    m = app.monitor
+    metrics_dict = {
+        'rebalances': m.rebalances,
+        'rebalance_return_avg': m.rebalance_return_avg,
+        # 'messages_received_by_topic': m.messages_received_by_topic,
+    }
+    logger.info(f"Metrics heartbeat for Consumer: {metrics_dict}")
+
+
+# @app.on_rebalance_start()
+# async def on_rebalance_start():
+#     pass
+
+
 
 if __name__ == '__main__':
     logger.info("Application getting started")

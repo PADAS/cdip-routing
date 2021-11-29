@@ -106,7 +106,7 @@ def transform_observation(stream_type: str,
     transformer = None
 
     # todo: need a better way than this to build the correct components.
-    if ((stream_type == schemas.StreamPrefixEnum.position or stream_type == schemas.StreamPrefixEnum.observation)
+    if (stream_type == schemas.StreamPrefixEnum.position
             and config.type_slug == schemas.DestinationTypes.EarthRanger.value):
         transformer = ERPositionTransformer
     elif (stream_type == schemas.StreamPrefixEnum.geoevent
