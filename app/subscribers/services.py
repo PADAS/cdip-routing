@@ -161,7 +161,8 @@ def dispatch_transformed_observation(stream_type: str,
         logger.error(f'No config detail found for {outbound_config_id}')
 
 
-def convert_observation_to_cdip_schema(observation, schema: schemas):
+def convert_observation_to_cdip_schema(observation):
+    schema = schemas.models_by_stream_type[observation.get('observation_type')]
     # method requires a list
     observations = [observation]
     observations, errors = schemas.get_validated_objects(observations, schema)

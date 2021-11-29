@@ -65,16 +65,14 @@ async def process_observation(key, message):
 
     db = get_redis_db()
 
-    observation_type = attributes.get('observation_type')
-    schema = models_by_stream_type[observation_type]
-    observation = convert_observation_to_cdip_schema(raw_observation, schema)
+    observation = convert_observation_to_cdip_schema(raw_observation)
 
     if observation:
         int_id = observation.integration_id
         destinations = get_all_outbound_configs_for_id(db, int_id)
 
         for destination in destinations:
-            jsonified_data = create_transformed_message(observation, destination, schema.stream_prefix())
+            jsonified_data = create_transformed_message(observation, destination, observation.observation_type)
 
             if destination.id:
                 key = get_key_for_transformed_observation(key, destination.id)
