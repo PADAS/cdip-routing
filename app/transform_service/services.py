@@ -35,7 +35,9 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
         resp.raise_for_status()
         resp_json = resp.json()
         resp_json_str = json.dumps(resp_json)
-        destinations_cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
+        # only cache if we receive results as its possible this is not mapped in portal yet
+        if resp_json:
+            destinations_cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
 
     resp_json = json.loads(resp_json_str)
     resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
