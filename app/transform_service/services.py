@@ -99,8 +99,8 @@ def apply_pre_transformation_rules(observation):
         else:
             logger.warning(f"No default location found for device {observation.device_id} with unspecified location")
 
-    # add admin portal configured name to title
-    if isinstance(observation, schemas.GeoEvent):
+    # add admin portal configured name to title for water meter geo events
+    if isinstance(observation, schemas.GeoEvent) and observation.event_type == 'water_meter_rep':
         if not device:
             device = get_device_detail(observation.integration_id, observation.device_id)
         if device and device.name:
