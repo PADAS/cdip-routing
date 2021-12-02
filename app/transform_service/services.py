@@ -86,6 +86,10 @@ def get_device_detail(integration_id : UUID, device_id: UUID) -> schemas.Device:
 
 
 def apply_pre_transformation_rules(observation):
+    """Area to query portal for configurations rules to apply to observation
+    TODO: Setting on inbound integration for whether there are rules to apply to avoid calling portal unnecessarily?"""
+
+    device = None
     # query portal for configured location if observation location is set to default_location
     if hasattr(observation, 'location') and observation.location == DEFAULT_LOCATION:
         device = get_device_detail(observation.integration_id, observation.device_id)
@@ -94,6 +98,13 @@ def apply_pre_transformation_rules(observation):
             observation.location = default_location
         else:
             logger.warning(f"No default location found for device {observation.device_id} with unspecified location")
+
+    # add admin portal configured name to title
+    if isinstance(observation, schemas.GeoEvent):
+        if not device:
+            device = get_device_detail(observation.integration_id, observation.device_id)
+        if device and device.name:
+            observation.title += f' - {device.name}'
     return observation
 
 
