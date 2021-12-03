@@ -105,6 +105,14 @@ def apply_pre_transformation_rules(observation):
             device = get_device_detail(observation.integration_id, observation.device_id)
         if device and device.name:
             observation.title += f' - {device.name}'
+
+    # add admin portal configured subject type
+    if isinstance(observation, schemas.Position) and not observation.subject_type:
+        if not device:
+            device = get_device_detail(observation.integration_id, observation.device_id)
+        if device and device.subject_type:
+            observation.subject_type = device.subject_type
+
     return observation
 
 

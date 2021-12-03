@@ -80,7 +80,8 @@ async def process_observation(key, message):
 
 
 async def process_transformed_observation(key, transformed_message):
-    logger.info(f'received transformed observation with key: {key}')
+    if key:
+        logger.info(f'received transformed observation with key: {key}')
     logger.debug(f'message received: {transformed_message}')
     transformed_observation, attributes = extract_fields_from_message(transformed_message)
     logger.debug(f'observation: {transformed_observation}')
@@ -134,7 +135,6 @@ async def log_metrics(app):
 # @app.on_rebalance_start()
 # async def on_rebalance_start():
 #     pass
-
 
 
 if __name__ == '__main__':
