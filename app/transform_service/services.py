@@ -35,7 +35,9 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
         resp.raise_for_status()
         resp_json = resp.json()
         resp_json_str = json.dumps(resp_json)
-        destinations_cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
+        # only cache if we receive results as its possible this is not mapped in portal yet
+        if resp_json:
+            destinations_cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
 
     resp_json = json.loads(resp_json_str)
     resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
@@ -84,6 +86,10 @@ def get_device_detail(integration_id : UUID, device_id: UUID) -> schemas.Device:
 
 
 def apply_pre_transformation_rules(observation):
+    """Area to query portal for configurations rules to apply to observation
+    TODO: Setting on inbound integration for whether there are rules to apply to avoid calling portal unnecessarily?"""
+
+    device = None
     # query portal for configured location if observation location is set to default_location
     if hasattr(observation, 'location') and observation.location == DEFAULT_LOCATION:
         device = get_device_detail(observation.integration_id, observation.device_id)
@@ -92,6 +98,13 @@ def apply_pre_transformation_rules(observation):
             observation.location = default_location
         else:
             logger.warning(f"No default location found for device {observation.device_id} with unspecified location")
+
+    # add admin portal configured name to title for water meter geo events
+    if isinstance(observation, schemas.GeoEvent) and observation.event_type == 'water_meter_rep':
+        if not device:
+            device = get_device_detail(observation.integration_id, observation.device_id)
+        if device and device.name:
+            observation.title += f' - {device.name}'
     return observation
 
 
@@ -106,7 +119,7 @@ def transform_observation(stream_type: str,
     transformer = None
 
     # todo: need a better way than this to build the correct components.
-    if ((stream_type == schemas.StreamPrefixEnum.position or stream_type == schemas.StreamPrefixEnum.observation)
+    if (stream_type == schemas.StreamPrefixEnum.position
             and config.type_slug == schemas.DestinationTypes.EarthRanger.value):
         transformer = ERPositionTransformer
     elif (stream_type == schemas.StreamPrefixEnum.geoevent
