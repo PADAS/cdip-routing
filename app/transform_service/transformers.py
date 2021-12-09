@@ -26,16 +26,22 @@ class ERPositionTransformer(Transformer):
     def transform(position: schemas.Position) -> dict:
         if not position.location or not position.location.y or not position.location.x:
             logger.warning(f'bad position?? {position}')
-        return dict(manufacturer_id=position.device_id,
-                    source_type=position.type if position.type else 'tracking-device',
-                    subject_name=position.name if position.name else position.device_id,
-                    recorded_at=position.recorded_at,
-                    location={
-                        'lon': position.location.x,
-                        'lat': position.location.y
-                    },
-                    additional=position.additional
-                    )
+        transformed_position = dict(manufacturer_id=position.device_id,
+                                    source_type=position.type if position.type else 'tracking-device',
+                                    subject_name=position.name if position.name else position.device_id,
+                                    recorded_at=position.recorded_at,
+                                    location={
+                                        'lon': position.location.x,
+                                        'lat': position.location.y
+                                    },
+                                    additional=position.additional
+                                    )
+
+        # ER does not except null subject_subtype so conditionally add to transformed position if set
+        if position.subject_type:
+            transformed_position['subject_subtype'] = position.subject_type
+
+        return transformed_position
 
 
 class ERGeoEventTransformer(Transformer):
