@@ -54,29 +54,3 @@ def generate_random_execption():
     num = random.random()
     if num > .66:
         raise Exception()
-
-async def ensure_device_integration(integration_id: str, device_id: str):
-    ensure_device_integration
-    async for devicecache_db in get_devicecache_db():
-        pass
-
-    if devicecache_db.sismember(create_integration_devices_cache_key(integration_id), device_id):
-        return True
-
-    portal = PortalApi()
-
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30),
-                                     connector=aiohttp.TCPConnector(ssl=False)) as sess:
-        try:
-            device_data = await portal.ensure_device(sess, str(integration_id), device_id)
-        except Exception as e:
-            logger.exception('Error when posting device to Portal.', extra={
-                'integration_id': integration_id,
-                'device_id': device_id
-            })
-            return False
-        else:
-
-            devicecache_db.sadd(create_integration_devices_cache_key(integration_id), device_id)
-
-            return True
