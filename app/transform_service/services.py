@@ -3,10 +3,10 @@ import logging
 from typing import List
 from uuid import UUID
 
+import aiohttp
 import requests
 import walrus
-from cdip_connector.core import schemas
-from pydantic import parse_obj_as
+from cdip_connector.core import schemas, portal_api
 
 from app import settings
 from app.core.utils import get_auth_header, create_cache_key, get_redis_db
@@ -49,71 +49,62 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
     return configs
 
 
-def get_device_detail(integration_id : UUID, device_id: UUID) -> schemas.Device:
-    '''
-    Get device detail based on inbound integration id and external_id when device.id not available
-    :param integration_id: inbound integration configruation id
-    :param device_id: external device id
-    :return: device
-    '''
+async def update_observation_with_device_configuration(observation):
+    device = await ensure_device_integration(observation.integration_id, observation.device_id)
+    if device:
+        if hasattr(observation, 'location') and observation.location == DEFAULT_LOCATION:
+            if device.additional and device.additional.location:
+                default_location = device.additional.location
+                observation.location = default_location
+            else:
+                logger.warning(
+                    f"No default location found for device {observation.device_id} with unspecified location")
+
+        # add admin portal configured name to title for water meter geo events
+        if isinstance(observation, schemas.GeoEvent) and observation.event_type == 'water_meter_rep':
+            if device and device.name:
+                observation.title += f' - {device.name}'
+
+        # add admin portal configured subject type
+        if isinstance(observation, schemas.Position) and not observation.subject_type:
+            if device and device.subject_type:
+                observation.subject_type = device.subject_type
+
+    return observation
+
+
+async def ensure_device_integration(integration_id: str, device_id: str):
     cache_db = get_redis_db()
-    integration_device_list_endpoint = f'{settings.PORTAL_API_ENDPOINT}/integrations/inbound/{str(integration_id)}/devices?external_id={device_id}'
-    cache_key = create_cache_key(integration_device_list_endpoint)
+
+    cache_key = f'device_detail.{integration_id}.{device_id}'
     resp_json_bytes = cache_db.get(cache_key)
+
     device = None
+    extra_dict = dict(needs_attention=True,
+                      integration_id=str(integration_id),
+                      device_id=device_id)
 
     if resp_json_bytes:
         resp_json_str = resp_json_bytes.decode('utf-8')
     else:
-        headers = get_auth_header()
-        resp = requests.get(url=f'{integration_device_list_endpoint}',
-                            headers=headers, verify=settings.PORTAL_SSL_VERIFY)
-        try:
-            resp.raise_for_status()
-        except Exception as e:
-            logger.warning(f'Portal API returned error: {e} for request: {integration_device_list_endpoint}')
-            return None
-        resp_json = resp.json()
-        resp_json_str = json.dumps(resp_json)
-        cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
+        portal = portal_api.PortalApi()
+
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30),
+                                         connector=aiohttp.TCPConnector(ssl=False)) as sess:
+            try:
+                resp_json = await portal.ensure_device(sess, str(integration_id), device_id)
+            except Exception as e:
+                logger.exception('Error when posting device to Portal.', extra=extra_dict)
+                return None
+            else:
+                resp_json_str = json.dumps(resp_json)
+                cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
     try:
         resp_json = json.loads(resp_json_str)
         device = schemas.Device.parse_obj(resp_json)
     except Exception as e:
-        logger.warning(f"Exception occurred parsing response from {integration_device_list_endpoint} \n {e}")
-
+        logger.exception(f"Exception {e} occurred parsing response from portal.ensure_device", extra=extra_dict)
     return device
-
-
-def apply_pre_transformation_rules(observation):
-    """Area to query portal for configurations rules to apply to observation
-    TODO: Setting on inbound integration for whether there are rules to apply to avoid calling portal unnecessarily?"""
-
-    device = None
-    # query portal for configured location if observation location is set to default_location
-    if hasattr(observation, 'location') and observation.location == DEFAULT_LOCATION:
-        device = get_device_detail(observation.integration_id, observation.device_id)
-        if device and device.additional and device.additional.location:
-            default_location = device.additional.location
-            observation.location = default_location
-        else:
-            logger.warning(f"No default location found for device {observation.device_id} with unspecified location")
-
-    # add admin portal configured name to title for water meter geo events
-    if isinstance(observation, schemas.GeoEvent) and observation.event_type == 'water_meter_rep':
-        if not device:
-            device = get_device_detail(observation.integration_id, observation.device_id)
-        if device and device.name:
-            observation.title += f' - {device.name}'
-
-    # add admin portal configured subject type
-    if isinstance(observation, schemas.Position) and not observation.subject_type:
-        if not device:
-            device = get_device_detail(observation.integration_id, observation.device_id)
-        if device and device.subject_type:
-            observation.subject_type = device.subject_type
-
-    return observation
 
 
 class TransformerNotFound(Exception):
@@ -141,7 +132,6 @@ def transform_observation(stream_type: str,
         transformer = SmartEREventTransformer(config=config, ca_datamodel=None)
 
     if transformer:
-        observation = apply_pre_transformation_rules(observation)
         return transformer.transform(observation)
     else:
         raise TransformerNotFound(f'No dispatcher found for {stream_type} dest: {config.type_slug}')

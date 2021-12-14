@@ -3,7 +3,6 @@ import logging
 import certifi
 import faust
 from aiokafka.helpers import create_ssl_context
-from cdip_connector.core.schemas import models_by_stream_type
 from cdip_connector.core.routing import TopicEnum
 
 from app import settings
@@ -11,7 +10,7 @@ from app.core import local_logging
 from app.core.utils import get_redis_db
 from app.subscribers.services import extract_fields_from_message, convert_observation_to_cdip_schema, \
     create_transformed_message, get_key_for_transformed_observation, dispatch_transformed_observation
-from app.transform_service.services import get_all_outbound_configs_for_id
+from app.transform_service.services import get_all_outbound_configs_for_id, update_observation_with_device_configuration
 
 local_logging.init()
 logger = logging.getLogger(__name__)
@@ -68,6 +67,7 @@ async def process_observation(key, message):
     observation = convert_observation_to_cdip_schema(raw_observation)
 
     if observation:
+        observation = await update_observation_with_device_configuration(observation)
         int_id = observation.integration_id
         destinations = get_all_outbound_configs_for_id(db, int_id)
 
