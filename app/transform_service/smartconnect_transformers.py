@@ -79,7 +79,8 @@ class SmartEREventTransformer:
             self.ca = self.get_conservation_area(self.ca_uuid)
         except Exception as ex:
             self.logger.warning(f'Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}.')
-
+            self.ca = None
+            
         # Let the timezone fall-back to configuration in the OutboundIntegration.
         try:
             val = self._config.additional.get('timezone', None)
