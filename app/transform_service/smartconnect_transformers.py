@@ -44,8 +44,8 @@ class AttributeMapper(BaseModel):
     event_types: Optional[List[str]]
 
 class TransformationRules(BaseModel):
-    category_map: List[CategoryPair]
-    attribute_map: List[AttributeMapper]
+    category_map: Optional[List[CategoryPair]] = []
+    attribute_map: Optional[List[AttributeMapper]] = []
 
 class SmartConnectConfigurationAdditional(BaseModel):
     ca_uuid: uuid.UUID
@@ -91,7 +91,7 @@ class SmartEREventTransformer:
             
         self.ca_timezone = guess_ca_timezone(self.ca) if self.ca else self._default_timezone
 
-        transformation_rules_dict = self._config.additional.get('transformation_rules', None)
+        transformation_rules_dict = self._config.additional.get('transformation_rules', {})
         if transformation_rules_dict:
             self._transformation_rules = TransformationRules.parse_obj(transformation_rules_dict)
 
@@ -280,9 +280,3 @@ class SmartEREventTransformer:
         incident = IndependentIncident.parse_obj(incident_data)
 
         return incident
-
-
-
-
-
-
