@@ -80,7 +80,7 @@ class SmartEREventTransformer:
         except Exception as ex:
             self.logger.warning(f'Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}.')
             self.ca = None
-            
+
         # Let the timezone fall-back to configuration in the OutboundIntegration.
         try:
             val = self._config.additional.get('timezone', None)
@@ -256,7 +256,7 @@ class SmartEREventTransformer:
             },
 
             'properties': {
-                'dateTime': geoevent_localtime.recorded_at.strftime(SMARTCONNECT_DATFORMAT),
+                'dateTime': geoevent_localtime.strftime(SMARTCONNECT_DATFORMAT),
                 'smartDataType': 'incident',
                 'smartFeatureType': 'observation',
                 'smartAttributes': {
