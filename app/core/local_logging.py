@@ -1,6 +1,7 @@
 import sys
 import logging
 import logging.config
+from enum import Enum
 from app import settings
 
 logging_level = settings.LOGGING_LEVEL
@@ -59,4 +60,16 @@ def init():
     logging.config.dictConfig(DEFAULT_LOGGING)
 
     is_initialized = True
+
+
+class ExtraKeys(Enum):
+    DeviceId = 'device_id'
+    InboundIntId = 'inbound_integration_id'
+    OutboundIntId = 'outbound_integration_id'
+    AttentionNeeded = 'attention_needed'
+    StreamType = 'stream_type'
+    Provider = 'provider'
+    Error = 'error'
+    Url = 'url'
+
 
