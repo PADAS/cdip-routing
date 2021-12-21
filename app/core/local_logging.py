@@ -62,7 +62,10 @@ def init():
     is_initialized = True
 
 
-class ExtraKeys(Enum):
+class ExtraKeys(str, Enum):
+    def __str__(self):
+        return str(self.value)
+
     DeviceId = 'device_id'
     InboundIntId = 'inbound_integration_id'
     OutboundIntId = 'outbound_integration_id'
