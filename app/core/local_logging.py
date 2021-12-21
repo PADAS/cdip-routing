@@ -27,7 +27,23 @@ DEFAULT_LOGGING = {
             'handlers': ['console'],
             'level': logging_level,
         },
-
+        # Reduce flood of debug messages from following modules when in debug mode
+        'mode.timers': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'aiokafka.consumer.fetcher': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'aiokafka.conn': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'aiokafka.consumer.group_coordinator': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
     }
 }
 

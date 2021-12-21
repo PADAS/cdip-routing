@@ -12,7 +12,6 @@ from app.subscribers.services import extract_fields_from_message, convert_observ
     create_transformed_message, get_key_for_transformed_observation, dispatch_transformed_observation
 from app.transform_service.services import get_all_outbound_configs_for_id, update_observation_with_device_configuration
 
-local_logging.init()
 logger = logging.getLogger(__name__)
 
 APP_ID = 'cdip-routing'
@@ -41,6 +40,7 @@ if cloud_enabled:
                 mechanism="PLAIN",
             ),
             value_serializer='raw',
+            logging_config=local_logging.DEFAULT_LOGGING,
             topic_disable_leader=True,
         )
 else:
@@ -48,6 +48,7 @@ else:
         APP_ID,
         broker=f'{settings.KAFKA_BROKER}',
         value_serializer='raw',
+        logging_config=local_logging.DEFAULT_LOGGING
     )
 
 observations_unprocessed_topic = app.topic(TopicEnum.observations_unprocessed.value)
@@ -129,7 +130,7 @@ async def log_metrics(app):
         'rebalance_return_avg': m.rebalance_return_avg,
         # 'messages_received_by_topic': m.messages_received_by_topic,
     }
-    logger.info(f"Metrics heartbeat for Consumer: {metrics_dict}")
+    logger.info(f"Metrics heartbeat for Consumer", extra=metrics_dict)
 
 
 # @app.on_rebalance_start()
