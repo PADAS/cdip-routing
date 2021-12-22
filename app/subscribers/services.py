@@ -14,6 +14,8 @@ from app.core.local_logging import ExtraKeys
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_TIMEOUT = (3.1, 20)
+
 
 def post_message_to_transform_service(observation_type, observation, message_id):
     logger.debug(f"Received observation: {observation}")
@@ -75,7 +77,10 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
     else:
         try:
             headers = get_auth_header()
-            response = requests.get(url=outbound_integrations_endpoint, verify=settings.PORTAL_SSL_VERIFY, headers=headers)
+            response = requests.get(url=outbound_integrations_endpoint,
+                                    verify=settings.PORTAL_SSL_VERIFY,
+                                    headers=headers,
+                                    timeout=DEFAULT_TIMEOUT)
             response.raise_for_status()
             value = schemas.OutboundConfiguration.parse_obj(response.json())
             if value:
@@ -102,7 +107,10 @@ def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationI
     else:
         try:
             headers = get_auth_header()
-            response = requests.get(url=inbound_integrations_endpoint, verify=settings.PORTAL_SSL_VERIFY, headers=headers)
+            response = requests.get(url=inbound_integrations_endpoint,
+                                    verify=settings.PORTAL_SSL_VERIFY,
+                                    headers=headers,
+                                    timeout=DEFAULT_TIMEOUT)
             response.raise_for_status()
             value = schemas.IntegrationInformation.parse_obj(response.json())
             if value:
@@ -197,6 +205,7 @@ def create_transformed_message(observation, destination, prefix: str):
 
     # observation_type may no longer be needed as topics are now specific to observation type
     attributes = {'observation_type': prefix,
+                  'device_id': observation.device_id,
                   'outbound_config_id': str(destination.id),
                   'integration_id': observation.integration_id}
 

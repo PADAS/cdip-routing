@@ -91,9 +91,11 @@ async def process_transformed_observation(key, transformed_message):
         logger.warning(f'No attributes were obtained from {transformed_message}')
         return
     observation_type = attributes.get('observation_type')
+    device_id = attributes.get('device_id')
     integration_id = attributes.get('integration_id')
     outbound_config_id = attributes.get('outbound_config_id')
-    logger.info('received transformed observation', extra={ExtraKeys.InboundIntId: integration_id,
+    logger.info('received transformed observation', extra={ExtraKeys.DeviceId: device_id,
+                                                           ExtraKeys.InboundIntId: integration_id,
                                                            ExtraKeys.OutboundIntId: outbound_config_id})
     dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, transformed_observation)
 
