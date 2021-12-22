@@ -6,10 +6,11 @@ import uuid
 import json
 from app.subscribers import cache
 from pydantic import BaseModel, Field
-from typing import List,Dict, Any, Optional, Tuple
+from typing import List,Dict, Any, Optional, Tuple, Union
 from enum import Enum
 # from models import TransformationRules
 # from transform_service.transformers import Transformer, ERGeoEventTransformer, ERPositionTransformer
+import timezonefinder
 
 from cdip_connector.core import schemas
 import urllib.parse as uparse
@@ -17,7 +18,7 @@ import urllib.parse as uparse
 import smartconnect
 from smartconnect.utils import guess_ca_timezone
 from smartconnect.models import SmartAttributes, SmartObservation, SMARTCONNECT_DATFORMAT, \
- SmartObservationGroup, IncidentProperties, IndependentIncident
+ SmartObservationGroup, IncidentProperties, IndependentIncident, ConservationArea
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +44,8 @@ class AttributeMapper(BaseModel):
     event_types: Optional[List[str]]
 
 class TransformationRules(BaseModel):
-    category_map: List[CategoryPair]
-    attribute_map: List[AttributeMapper]
+    category_map: Optional[List[CategoryPair]] = []
+    attribute_map: Optional[List[AttributeMapper]] = []
 
 class SmartConnectConfigurationAdditional(BaseModel):
     ca_uuid: uuid.UUID
@@ -62,31 +63,78 @@ class SmartEREventTransformer:
     
     '''
 
-    def __init__(self, *, config: schemas.OutboundConfiguration = None, ca_datamodel: smartconnect.DataModel = None):
+    def __init__(self, *, config: schemas.OutboundConfiguration = None, **kwargs):
         self._config = config
+
+        self.logger = logging.getLogger(self.__class__.__name__)
 
         self.ca_uuid = self._config.additional.get('ca_uuid', None)
 
-        self.smartconnect_client = smartconnect.SmartClient(api=config.endpoint, username=config.login, password=config.password)
+        self.smartconnect_client = smartconnect.SmartClient(api=config.endpoint, username=config.login,
+                                                            password=config.password)
 
         self._ca_datamodel = self.get_data_model(ca_uuid=self.ca_uuid) 
-        #self.smartconnect_client.download_datamodel(ca_uuid=self.ca_uuid)
 
-        for ca in self.smartconnect_client.get_conservation_areas():
-            if ca.uuid == uuid.UUID(self.ca_uuid):
-                self.ca = ca
-                break
-        else:
-            logger.error('Can\'t find a Conservation Area with UUID: {self.ca_uuid}')
+        try:
+            self.ca = self.get_conservation_area(self.ca_uuid)
+        except Exception as ex:
+            self.logger.warning(f'Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}.')
             self.ca = None
 
-        self.ca_timezone = guess_ca_timezone(self.ca) if ca else None
+        # Let the timezone fall-back to configuration in the OutboundIntegration.
+        try:
+            val = self._config.additional.get('timezone', None)
+            self._default_timezone = pytz.timezone(val)
+        except pytz.exceptions.UnknownTimeZoneError as utze:
+            self.logger.warning(f'Configured timezone is {val}, but it is not a known timezone. Defaulting to UTC unless timezone can be inferred from the Conservation Area\'s meta-data.')
+            self._default_timezone = pytz.utc
+            
+        self.ca_timezone = guess_ca_timezone(self.ca) if self.ca else self._default_timezone
 
-        transformation_rules_dict = self._config.additional.get('transformation_rules', None)
+        transformation_rules_dict = self._config.additional.get('transformation_rules', {})
         if transformation_rules_dict:
             self._transformation_rules = TransformationRules.parse_obj(transformation_rules_dict)
 
-    def get_data_model(self, *, ca_uuid:str):
+    def get_conservation_area(self, *, ca_uuid:str = None):
+
+        cache_key = f'cache:smart-ca:{ca_uuid}:metadata'
+        self.logger.info('Looking up CA cached at {cache_key}.')
+        try:
+            cached_data = cache.cache.get(cache_key)
+            if cached_data:
+                self.logger.info('Found CA cached at {cache_key}.')
+                self.ca = ConservationArea.parse_raw(cached_data)
+                return self.ca
+
+            self.logger.info(f'Cache miss for {cache_key}')
+        except:
+            self.logger.info(f'Cache miss/error for {cache_key}')
+            pass
+
+        try:
+            self.logger.info('Querying Smart Connect for CAs at endpoint: %s, username: %s', self._config.endpoint, self._config.login)
+
+            for ca in self.smartconnect_client.get_conservation_areas():
+                if ca.uuid == uuid.UUID(ca_uuid):
+                    self.ca = ca
+                    break
+
+
+
+            else:
+                logger.error('Can\'t find a Conservation Area with UUID: {self.ca_uuid}')
+                self.ca = None
+
+            if self.ca:
+                self.logger.info(f'Caching CA metadata at {cache_key}')
+                cache.cache.setex(name=cache_key, time=60 * 5, value=json.dumps(dict(self.ca)))
+
+            return self.ca
+
+        except Exception as ex:
+            self.logger.exception(f'Failed to get Conservation Areas')
+
+    def get_data_model(self, *, ca_uuid:str = None):
 
 
             cache_key = f'cache:smart-ca:{ca_uuid}:datamodel'
@@ -163,6 +211,17 @@ class SmartEREventTransformer:
 
         return json.loads(incident.json()) if incident else None
 
+    def guess_location_timezone(self, *, longitude:Union[float,int]=None, latitude: Union[float,int]=None):
+        '''
+        Guess the timezone at the given location. Gracefully fall back on the timezone that's configured for this
+        OutboundConfiguration (which will in turn fall back to Utc).
+        '''
+        try:
+            predicted_timezone = timezonefinder.TimezoneFinder().timezone_at(lng=longitude, lat=latitude)
+            return pytz.timezone(predicted_timezone)
+        except:
+            return self._default_timezone
+    
     def geoevent_to_incident(self, *, geoevent: schemas.GeoEvent = None) -> IndependentIncident:
 
         # Sanitize coordinates
@@ -178,9 +237,15 @@ class SmartEREventTransformer:
 
         attributes = self._resolve_attributes_for_event(geoevent=geoevent)
 
-        present_time = datetime.now(tz=pytz.utc)
+
+        location_timezone = self.guess_location_timezone(longitude=geoevent.location.x, latitude=geoevent.location.y)
+
+
+        present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
+        geoevent_localtime = geoevent.recorded_at.astimezone(location_timezone)
+        
         comment = f'Report: {geoevent.title if geoevent.title else geoevent.event_type}' \
-                + f'\nImported: {present_time.isoformat()}' 
+                + f'\nImported: {present_localtime.isoformat()}' 
 
 
         incident_data = {
@@ -191,7 +256,7 @@ class SmartEREventTransformer:
             },
 
             'properties': {
-                'dateTime': geoevent.recorded_at.strftime(SMARTCONNECT_DATFORMAT),
+                'dateTime': geoevent_localtime.strftime(SMARTCONNECT_DATFORMAT),
                 'smartDataType': 'incident',
                 'smartFeatureType': 'observation',
                 'smartAttributes': {
@@ -215,9 +280,3 @@ class SmartEREventTransformer:
         incident = IndependentIncident.parse_obj(incident_data)
 
         return incident
-
-
-
-
-
-
