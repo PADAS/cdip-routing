@@ -6,13 +6,12 @@ from aiokafka.helpers import create_ssl_context
 from cdip_connector.core.routing import TopicEnum
 
 from app import settings
-from app.core import local_logging
+from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
 from app.core.utils import get_redis_db
 from app.subscribers.services import extract_fields_from_message, convert_observation_to_cdip_schema, \
     create_transformed_message, get_key_for_transformed_observation, dispatch_transformed_observation
 from app.transform_service.services import get_all_outbound_configs_for_id, update_observation_with_device_configuration
 
-local_logging.init()
 logger = logging.getLogger(__name__)
 
 APP_ID = 'cdip-routing'
@@ -41,6 +40,7 @@ if cloud_enabled:
                 mechanism="PLAIN",
             ),
             value_serializer='raw',
+            logging_config=DEFAULT_LOGGING,
             topic_disable_leader=True,
         )
 else:
@@ -48,6 +48,7 @@ else:
         APP_ID,
         broker=f'{settings.KAFKA_BROKER}',
         value_serializer='raw',
+        logging_config=DEFAULT_LOGGING
     )
 
 observations_unprocessed_topic = app.topic(TopicEnum.observations_unprocessed.value)
@@ -55,8 +56,6 @@ observations_transformed_topic = app.topic(TopicEnum.observations_transformed.va
 
 
 async def process_observation(key, message):
-    if key:
-        logger.info(f'received unprocessed observation with key: {key}')
     logger.debug(f'message received: {message}')
     raw_observation, attributes = extract_fields_from_message(message)
     logger.debug(f'observation: {raw_observation}')
@@ -65,6 +64,8 @@ async def process_observation(key, message):
     db = get_redis_db()
 
     observation = convert_observation_to_cdip_schema(raw_observation)
+    logger.info('received unprocessed observation', extra={ExtraKeys.DeviceId: observation.device_id,
+                                                           ExtraKeys.InboundIntId: observation.integration_id})
 
     if observation:
         observation = await update_observation_with_device_configuration(observation)
@@ -73,15 +74,11 @@ async def process_observation(key, message):
 
         for destination in destinations:
             jsonified_data = create_transformed_message(observation, destination, observation.observation_type)
-
-            if destination.id:
-                key = get_key_for_transformed_observation(key, destination.id)
+            key = get_key_for_transformed_observation(key, destination.id)
             await observations_transformed_topic.send(key=key, value=jsonified_data)
 
 
 async def process_transformed_observation(key, transformed_message):
-    if key:
-        logger.info(f'received transformed observation with key: {key}')
     logger.debug(f'message received: {transformed_message}')
     transformed_observation, attributes = extract_fields_from_message(transformed_message)
     logger.debug(f'observation: {transformed_observation}')
@@ -94,10 +91,14 @@ async def process_transformed_observation(key, transformed_message):
         logger.warning(f'No attributes were obtained from {transformed_message}')
         return
     observation_type = attributes.get('observation_type')
+    device_id = attributes.get('device_id')
     integration_id = attributes.get('integration_id')
     outbound_config_id = attributes.get('outbound_config_id')
-
+    logger.info('received transformed observation', extra={ExtraKeys.DeviceId: device_id,
+                                                           ExtraKeys.InboundIntId: integration_id,
+                                                           ExtraKeys.OutboundIntId: outbound_config_id})
     dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, transformed_observation)
+
 
 @app.agent(observations_unprocessed_topic)
 async def process_observations(streaming_data):
@@ -129,7 +130,7 @@ async def log_metrics(app):
         'rebalance_return_avg': m.rebalance_return_avg,
         # 'messages_received_by_topic': m.messages_received_by_topic,
     }
-    logger.info(f"Metrics heartbeat for Consumer: {metrics_dict}")
+    logger.info(f"Metrics heartbeat for Consumer", extra=metrics_dict)
 
 
 # @app.on_rebalance_start()

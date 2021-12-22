@@ -1,6 +1,7 @@
 import sys
 import logging
 import logging.config
+from enum import Enum
 from app import settings
 
 logging_level = settings.LOGGING_LEVEL
@@ -27,7 +28,23 @@ DEFAULT_LOGGING = {
             'handlers': ['console'],
             'level': logging_level,
         },
-
+        # Reduce flood of debug messages from following modules when in debug mode
+        'mode.timers': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+        },
+        'aiokafka.consumer.fetcher': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'aiokafka.conn': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'aiokafka.consumer.group_coordinator': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
     }
 }
 
@@ -43,4 +60,19 @@ def init():
     logging.config.dictConfig(DEFAULT_LOGGING)
 
     is_initialized = True
+
+
+class ExtraKeys(str, Enum):
+    def __str__(self):
+        return str(self.value)
+
+    DeviceId = 'device_id'
+    InboundIntId = 'inbound_integration_id'
+    OutboundIntId = 'outbound_integration_id'
+    AttentionNeeded = 'attention_needed'
+    StreamType = 'stream_type'
+    Provider = 'provider'
+    Error = 'error'
+    Url = 'url'
+
 

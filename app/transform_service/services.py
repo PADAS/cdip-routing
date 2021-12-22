@@ -9,6 +9,7 @@ import walrus
 from cdip_connector.core import schemas, portal_api
 
 from app import settings
+from app.core.local_logging import ExtraKeys
 from app.core.utils import get_auth_header, create_cache_key, get_redis_db
 from app.transform_service.smartconnect_transformers import SmartEREventTransformer
 from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer, ERCameraTrapTransformer
@@ -43,9 +44,11 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
     resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
     configs, errors = schemas.get_validated_objects(resp_json, schemas.OutboundConfiguration)
     if errors:
-        logger.warning(f'{len(errors)} outbound configs have validation errors. {errors}')
+        logger.error(f'{len(errors)} outbound configs have validation errors', extra={ExtraKeys.Error: errors,
+                                                                                      'portal_response': resp_json})
     if not configs:
-        logger.warning(f'No destinations were found for inbound integration: {inbound_id}')
+        logger.warning(f'No destinations were found for inbound integration',
+                       extra={ExtraKeys.InboundIntId: inbound_id})
     return configs
 
 
@@ -57,8 +60,8 @@ async def update_observation_with_device_configuration(observation):
                 default_location = device.additional.location
                 observation.location = default_location
             else:
-                logger.warning(
-                    f"No default location found for device {observation.device_id} with unspecified location")
+                logger.warning(f"No default location found for device with unspecified location",
+                               extra={ExtraKeys.DeviceId: observation.device_id})
 
         # add admin portal configured name to title for water meter geo events
         if isinstance(observation, schemas.GeoEvent) and observation.event_type == 'water_meter_rep':
@@ -80,9 +83,9 @@ async def ensure_device_integration(integration_id: str, device_id: str):
     resp_json_bytes = cache_db.get(cache_key)
 
     device = None
-    extra_dict = dict(needs_attention=True,
-                      integration_id=str(integration_id),
-                      device_id=device_id)
+    extra_dict = {ExtraKeys.AttentionNeeded: True,
+                  ExtraKeys.InboundIntId: str(integration_id),
+                  ExtraKeys.DeviceId: device_id}
 
     if resp_json_bytes:
         resp_json_str = resp_json_bytes.decode('utf-8')
@@ -94,7 +97,8 @@ async def ensure_device_integration(integration_id: str, device_id: str):
             try:
                 resp_json = await portal.ensure_device(sess, str(integration_id), device_id)
             except Exception as e:
-                logger.exception('Error when posting device to Portal.', extra=extra_dict)
+                logger.exception('Error when posting device to Portal.', extra={**extra_dict,
+                                                                                ExtraKeys.Error: e})
                 return None
             else:
                 resp_json_str = json.dumps(resp_json)
@@ -103,7 +107,8 @@ async def ensure_device_integration(integration_id: str, device_id: str):
         resp_json = json.loads(resp_json_str)
         device = schemas.Device.parse_obj(resp_json)
     except Exception as e:
-        logger.exception(f"Exception {e} occurred parsing response from portal.ensure_device", extra=extra_dict)
+        logger.exception(f"Exception occurred parsing response from portal.ensure_device", extra={**extra_dict,
+                                                                                                  ExtraKeys.Error: e})
     return device
 
 
@@ -116,6 +121,9 @@ def transform_observation(stream_type: str,
             observation) -> dict:
 
     transformer = None
+    extra_dict = {ExtraKeys.InboundIntId: observation.integration_id,
+                  ExtraKeys.OutboundIntId: config.id,
+                  ExtraKeys.StreamType: stream_type}
 
     # todo: need a better way than this to build the correct components.
     if (stream_type == schemas.StreamPrefixEnum.position
@@ -134,4 +142,6 @@ def transform_observation(stream_type: str,
     if transformer:
         return transformer.transform(observation)
     else:
+        logger.error('No dispatcher found for destination', extra={**extra_dict,
+                                                                   ExtraKeys.Provider: config.type_slug})
         raise TransformerNotFound(f'No dispatcher found for {stream_type} dest: {config.type_slug}')

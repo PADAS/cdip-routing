@@ -10,8 +10,11 @@ from app.core.utils import get_auth_header, get_redis_db, create_cache_key
 from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher, ERCameraTrapDispatcher, \
     SmartConnectEREventDispatcher
 from app.transform_service.services import transform_observation
+from app.core.local_logging import ExtraKeys
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_TIMEOUT = (3.1, 20)
 
 
 def post_message_to_transform_service(observation_type, observation, message_id):
@@ -72,15 +75,23 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
     if cached_json:
         return schemas.OutboundConfiguration.parse_raw(cached_json)
     else:
-        headers = get_auth_header()
-        response = requests.get(url=outbound_integrations_endpoint, verify=settings.PORTAL_SSL_VERIFY, headers=headers)
-
-        if response.ok:
+        try:
+            headers = get_auth_header()
+            response = requests.get(url=outbound_integrations_endpoint,
+                                    verify=settings.PORTAL_SSL_VERIFY,
+                                    headers=headers,
+                                    timeout=DEFAULT_TIMEOUT)
+            response.raise_for_status()
             value = schemas.OutboundConfiguration.parse_obj(response.json())
-            cache.setex(cache_key, settings.PORTAL_CONFIG_OBJECT_CACHE_TTL, value.json())
+            if value:
+                cache.setex(cache_key, settings.PORTAL_CONFIG_OBJECT_CACHE_TTL, value.json())
             return value
-        else:
-            raise Exception(f'No Outbound configuration found for id: {outbound_id}')
+        except Exception as e:
+            logger.error('Portal returned bad response during request for outbound config detail',
+                         extra={ExtraKeys.AttentionNeeded: True,
+                                ExtraKeys.OutboundIntId: outbound_id,
+                                ExtraKeys.Url: response.request,
+                                ExtraKeys.Error: e})
 
 
 def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationInformation:
@@ -94,17 +105,23 @@ def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationI
     if cached_json:
         return schemas.IntegrationInformation.parse_raw(cached_json)
     else:
-
-        headers = get_auth_header()
-        response = requests.get(url=inbound_integrations_endpoint, verify=settings.PORTAL_SSL_VERIFY, headers=headers)
-
-        if response.ok:
-
+        try:
+            headers = get_auth_header()
+            response = requests.get(url=inbound_integrations_endpoint,
+                                    verify=settings.PORTAL_SSL_VERIFY,
+                                    headers=headers,
+                                    timeout=DEFAULT_TIMEOUT)
+            response.raise_for_status()
             value = schemas.IntegrationInformation.parse_obj(response.json())
-            cache.setex(cache_key, settings.PORTAL_CONFIG_OBJECT_CACHE_TTL, value.json())
+            if value:
+                cache.setex(cache_key, settings.PORTAL_CONFIG_OBJECT_CACHE_TTL, value.json())
             return value
-        else:
-            raise Exception(f'No Inbound configuration found for id: {integration_id}')
+        except Exception as e:
+            logger.error('Portal returned bad response during request for inbound config detail',
+                         extra={ExtraKeys.AttentionNeeded: True,
+                                ExtraKeys.InboundIntId: integration_id,
+                                ExtraKeys.Url: response.request,
+                                ExtraKeys.Error: e})
 
 # class SmartConnectEREventLoader(ERLoader):
 
@@ -128,7 +145,6 @@ def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationI
 #         return results
 
 
-
 def dispatch_transformed_observation(stream_type: str,
                                      outbound_config_id: str,
                                      inbound_int_id: str,
@@ -137,10 +153,9 @@ def dispatch_transformed_observation(stream_type: str,
     config = get_outbound_config_detail(outbound_config_id)
     inbound_integration = get_inbound_integration_detail(inbound_int_id)
     provider = inbound_integration.provider
-
-    if stream_type == schemas.StreamPrefixEnum.position:
-        logger.debug(f'observation: {observation}')
-        logger.debug(f'config: {config}')
+    extra_dict = {ExtraKeys.InboundIntId: inbound_int_id,
+                  ExtraKeys.OutboundIntId: outbound_config_id,
+                  ExtraKeys.StreamType: stream_type}
 
     if config:
         if stream_type == schemas.StreamPrefixEnum.position:
@@ -156,9 +171,13 @@ def dispatch_transformed_observation(stream_type: str,
         if dispatcher:
             dispatcher.send(observation)
         else:
-            logger.error(f'No dispatcher found for {stream_type} dest: {config.type_slug}')
+            extra_dict[ExtraKeys.Provider] = config.type_slug
+            logger.error(f'No dispatcher found', extra={**extra_dict,
+                                                        ExtraKeys.Provider: config.type_slug,
+                                                        ExtraKeys.AttentionNeeded: True})
     else:
-        logger.error(f'No config detail found for {outbound_config_id}')
+        logger.error(f'No outbound config detail found', extra={**extra_dict,
+                                                                ExtraKeys.AttentionNeeded: True})
 
 
 def convert_observation_to_cdip_schema(observation):
@@ -169,7 +188,8 @@ def convert_observation_to_cdip_schema(observation):
     if len(observations) > 0:
         return observations[0]
     else:
-        logger.warning(f'unable to validate position: {observation} errors: {errors}')
+        logger.error(f'unable to validate observation', extra={'observation': observation,
+                                                               ExtraKeys.Error: errors})
         return None
 
 
@@ -185,6 +205,7 @@ def create_transformed_message(observation, destination, prefix: str):
 
     # observation_type may no longer be needed as topics are now specific to observation type
     attributes = {'observation_type': prefix,
+                  'device_id': observation.device_id,
                   'outbound_config_id': str(destination.id),
                   'integration_id': observation.integration_id}
 
@@ -200,7 +221,7 @@ def extract_fields_from_message(message):
         observation = decoded_message.get('data')
         attributes = decoded_message.get('attributes')
     else:
-        logger.warning(f'message: {message} contained no payload')
+        logger.warning(f'message contained no payload', extra={'message': message})
         return None, None
     return observation, attributes
 
