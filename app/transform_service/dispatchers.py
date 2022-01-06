@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Union
 from urllib.parse import urlparse
 
+import requests
 from cdip_connector.core import schemas
 from dasclient.dasclient import DasClient
 from smartconnect import SmartClient
@@ -109,10 +110,43 @@ class ERCameraTrapDispatcher(ERDispatcher):
 class SmartConnectEREventDispatcher:
     def __init__(self, config: schemas.OutboundConfiguration):
         self.config = config
+        self.cloud_storage = get_cloud_storage()
 
     def send(self, item: dict):
 
         item = IndependentIncident.parse_obj(item)
         smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
         smartclient.add_independent_incident(incident=item, ca_uuid=self.config.additional.get('ca_uuid'))
-        return 
+        return
+
+
+class WPSWatchCameraTrapDispatcher:
+    def __init__(self, config: schemas.OutboundConfiguration):
+        self.config = config
+        self.cloud_storage = get_cloud_storage()
+
+    # TODO: potentially move this up so we dont download multiple times
+    def send(self, camera_trap_payload: dict):
+        try:
+            file_name = camera_trap_payload.get('Attachment1')
+            file = self.cloud_storage.download(file_name)
+            file_data = (file_name, file, 'image/jpeg')
+            result = self.wpswatch_post(camera_trap_payload, file_data)
+        except Exception as ex:
+            logger.exception(f'exception raised sending to dest {ex}')
+            raise ex
+        finally:
+            self.cloud_storage.remove(file)
+        return
+
+    def wpswatch_post(self, camera_trap_payload, file_data=None):
+        endpoint = f'{self.config.endpoint}/api/Upload'
+        headers = {'Wps-Api-Key': self.config.token,
+                   }
+        files = {'Attachment1': file_data}
+
+        body = camera_trap_payload
+        # TODO: remove redundant slashes in case base URL has it added
+        response = requests.post(endpoint, data=body, headers=headers, files=files)
+        return response
+

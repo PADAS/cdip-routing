@@ -12,7 +12,8 @@ from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import get_auth_header, create_cache_key, get_redis_db
 from app.transform_service.smartconnect_transformers import SmartEREventTransformer
-from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer, ERCameraTrapTransformer
+from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer, ERCameraTrapTransformer, \
+    WPSWatchCameraTrapTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,9 @@ def transform_observation(stream_type: str,
     elif (stream_type == schemas.StreamPrefixEnum.camera_trap
           and config.type_slug == schemas.DestinationTypes.EarthRanger.value):
         transformer = ERCameraTrapTransformer
+    elif (stream_type == schemas.StreamPrefixEnum.camera_trap
+          and config.type_slug == schemas.DestinationTypes.WPSWatch.value):
+        transformer = WPSWatchCameraTrapTransformer
     elif (stream_type == schemas.StreamPrefixEnum.geoevent
         and config.type_slug == schemas.DestinationTypes.SmartConnect.value):
         transformer = SmartEREventTransformer(config=config, ca_datamodel=None)
