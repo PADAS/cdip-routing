@@ -1,4 +1,6 @@
 import logging
+import mimetypes
+import os
 from abc import ABC, abstractmethod
 from typing import Union
 from urllib.parse import urlparse
@@ -125,28 +127,41 @@ class WPSWatchCameraTrapDispatcher:
         self.config = config
         self.cloud_storage = get_cloud_storage()
 
-    # TODO: potentially move this up so we dont download multiple times
     def send(self, camera_trap_payload: dict):
         try:
             file_name = camera_trap_payload.get('Attachment1')
+            # TODO: Test without media type and with other types
             file = self.cloud_storage.download(file_name)
-            file_data = (file_name, file, 'image/jpeg')
+            file_data = self.get_file_data(file_name, file)
             result = self.wpswatch_post(camera_trap_payload, file_data)
         except Exception as ex:
-            logger.exception(f'exception raised sending to dest {ex}')
+            logger.exception(f'exception raised sending to WPS Watch {ex}')
             raise ex
         finally:
             self.cloud_storage.remove(file)
         return
 
     def wpswatch_post(self, camera_trap_payload, file_data=None):
-        endpoint = f'{self.config.endpoint}/api/Upload'
-        headers = {'Wps-Api-Key': self.config.token,
-                   }
+        sanitized_endpoint = self.sanitize_endpoint(f'{self.config.endpoint}/api/Upload')
+        headers = {'Wps-Api-Key': self.config.token,}
         files = {'Attachment1': file_data}
 
         body = camera_trap_payload
-        # TODO: remove redundant slashes in case base URL has it added
-        response = requests.post(endpoint, data=body, headers=headers, files=files)
+        response = requests.post(sanitized_endpoint, data=body, headers=headers, files=files)
+        response.raise_for_status()
         return response
+
+    def get_file_data(self, file_name, file):
+        name, file_ext = os.path.splitext(file_name)
+        mimetype = mimetypes.types_map[file_ext]
+        return file_name, file, mimetype
+
+
+    @staticmethod
+    def sanitize_endpoint(endpoint):
+        scheme = urlparse(endpoint).scheme
+        host = urlparse(endpoint).hostname
+        path = urlparse(endpoint).path.replace('//', '/')  # in case tailing forward slash configured in portal
+        sanitized_endpoint = f'{scheme}://{host}{path}'
+        return sanitized_endpoint
 
