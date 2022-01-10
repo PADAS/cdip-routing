@@ -112,7 +112,6 @@ class ERCameraTrapDispatcher(ERDispatcher):
 class SmartConnectEREventDispatcher:
     def __init__(self, config: schemas.OutboundConfiguration):
         self.config = config
-        self.cloud_storage = get_cloud_storage()
 
     def send(self, item: dict):
 
@@ -130,7 +129,6 @@ class WPSWatchCameraTrapDispatcher:
     def send(self, camera_trap_payload: dict):
         try:
             file_name = camera_trap_payload.get('Attachment1')
-            # TODO: Test without media type and with other types
             file = self.cloud_storage.download(file_name)
             file_data = self.get_file_data(file_name, file)
             result = self.wpswatch_post(camera_trap_payload, file_data)
