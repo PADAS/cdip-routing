@@ -15,6 +15,8 @@ from app.core.cloudstorage import get_cloud_storage
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_TIMEOUT = (3.1, 20)
+
 
 class Dispatcher(ABC):
     stream_type: schemas.StreamPrefixEnum
@@ -145,7 +147,12 @@ class WPSWatchCameraTrapDispatcher:
         files = {'Attachment1': file_data}
 
         body = camera_trap_payload
-        response = requests.post(sanitized_endpoint, data=body, headers=headers, files=files)
+        try:
+            response = requests.post(sanitized_endpoint, data=body, headers=headers, files=files,
+                                    timeout=DEFAULT_TIMEOUT)
+        except requests.exceptions.Timeout as ex:
+            logger.exception("Timeout occurred posting to WPS Watch", extra=body)
+            raise ex
         response.raise_for_status()
         return response
 
