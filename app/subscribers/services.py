@@ -8,7 +8,7 @@ from cdip_connector.core import schemas
 from app import settings
 from app.core.utils import get_auth_header, get_redis_db, create_cache_key
 from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher, ERCameraTrapDispatcher, \
-    SmartConnectEREventDispatcher
+    SmartConnectEREventDispatcher, WPSWatchCameraTrapDispatcher
 from app.transform_service.services import transform_observation
 from app.core.local_logging import ExtraKeys
 
@@ -165,8 +165,12 @@ def dispatch_transformed_observation(stream_type: str,
                 dispatcher = SmartConnectEREventDispatcher(config)
         elif stream_type == schemas.StreamPrefixEnum.geoevent:
             dispatcher = ERGeoEventDispatcher(config, provider)
-        elif stream_type == schemas.StreamPrefixEnum.camera_trap:
+        elif stream_type == schemas.StreamPrefixEnum.camera_trap and \
+                config.type_slug == schemas.DestinationTypes.EarthRanger.value:
             dispatcher = ERCameraTrapDispatcher(config, provider)
+        elif stream_type == schemas.StreamPrefixEnum.camera_trap and \
+                config.type_slug == schemas.DestinationTypes.WPSWatch.value:
+            dispatcher = WPSWatchCameraTrapDispatcher(config)
 
         if dispatcher:
             dispatcher.send(observation)

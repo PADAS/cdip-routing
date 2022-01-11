@@ -66,3 +66,15 @@ class ERCameraTrapTransformer(Transformer):
                     location=json.dumps(dict(longitude=payload.location.x,
                                              latitude=payload.location.y))
                     )
+
+
+class WPSWatchCameraTrapTransformer(Transformer):
+    @staticmethod
+    def transform(payload: schemas.CameraTrap) -> dict:
+        from_domain_name = 'CameraTrap@upload.wpswatch.org'
+        return dict(
+                    Attachment1=payload.image_uri,
+                    Attachments='1',
+                    From=from_domain_name,
+                    To=f'{payload.camera_name}@upload.wpswatch.org',
+                    )

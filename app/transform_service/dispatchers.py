@@ -1,8 +1,11 @@
 import logging
+import mimetypes
+import os
 from abc import ABC, abstractmethod
 from typing import Union
 from urllib.parse import urlparse
 
+import requests
 from cdip_connector.core import schemas
 from dasclient.dasclient import DasClient
 from smartconnect import SmartClient
@@ -11,6 +14,8 @@ from smartconnect.models import IndependentIncident
 from app.core.cloudstorage import get_cloud_storage
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_TIMEOUT = (3.1, 20)
 
 
 class Dispatcher(ABC):
@@ -115,4 +120,53 @@ class SmartConnectEREventDispatcher:
         item = IndependentIncident.parse_obj(item)
         smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
         smartclient.add_independent_incident(incident=item, ca_uuid=self.config.additional.get('ca_uuid'))
-        return 
+        return
+
+
+class WPSWatchCameraTrapDispatcher:
+    def __init__(self, config: schemas.OutboundConfiguration):
+        self.config = config
+        self.cloud_storage = get_cloud_storage()
+
+    def send(self, camera_trap_payload: dict):
+        try:
+            file_name = camera_trap_payload.get('Attachment1')
+            file = self.cloud_storage.download(file_name)
+            file_data = self.get_file_data(file_name, file)
+            result = self.wpswatch_post(camera_trap_payload, file_data)
+        except Exception as ex:
+            logger.exception(f'exception raised sending to WPS Watch {ex}')
+            raise ex
+        finally:
+            self.cloud_storage.remove(file)
+        return
+
+    def wpswatch_post(self, camera_trap_payload, file_data=None):
+        sanitized_endpoint = self.sanitize_endpoint(f'{self.config.endpoint}/api/Upload')
+        headers = {'Wps-Api-Key': self.config.token,}
+        files = {'Attachment1': file_data}
+
+        body = camera_trap_payload
+        try:
+            response = requests.post(sanitized_endpoint, data=body, headers=headers, files=files,
+                                    timeout=DEFAULT_TIMEOUT)
+        except requests.exceptions.Timeout as ex:
+            logger.exception("Timeout occurred posting to WPS Watch", extra=body)
+            raise ex
+        response.raise_for_status()
+        return response
+
+    def get_file_data(self, file_name, file):
+        name, file_ext = os.path.splitext(file_name)
+        mimetype = mimetypes.types_map[file_ext]
+        return file_name, file, mimetype
+
+
+    @staticmethod
+    def sanitize_endpoint(endpoint):
+        scheme = urlparse(endpoint).scheme
+        host = urlparse(endpoint).hostname
+        path = urlparse(endpoint).path.replace('//', '/')  # in case tailing forward slash configured in portal
+        sanitized_endpoint = f'{scheme}://{host}{path}'
+        return sanitized_endpoint
+
