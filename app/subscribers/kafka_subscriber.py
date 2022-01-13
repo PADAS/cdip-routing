@@ -109,7 +109,8 @@ async def process_observations(streaming_data):
             await process_observation(key, message)
         # we want to catch all exceptions and repost to a topic to avoid data loss
         except Exception as e:
-            logger.exception(f'Exception {e} occurred processing {message}')
+            logger.exception(f'Exception occurred processing observation', extra={ExtraKeys.AttentionNeeded: True,
+                                                                                  ExtraKeys.Observation: message})
             # TODO: determine what we want to do with failed observations
 
 
@@ -120,7 +121,9 @@ async def process_transformed_observations(streaming_transformed_data):
             await process_transformed_observation(key, transformed_message)
         # we want to catch all exceptions and repost to a topic to avoid data loss
         except Exception as e:
-            logger.exception(f'Exception {e} occurred processing {transformed_message}')
+            logger.exception(f'Exception occurred processing transformed observation',
+                             extra={ExtraKeys.AttentionNeeded: True,
+                                    ExtraKeys.Observation: transformed_message})
             # TODO: determine what we want to do with failed observations
 
 
