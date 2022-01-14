@@ -74,5 +74,6 @@ class ExtraKeys(str, Enum):
     Provider = 'provider'
     Error = 'error'
     Url = 'url'
+    Observation = 'observation'
 
 

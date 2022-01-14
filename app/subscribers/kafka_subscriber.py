@@ -65,7 +65,8 @@ async def process_observation(key, message):
 
     observation = convert_observation_to_cdip_schema(raw_observation)
     logger.info('received unprocessed observation', extra={ExtraKeys.DeviceId: observation.device_id,
-                                                           ExtraKeys.InboundIntId: observation.integration_id})
+                                                           ExtraKeys.InboundIntId: observation.integration_id,
+                                                           ExtraKeys.StreamType: observation.observation_type})
 
     if observation:
         observation = await update_observation_with_device_configuration(observation)
@@ -96,7 +97,8 @@ async def process_transformed_observation(key, transformed_message):
     outbound_config_id = attributes.get('outbound_config_id')
     logger.info('received transformed observation', extra={ExtraKeys.DeviceId: device_id,
                                                            ExtraKeys.InboundIntId: integration_id,
-                                                           ExtraKeys.OutboundIntId: outbound_config_id})
+                                                           ExtraKeys.OutboundIntId: outbound_config_id,
+                                                           ExtraKeys.StreamType: observation_type})
     dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, transformed_observation)
 
 
@@ -107,7 +109,8 @@ async def process_observations(streaming_data):
             await process_observation(key, message)
         # we want to catch all exceptions and repost to a topic to avoid data loss
         except Exception as e:
-            logger.exception(f'Exception {e} occurred processing {message}')
+            logger.exception(f'Exception occurred processing observation', extra={ExtraKeys.AttentionNeeded: True,
+                                                                                  ExtraKeys.Observation: message})
             # TODO: determine what we want to do with failed observations
 
 
@@ -118,7 +121,9 @@ async def process_transformed_observations(streaming_transformed_data):
             await process_transformed_observation(key, transformed_message)
         # we want to catch all exceptions and repost to a topic to avoid data loss
         except Exception as e:
-            logger.exception(f'Exception {e} occurred processing {transformed_message}')
+            logger.exception(f'Exception occurred processing transformed observation',
+                             extra={ExtraKeys.AttentionNeeded: True,
+                                    ExtraKeys.Observation: transformed_message})
             # TODO: determine what we want to do with failed observations
 
 
