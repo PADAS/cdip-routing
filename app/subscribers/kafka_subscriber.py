@@ -56,70 +56,87 @@ observations_transformed_topic = app.topic(TopicEnum.observations_transformed.va
 
 
 async def process_observation(key, message):
-    logger.debug(f'message received: {message}')
-    raw_observation, attributes = extract_fields_from_message(message)
-    logger.debug(f'observation: {raw_observation}')
-    logger.debug(f'attributes: {attributes}')
+    try:
+        logger.debug(f'message received: {message}')
+        raw_observation, attributes = extract_fields_from_message(message)
+        logger.debug(f'observation: {raw_observation}')
+        logger.debug(f'attributes: {attributes}')
 
-    db = get_redis_db()
+        db = get_redis_db()
 
-    observation = convert_observation_to_cdip_schema(raw_observation)
-    logger.info('received unprocessed observation', extra={ExtraKeys.DeviceId: observation.device_id,
-                                                           ExtraKeys.InboundIntId: observation.integration_id})
+        observation = convert_observation_to_cdip_schema(raw_observation)
+        logger.info('received unprocessed observation', extra={ExtraKeys.DeviceId: observation.device_id,
+                                                               ExtraKeys.InboundIntId: observation.integration_id,
+                                                               ExtraKeys.StreamType: observation.observation_type})
+    except Exception as e:
+        logger.exception(f'Exception occurred prior to processing observation', extra={ExtraKeys.AttentionNeeded: True,
+                                                                                       ExtraKeys.Observation: message})
+    try:
+        if observation:
+            observation = await update_observation_with_device_configuration(observation)
+            int_id = observation.integration_id
+            destinations = get_all_outbound_configs_for_id(db, int_id)
 
-    if observation:
-        observation = await update_observation_with_device_configuration(observation)
-        int_id = observation.integration_id
-        destinations = get_all_outbound_configs_for_id(db, int_id)
-
-        for destination in destinations:
-            jsonified_data = create_transformed_message(observation, destination, observation.observation_type)
-            key = get_key_for_transformed_observation(key, destination.id)
-            await observations_transformed_topic.send(key=key, value=jsonified_data)
+            for destination in destinations:
+                jsonified_data = create_transformed_message(observation, destination, observation.observation_type)
+                key = get_key_for_transformed_observation(key, destination.id)
+                await observations_transformed_topic.send(key=key, value=jsonified_data)
+    except Exception as e:
+        logger.exception(f'Exception occurred processing observation',
+                         extra={ExtraKeys.AttentionNeeded: True,
+                                ExtraKeys.DeviceId: observation.device_id,
+                                ExtraKeys.InboundIntId: observation.integration_id,
+                                ExtraKeys.StreamType: observation.observation_type})
+        # TODO: Implement Retry Logic
 
 
 async def process_transformed_observation(key, transformed_message):
-    logger.debug(f'message received: {transformed_message}')
-    transformed_observation, attributes = extract_fields_from_message(transformed_message)
-    logger.debug(f'observation: {transformed_observation}')
-    logger.debug(f'attributes: {attributes}')
+    try:
+        logger.debug(f'message received: {transformed_message}')
+        transformed_observation, attributes = extract_fields_from_message(transformed_message)
+        logger.debug(f'observation: {transformed_observation}')
+        logger.debug(f'attributes: {attributes}')
 
-    if not transformed_observation:
-        logger.warning(f'No observation was obtained from {transformed_message}')
-        return
-    if not attributes:
-        logger.warning(f'No attributes were obtained from {transformed_message}')
-        return
-    observation_type = attributes.get('observation_type')
-    device_id = attributes.get('device_id')
-    integration_id = attributes.get('integration_id')
-    outbound_config_id = attributes.get('outbound_config_id')
-    logger.info('received transformed observation', extra={ExtraKeys.DeviceId: device_id,
-                                                           ExtraKeys.InboundIntId: integration_id,
-                                                           ExtraKeys.OutboundIntId: outbound_config_id})
-    dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, transformed_observation)
+        if not transformed_observation:
+            logger.warning(f'No observation was obtained from {transformed_message}')
+            return
+        if not attributes:
+            logger.warning(f'No attributes were obtained from {transformed_message}')
+            return
+        observation_type = attributes.get('observation_type')
+        device_id = attributes.get('device_id')
+        integration_id = attributes.get('integration_id')
+        outbound_config_id = attributes.get('outbound_config_id')
+        logger.info('received transformed observation', extra={ExtraKeys.DeviceId: device_id,
+                                                               ExtraKeys.InboundIntId: integration_id,
+                                                               ExtraKeys.OutboundIntId: outbound_config_id,
+                                                               ExtraKeys.StreamType: observation_type})
+    except Exception as e:
+        logger.exception(f'Exception occurred prior to processing transformed observation',
+                         extra={ExtraKeys.AttentionNeeded: True,
+                                ExtraKeys.Observation: transformed_message})
+    try:
+        dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, transformed_observation)
+    except Exception as e:
+        logger.exception(f'Exception occurred processing transformed observation',
+                         extra={ExtraKeys.AttentionNeeded: True,
+                                ExtraKeys.DeviceId: device_id,
+                                ExtraKeys.InboundIntId: integration_id,
+                                ExtraKeys.OutboundIntId: outbound_config_id,
+                                ExtraKeys.StreamType: observation_type})
+        # TODO: Implement Retry Logic
 
 
 @app.agent(observations_unprocessed_topic)
 async def process_observations(streaming_data):
     async for key, message in streaming_data.items():
-        try:
-            await process_observation(key, message)
-        # we want to catch all exceptions and repost to a topic to avoid data loss
-        except Exception as e:
-            logger.exception(f'Exception {e} occurred processing {message}')
-            # TODO: determine what we want to do with failed observations
+        await process_observation(key, message)
 
 
 @app.agent(observations_transformed_topic)
 async def process_transformed_observations(streaming_transformed_data):
     async for key, transformed_message in streaming_transformed_data.items():
-        try:
-            await process_transformed_observation(key, transformed_message)
-        # we want to catch all exceptions and repost to a topic to avoid data loss
-        except Exception as e:
-            logger.exception(f'Exception {e} occurred processing {transformed_message}')
-            # TODO: determine what we want to do with failed observations
+        await process_transformed_observation(key, transformed_message)
 
 
 @app.timer(interval=120.0)
