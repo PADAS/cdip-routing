@@ -1,12 +1,15 @@
 import json
 import logging
+from app import settings
 from abc import ABC, abstractmethod
+from urllib.parse import urlparse
 from typing import Any
 
 from cdip_connector.core import schemas
 
 logger = logging.getLogger(__name__)
 
+ADMIN_PORTAL_HOST = urlparse(settings.PORTAL_API_ENDPOINT).hostname
 
 class Transformer(ABC):
     stream_type: schemas.StreamPrefixEnum
@@ -65,4 +68,18 @@ class ERCameraTrapTransformer(Transformer):
                     time=payload.recorded_at,
                     location=json.dumps(dict(longitude=payload.location.x,
                                              latitude=payload.location.y))
+                    )
+
+
+class WPSWatchCameraTrapTransformer(Transformer):
+    @staticmethod
+    def transform(payload: schemas.CameraTrap) -> dict:
+        # From and To are currently needed for current WPS Watch API
+        # camera_name or device_id preceeding @ in 'To' is all that is necessary, other parts just useful for logging
+        from_domain_name = f'{payload.integration_id}@{ADMIN_PORTAL_HOST}'
+        return dict(
+                    Attachment1=payload.image_uri,
+                    Attachments='1',
+                    From=from_domain_name,
+                    To=f'{payload.camera_name}@upload.wpswatch.org',
                     )

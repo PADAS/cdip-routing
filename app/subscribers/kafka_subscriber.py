@@ -133,6 +133,7 @@ async def process_observations(streaming_data):
         await process_observation(key, message)
 
 
+
 @app.agent(observations_transformed_topic)
 async def process_transformed_observations(streaming_transformed_data):
     async for key, transformed_message in streaming_transformed_data.items():
