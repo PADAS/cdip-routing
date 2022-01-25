@@ -71,6 +71,7 @@ async def process_observation(key, message):
     except Exception as e:
         logger.exception(f'Exception occurred prior to processing observation', extra={ExtraKeys.AttentionNeeded: True,
                                                                                        ExtraKeys.Observation: message})
+        return
     try:
         if observation:
             observation = await update_observation_with_device_configuration(observation)
@@ -115,6 +116,7 @@ async def process_transformed_observation(key, transformed_message):
         logger.exception(f'Exception occurred prior to processing transformed observation',
                          extra={ExtraKeys.AttentionNeeded: True,
                                 ExtraKeys.Observation: transformed_message})
+        return
     try:
         dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, transformed_observation)
     except Exception as e:
