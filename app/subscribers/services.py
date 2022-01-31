@@ -1,16 +1,18 @@
+import asyncio
 import json
 import logging
+from datetime import datetime, timedelta
 from uuid import UUID
 
 import requests
-from cdip_connector.core import schemas
+from cdip_connector.core import schemas, routing
 
 from app import settings
+from app.core.local_logging import ExtraKeys
 from app.core.utils import get_auth_header, get_redis_db, create_cache_key
 from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher, ERCameraTrapDispatcher, \
     SmartConnectEREventDispatcher, WPSWatchCameraTrapDispatcher
 from app.transform_service.services import transform_observation
-from app.core.local_logging import ExtraKeys
 
 logger = logging.getLogger(__name__)
 
@@ -219,11 +221,68 @@ def create_transformed_message(observation, destination, prefix: str):
     return jsonified_data
 
 
+def create_retry_transformed_message(transformed_observation, attributes):
+    retry_transformed_message = create_message(attributes, transformed_observation)
+    jsonified_data = json.dumps(retry_transformed_message, default=str)
+    return jsonified_data
+
+
+def update_attributes_for_retry(attributes):
+
+    retry_topic = attributes.get('retry_topic')
+    retry_attempt = attributes.get('retry_attempt')
+    retry_at = None
+
+    if not retry_topic:
+        # first failure, initialize
+        retry_topic = routing.TopicEnum.observations_transformed_retry_short.value
+        retry_attempt = 1
+        retry_at = datetime.utcnow() + timedelta(minutes=settings.RETRY_SHORT_DELAY_MINUTES)
+    elif retry_topic == routing.TopicEnum.observations_transformed_retry_short.value:
+        if retry_attempt < settings.RETRY_SHORT_ATTEMPTS:
+            retry_attempt += 1
+            retry_at = datetime.utcnow() + timedelta(minutes=settings.RETRY_SHORT_DELAY_MINUTES)
+        else:
+            retry_topic = routing.TopicEnum.observations_transformed_retry_long.value
+            retry_attempt = 1
+            retry_at = datetime.utcnow() + timedelta(minutes=settings.RETRY_LONG_DELAY_MINUTES)
+    elif retry_topic == routing.TopicEnum.observations_transformed_retry_long.value:
+        if retry_attempt < settings.RETRY_LONG_ATTEMPTS:
+            retry_attempt += 1
+            retry_at = datetime.utcnow() + timedelta(minutes=settings.RETRY_LONG_DELAY_MINUTES)
+        else:
+            retry_topic = routing.TopicEnum.observations_transformed_deadletter.value
+
+    attributes['retry_topic'] = retry_topic
+    attributes['retry_attempt'] = retry_attempt
+    if retry_at:
+        attributes['retry_at'] = retry_at.isoformat()
+
+    return attributes
+
+
+async def wait_until_retry_at(retry_at: datetime):
+    now = datetime.utcnow()
+    wait_time_seconds = (retry_at - now).total_seconds()
+    if wait_time_seconds > 0:
+        logger.info(f'Waiting to re process transformed observation',
+                    extra=dict(retry_at=retry_at,
+                               wait_time_seconds=wait_time_seconds))
+        await asyncio.sleep(wait_time_seconds)
+    else:
+        logger.info(f'Sending retry immediately.', extra=dict(retry_at=retry_at,
+                                                              actual_delay_seconds=wait_time_seconds))
+
+
 def extract_fields_from_message(message):
     decoded_message = json.loads(message.decode('utf-8'))
     if decoded_message:
         observation = decoded_message.get('data')
         attributes = decoded_message.get('attributes')
+        if not observation:
+            logger.warning(f'No observation was obtained from {decoded_message}')
+        if not attributes:
+            logger.warning(f'No attributes were obtained from {decoded_message}')
     else:
         logger.warning(f'message contained no payload', extra={'message': message})
         return None, None

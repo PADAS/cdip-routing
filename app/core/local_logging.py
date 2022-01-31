@@ -75,5 +75,8 @@ class ExtraKeys(str, Enum):
     Error = 'error'
     Url = 'url'
     Observation = 'observation'
+    RetryTopic = 'retry_topic'
+    RetryAt = 'retry_at'
+    RetryAttempt = 'retry_attempt'
 
 

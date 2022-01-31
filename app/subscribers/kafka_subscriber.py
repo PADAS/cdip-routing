@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 import certifi
 import faust
@@ -9,7 +10,8 @@ from app import settings
 from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
 from app.core.utils import get_redis_db
 from app.subscribers.services import extract_fields_from_message, convert_observation_to_cdip_schema, \
-    create_transformed_message, get_key_for_transformed_observation, dispatch_transformed_observation
+    create_transformed_message, get_key_for_transformed_observation, dispatch_transformed_observation, \
+    wait_until_retry_at, update_attributes_for_retry, create_retry_transformed_message
 from app.transform_service.services import get_all_outbound_configs_for_id, update_observation_with_device_configuration
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,17 @@ else:
 
 observations_unprocessed_topic = app.topic(TopicEnum.observations_unprocessed.value)
 observations_transformed_topic = app.topic(TopicEnum.observations_transformed.value)
+observations_transformed_retry_short_topic = app.topic(TopicEnum.observations_transformed_retry_short.value)
+observations_transformed_retry_long_topic = app.topic(TopicEnum.observations_transformed_retry_long.value)
+observations_transformed_deadletter = app.topic(TopicEnum.observations_transformed_deadletter.value)
+
+topics_dict = {
+    TopicEnum.observations_unprocessed.value: observations_unprocessed_topic,
+    TopicEnum.observations_transformed: observations_transformed_topic,
+    TopicEnum.observations_transformed_retry_short: observations_transformed_retry_short_topic,
+    TopicEnum.observations_transformed_retry_long: observations_transformed_retry_long_topic,
+    TopicEnum.observations_transformed_deadletter: observations_transformed_deadletter
+}
 
 
 async def process_observation(key, message):
@@ -93,31 +106,27 @@ async def process_observation(key, message):
 
 async def process_transformed_observation(key, transformed_message):
     try:
-        logger.debug(f'message received: {transformed_message}')
         transformed_observation, attributes = extract_fields_from_message(transformed_message)
-        logger.debug(f'observation: {transformed_observation}')
-        logger.debug(f'attributes: {attributes}')
 
-        if not transformed_observation:
-            logger.warning(f'No observation was obtained from {transformed_message}')
-            return
-        if not attributes:
-            logger.warning(f'No attributes were obtained from {transformed_message}')
-            return
         observation_type = attributes.get('observation_type')
         device_id = attributes.get('device_id')
         integration_id = attributes.get('integration_id')
         outbound_config_id = attributes.get('outbound_config_id')
+        retry_attempt: int = attributes.get('retry_attempt') or 0
+
         logger.info('received transformed observation', extra={ExtraKeys.DeviceId: device_id,
                                                                ExtraKeys.InboundIntId: integration_id,
                                                                ExtraKeys.OutboundIntId: outbound_config_id,
-                                                               ExtraKeys.StreamType: observation_type})
+                                                               ExtraKeys.StreamType: observation_type,
+                                                               ExtraKeys.RetryAttempt: retry_attempt})
+
     except Exception as e:
-        logger.exception(f'Exception occurred prior to processing transformed observation',
+        logger.exception(f'Exception occurred prior to dispatching transformed observation',
                          extra={ExtraKeys.AttentionNeeded: True,
                                 ExtraKeys.Observation: transformed_message})
-        return
+        raise e
     try:
+        raise Exception("Test Fail Dispatching")
         dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, transformed_observation)
     except Exception as e:
         logger.exception(f'Exception occurred processing transformed observation',
@@ -126,7 +135,34 @@ async def process_transformed_observation(key, transformed_message):
                                 ExtraKeys.InboundIntId: integration_id,
                                 ExtraKeys.OutboundIntId: outbound_config_id,
                                 ExtraKeys.StreamType: observation_type})
-        # TODO: Implement Retry Logic
+        await process_failed_transformed_observation(key, transformed_message)
+
+
+async def process_failed_transformed_observation(key, transformed_message):
+    try:
+        transformed_observation, attributes = extract_fields_from_message(transformed_message)
+        attributes = update_attributes_for_retry(attributes)
+        retry_topic_str = attributes.get('retry_topic')
+        retry_attempt = attributes.get('retry_attempt')
+        retry_transformed_message = create_retry_transformed_message(transformed_observation, attributes)
+        retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
+        logger.info("Putting failed transformed observation back on queue", extra={ExtraKeys.RetryTopic: retry_topic_str,
+                                                                                   ExtraKeys.RetryAttempt: retry_attempt})
+        await retry_topic.send(value=retry_transformed_message)
+    except Exception as e:
+        # When all else fails post to dead letter
+        await observations_transformed_deadletter.send(value=transformed_message)
+
+
+async def process_transformed_retry_observation(key, transformed_message):
+    try:
+        transformed_observation, attributes = extract_fields_from_message(transformed_message)
+        retry_at = datetime.fromisoformat(attributes.get('retry_at'))
+        await wait_until_retry_at(retry_at)
+        await process_transformed_observation(key, transformed_message)
+    except Exception as e:
+        # When all else fails post to dead letter
+        await observations_transformed_deadletter.send(value=transformed_message)
 
 
 @app.agent(observations_unprocessed_topic)
@@ -135,11 +171,22 @@ async def process_observations(streaming_data):
         await process_observation(key, message)
 
 
-
 @app.agent(observations_transformed_topic)
 async def process_transformed_observations(streaming_transformed_data):
     async for key, transformed_message in streaming_transformed_data.items():
         await process_transformed_observation(key, transformed_message)
+
+
+@app.agent(observations_transformed_retry_short_topic)
+async def process_transformed_retry_short_observations(streaming_transformed_data):
+    async for key, transformed_message in streaming_transformed_data.items():
+        await process_transformed_retry_observation(key, transformed_message)
+
+
+@app.agent(observations_transformed_retry_long_topic)
+async def process_transformed_retry_long_observations(streaming_transformed_data):
+    async for key, transformed_message in streaming_transformed_data.items():
+        await process_transformed_retry_observation(key, transformed_message)
 
 
 @app.timer(interval=120.0)
