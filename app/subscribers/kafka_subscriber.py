@@ -126,7 +126,6 @@ async def process_transformed_observation(key, transformed_message):
                                 ExtraKeys.Observation: transformed_message})
         raise e
     try:
-        raise Exception("Test Fail Dispatching")
         dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, transformed_observation)
     except Exception as e:
         logger.exception(f'Exception occurred processing transformed observation',
