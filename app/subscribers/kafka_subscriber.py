@@ -141,11 +141,19 @@ async def process_failed_transformed_observation(key, transformed_message):
     try:
         transformed_observation, attributes = extract_fields_from_message(transformed_message)
         attributes = update_attributes_for_retry(attributes)
+        observation_type = attributes.get('observation_type')
+        device_id = attributes.get('device_id')
+        integration_id = attributes.get('integration_id')
+        outbound_config_id = attributes.get('outbound_config_id')
         retry_topic_str = attributes.get('retry_topic')
         retry_attempt = attributes.get('retry_attempt')
         retry_transformed_message = create_retry_transformed_message(transformed_observation, attributes)
         retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
-        logger.info("Putting failed transformed observation back on queue", extra={ExtraKeys.RetryTopic: retry_topic_str,
+        logger.info("Putting failed transformed observation back on queue", extra={ExtraKeys.DeviceId: device_id,
+                                                                                   ExtraKeys.InboundIntId: integration_id,
+                                                                                   ExtraKeys.OutboundIntId: outbound_config_id,
+                                                                                   ExtraKeys.StreamType: observation_type,
+                                                                                   ExtraKeys.RetryTopic: retry_topic_str,
                                                                                    ExtraKeys.RetryAttempt: retry_attempt})
         await retry_topic.send(value=retry_transformed_message)
     except Exception as e:
