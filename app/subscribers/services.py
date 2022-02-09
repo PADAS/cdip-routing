@@ -162,8 +162,9 @@ def dispatch_transformed_observation(stream_type: str,
     if config:
         if stream_type == schemas.StreamPrefixEnum.position:
             dispatcher = ERPositionDispatcher(config, provider)
-        elif stream_type == schemas.StreamPrefixEnum.geoevent and \
-            config.type_slug == schemas.DestinationTypes.SmartConnect.value:
+        elif (stream_type == schemas.StreamPrefixEnum.geoevent or
+              stream_type == schemas.StreamPrefixEnum.earthranger_event) and \
+                config.type_slug == schemas.DestinationTypes.SmartConnect.value:
                 dispatcher = SmartConnectEREventDispatcher(config)
         elif stream_type == schemas.StreamPrefixEnum.geoevent:
             dispatcher = ERGeoEventDispatcher(config, provider)
