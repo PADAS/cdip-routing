@@ -1,24 +1,19 @@
-from datetime import datetime, timedelta, timezone
-from xml.sax import parseString
-import pytz
+import json
 import logging
 import uuid
-import json
-from app.subscribers import cache
-from pydantic import BaseModel, Field
-from typing import List,Dict, Any, Optional, Tuple, Union
-from enum import Enum
-# from models import TransformationRules
-# from transform_service.transformers import Transformer, ERGeoEventTransformer, ERPositionTransformer
-import timezonefinder
+from datetime import datetime
+from typing import List, Optional, Tuple, Union
 
-from cdip_connector.core import schemas
-import urllib.parse as uparse
-
+import pytz
 import smartconnect
+import timezonefinder
+from cdip_connector.core import schemas
+from pydantic import BaseModel
+from smartconnect.models import SMARTCONNECT_DATFORMAT, \
+    IndependentIncident, ConservationArea
 from smartconnect.utils import guess_ca_timezone
-from smartconnect.models import SmartAttributes, SmartObservation, SMARTCONNECT_DATFORMAT, \
- SmartObservationGroup, IncidentProperties, IndependentIncident, ConservationArea
+
+from app.subscribers import cache
 
 logger = logging.getLogger(__name__)
 
@@ -122,9 +117,6 @@ class SmartEREventTransformer:
                 if ca.uuid == uuid.UUID(ca_uuid):
                     self.ca = ca
                     break
-
-
-
             else:
                 logger.error('Can\'t find a Conservation Area with UUID: {self.ca_uuid}')
                 self.ca = None
