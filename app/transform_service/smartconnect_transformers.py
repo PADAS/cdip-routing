@@ -78,7 +78,7 @@ class SmartEREventTransformer:
 
 
         try:
-            self.ca = self.get_conservation_area(self.ca_uuid)
+            self.ca = self.get_conservation_area(ca_uuid=self.ca_uuid)
         except Exception as ex:
             self.logger.warning(f'Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}.')
             self.ca = None
@@ -99,7 +99,7 @@ class SmartEREventTransformer:
         self._version = self._config.additional.get('version', "7.0")
         logger.info(f"Using SMART Integration version {self._version}")
 
-    def get_conservation_area(self, ca_uuid:str = None):
+    def get_conservation_area(self, *, ca_uuid:str = None):
 
         cache_key = f'cache:smart-ca:{ca_uuid}:metadata'
         self.logger.info('Looking up CA cached at {cache_key}.')
