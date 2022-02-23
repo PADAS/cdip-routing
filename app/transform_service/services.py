@@ -139,13 +139,14 @@ def transform_observation(stream_type: str,
     elif (stream_type == schemas.StreamPrefixEnum.camera_trap
           and config.type_slug == schemas.DestinationTypes.WPSWatch.value):
         transformer = WPSWatchCameraTrapTransformer
-    elif (stream_type == schemas.StreamPrefixEnum.geoevent
-        and config.type_slug == schemas.DestinationTypes.SmartConnect.value):
+    elif ((stream_type == schemas.StreamPrefixEnum.geoevent or
+           stream_type == schemas.StreamPrefixEnum.earthranger_event)
+          and config.type_slug == schemas.DestinationTypes.SmartConnect.value):
         transformer = SmartEREventTransformer(config=config, ca_datamodel=None)
 
     if transformer:
         return transformer.transform(observation)
     else:
-        logger.error('No dispatcher found for destination', extra={**extra_dict,
+        logger.error('No transformer found for stream type', extra={**extra_dict,
                                                                    ExtraKeys.Provider: config.type_slug})
-        raise TransformerNotFound(f'No dispatcher found for {stream_type} dest: {config.type_slug}')
+        raise TransformerNotFound(f'No transformer found for {stream_type} dest: {config.type_slug}')

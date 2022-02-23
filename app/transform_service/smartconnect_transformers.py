@@ -1,24 +1,19 @@
-from datetime import datetime, timedelta, timezone
-from xml.sax import parseString
-import pytz
+import json
 import logging
 import uuid
-import json
-from app.subscribers import cache
-from pydantic import BaseModel, Field
-from typing import List,Dict, Any, Optional, Tuple, Union
-from enum import Enum
-# from models import TransformationRules
-# from transform_service.transformers import Transformer, ERGeoEventTransformer, ERPositionTransformer
-import timezonefinder
+from datetime import datetime
+from typing import List, Optional, Tuple, Union
 
-from cdip_connector.core import schemas
-import urllib.parse as uparse
-
+import pytz
 import smartconnect
+import timezonefinder
+from cdip_connector.core import schemas
+from pydantic import BaseModel
+from smartconnect.models import SMARTCONNECT_DATFORMAT, \
+    IndependentIncident, ConservationArea
 from smartconnect.utils import guess_ca_timezone
-from smartconnect.models import SmartAttributes, SmartObservation, SMARTCONNECT_DATFORMAT, \
- SmartObservationGroup, IncidentProperties, IndependentIncident, ConservationArea
+
+from app.subscribers import cache
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +45,7 @@ class TransformationRules(BaseModel):
 class SmartConnectConfigurationAdditional(BaseModel):
     ca_uuid: uuid.UUID
     transformation_rules: Optional[TransformationRules]
+    version: Optional[str]
 
 
 def transform_ca_datamodel(*, er_event: schemas.EREvent = None, ca_datamodel: smartconnect.DataModel = None):
@@ -73,10 +69,11 @@ class SmartEREventTransformer:
         self.smartconnect_client = smartconnect.SmartClient(api=config.endpoint, username=config.login,
                                                             password=config.password)
 
-        self._ca_datamodel = self.get_data_model(ca_uuid=self.ca_uuid) 
+        self._ca_datamodel = self.get_data_model(ca_uuid=self.ca_uuid)
+
 
         try:
-            self.ca = self.get_conservation_area(self.ca_uuid)
+            self.ca = self.get_conservation_area(ca_uuid=self.ca_uuid)
         except Exception as ex:
             self.logger.warning(f'Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}.')
             self.ca = None
@@ -88,12 +85,14 @@ class SmartEREventTransformer:
         except pytz.exceptions.UnknownTimeZoneError as utze:
             self.logger.warning(f'Configured timezone is {val}, but it is not a known timezone. Defaulting to UTC unless timezone can be inferred from the Conservation Area\'s meta-data.')
             self._default_timezone = pytz.utc
-            
-        self.ca_timezone = guess_ca_timezone(self.ca) if self.ca else self._default_timezone
+        self.ca_timezone = guess_ca_timezone(self.ca) if self.ca and self.ca.caBoundaryJson else self._default_timezone
 
         transformation_rules_dict = self._config.additional.get('transformation_rules', {})
         if transformation_rules_dict:
             self._transformation_rules = TransformationRules.parse_obj(transformation_rules_dict)
+
+        self._version = self._config.additional.get('version', "7.0")
+        logger.info(f"Using SMART Integration version {self._version}")
 
     def get_conservation_area(self, *, ca_uuid:str = None):
 
@@ -118,16 +117,13 @@ class SmartEREventTransformer:
                 if ca.uuid == uuid.UUID(ca_uuid):
                     self.ca = ca
                     break
-
-
-
             else:
                 logger.error('Can\'t find a Conservation Area with UUID: {self.ca_uuid}')
                 self.ca = None
 
             if self.ca:
                 self.logger.info(f'Caching CA metadata at {cache_key}')
-                cache.cache.setex(name=cache_key, time=60 * 5, value=json.dumps(dict(self.ca)))
+                cache.cache.setex(name=cache_key, time=60 * 5, value=json.dumps(dict(self.ca), default=str))
 
             return self.ca
 
@@ -151,18 +147,22 @@ class SmartEREventTransformer:
             cache.cache.setex(name=cache_key, time=60*5, value=json.dumps(ca_datamodel.export_as_dict()))
             return ca_datamodel
 
-
-    def resolve_category_path_for_event(self, *, er_event:schemas.GeoEvent=None) -> str:
+    def resolve_category_path_for_event(self, *, event: [schemas.GeoEvent, schemas.EREvent] = None) -> str:
         '''
         Favor finding a match in the CA Datamodel.
         '''
 
-        matched_category = self._ca_datamodel.get_category(path=er_event.event_type)
+        matched_category = self._ca_datamodel.get_category(path=event.event_type)
+
+        if not matched_category:
+            # convert ER event type to CA path syntax
+            matched_category = self._ca_datamodel.get_category(path=str.replace(event.event_type, '_', '.'))
+
         if matched_category:
             return matched_category['path']
         else:
             for t in self._transformation_rules.category_map:
-                if t.event_type == er_event.event_type:
+                if t.event_type == event.event_type:
                     return t.category_path
 
     def _resolve_attribute(self, key, value) -> Tuple[str]:
@@ -193,11 +193,13 @@ class SmartEREventTransformer:
         
         return return_key, value
 
-
-    def _resolve_attributes_for_event(self, *, geoevent:schemas.GeoEvent= None) -> dict:
+    def _resolve_attributes_for_event(self, *, event: [schemas.GeoEvent, schemas.EREvent] = None) -> dict:
         
         attributes = {}
-        for k, v in geoevent.event_details.items():
+        for k, v in event.event_details.items():
+
+            # er event detail values that are drop downs are received as lists
+            v = v[0] if isinstance(v,list) else v
 
             k,v = self._resolve_attribute(k, v)
 
@@ -205,9 +207,11 @@ class SmartEREventTransformer:
                 attributes[k] = v
         return attributes
 
-
     def transform(self, item) -> dict:
-        incident = self.geoevent_to_incident(geoevent=item)
+        if self._version == "7.4":
+            incident = self.event_to_incident(event=item)
+        else:
+            incident = self.geoevent_to_incident(geoevent=item)
 
         return json.loads(incident.json()) if incident else None
 
@@ -221,7 +225,8 @@ class SmartEREventTransformer:
             return pytz.timezone(predicted_timezone)
         except:
             return self._default_timezone
-    
+
+    # TODO: Depreciated use event_to_incident, remove when all integrations on smart connect version > 7.4.x
     def geoevent_to_incident(self, *, geoevent: schemas.GeoEvent = None) -> IndependentIncident:
 
         # Sanitize coordinates
@@ -229,24 +234,21 @@ class SmartEREventTransformer:
 
         # Apply Transformation Rules
 
-        category_path = self.resolve_category_path_for_event(er_event=geoevent)
+        category_path = self.resolve_category_path_for_event(event=geoevent)
 
         if not category_path:
             logger.info('No category found for event_type: %s', geoevent.event_type)
             return
 
-        attributes = self._resolve_attributes_for_event(geoevent=geoevent)
-
+        attributes = self._resolve_attributes_for_event(event=geoevent)
 
         location_timezone = self.guess_location_timezone(longitude=geoevent.location.x, latitude=geoevent.location.y)
-
 
         present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
         geoevent_localtime = geoevent.recorded_at.astimezone(location_timezone)
         
         comment = f'Report: {geoevent.title if geoevent.title else geoevent.event_type}' \
                 + f'\nImported: {present_localtime.isoformat()}' 
-
 
         incident_data = {
             'type': 'Feature',
@@ -259,6 +261,78 @@ class SmartEREventTransformer:
                 'dateTime': geoevent_localtime.strftime(SMARTCONNECT_DATFORMAT),
                 'smartDataType': 'incident',
                 'smartFeatureType': 'observation',
+                'smartAttributes': {
+                    'comment': comment,
+                    'observationGroups': [
+                        {
+                            'observations': [
+                                {
+                                    'category': category_path,
+                                    'attributes': attributes,
+
+                                }
+                            ]
+                        }
+                    ]
+
+                }
+            }
+        }
+
+        incident = IndependentIncident.parse_obj(incident_data)
+
+        return incident
+
+    def event_to_incident(self, *, event: Union[schemas.EREvent, schemas.GeoEvent] = None) -> IndependentIncident:
+        """
+        Handle both geo events and er events for version > 7.0 of smart connect
+        """
+
+        is_er_event = isinstance(event, schemas.EREvent)
+
+        # Sanitize coordinates
+        coordinates = [0, 0]
+        location_timezone = self._default_timezone
+        if event.location:
+            if is_er_event:
+                coordinates = [event.location.longitude, event.location.latitude]
+                location_timezone = self.guess_location_timezone(longitude=event.location.longitude,
+                                                                 latitude=event.location.latitude)
+            else:
+                coordinates = [event.location.x, event.location.y]
+                location_timezone = self.guess_location_timezone(longitude=event.location.x,
+                                                                 latitude=event.location.y)
+
+
+        # Apply Transformation Rules
+
+        category_path = self.resolve_category_path_for_event(event=event)
+
+        if not category_path:
+            logger.info('No category found for event_type: %s', event.event_type)
+            return
+
+        attributes = self._resolve_attributes_for_event(event=event)
+
+        present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
+        event_localtime = event.time.astimezone(location_timezone)
+
+        comment = f'Report: {event.title if event.title else event.event_type}' \
+                  + f'\nImported: {present_localtime.isoformat()}'
+
+        # TODO: Handle Update logic
+
+        incident_data = {
+            'type': 'Feature',
+            'geometry': {
+                'coordinates': coordinates,
+                'type': 'Point',
+            },
+
+            'properties': {
+                'dateTime': event_localtime.strftime(SMARTCONNECT_DATFORMAT),
+                'smartDataType': 'incident',
+                'smartFeatureType': 'waypoint/new',
                 'smartAttributes': {
                     'comment': comment,
                     'observationGroups': [
