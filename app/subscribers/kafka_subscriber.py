@@ -126,6 +126,10 @@ async def process_transformed_observation(key, transformed_message):
                                 ExtraKeys.Observation: transformed_message})
         raise e
     try:
+        logger.info('Dispatching for transformed observation.', extra={'transformed_observation': transformed_observation,
+                                                                       'integration_id': integration_id,
+                                                                       'outbound_config_id': outbound_config_id,
+                                                                       'observation_type': observation_type})
         dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, transformed_observation)
     except Exception as e:
         logger.exception(f'Exception occurred processing transformed observation',
