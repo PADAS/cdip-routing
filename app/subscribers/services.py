@@ -98,6 +98,9 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
 
 def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationInformation:
 
+    if not integration_id:
+        raise ValueError('integration_id must not be None')
+
     inbound_integrations_endpoint = f'{settings.PORTAL_INBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}'
     cache_key = create_cache_key(inbound_integrations_endpoint)
     cache = get_redis_db()
@@ -151,6 +154,14 @@ def dispatch_transformed_observation(stream_type: str,
                                      outbound_config_id: str,
                                      inbound_int_id: str,
                                      observation) -> dict:
+
+    if not outbound_config_id or not inbound_int_id:
+        logger.error('dispatch_transformed_observation - value error.', extra={
+            'outbound_config_id': outbound_config_id,
+            'inbound_int_id': inbound_int_id,
+            'observation': observation,
+            'stream_type': stream_type
+        })
 
     config = get_outbound_config_detail(outbound_config_id)
     inbound_integration = get_inbound_integration_detail(inbound_int_id)
