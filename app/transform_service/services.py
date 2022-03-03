@@ -23,36 +23,24 @@ DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
 def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbound_id: UUID) -> List[schemas.OutboundConfiguration]:
 
     outbound_integrations_endpoint = settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT
-    cache_key = create_cache_key(f'{outbound_integrations_endpoint}/{str(inbound_id)}')
 
-    resp_json_bytes = destinations_cache_db.get(cache_key)
-
-    if resp_json_bytes:
-        resp_json_str = resp_json_bytes.decode('utf-8')
-    else:
+    try:
         headers = get_auth_header()
         resp = requests.get(url=f'{outbound_integrations_endpoint}',
                             params=dict(inbound_id=inbound_id),
                             headers=headers, verify=settings.PORTAL_SSL_VERIFY,
                             timeout=(3.1, 20))
-
+    except:
+        logger.exception('Failed to get outbound integrations for inbound_id', extra={'inbound_integration_id': inbound_id})
+        raise
+    else:
         if resp.ok:
             resp_json = resp.json()
-            resp_json_str = json.dumps(resp_json)
-            # only cache if we receive results as its possible this is not mapped in portal yet
-            # if resp_json:
-            #     destinations_cache_db.setex(cache_key, settings.PORTAL_CONFIG_OBJECT_CACHE_TTL, resp_json_str)
+            resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
+            configs, errors = schemas.get_validated_objects(resp_json, schemas.OutboundConfiguration)
+            return configs
 
-    resp_json = json.loads(resp_json_str)
-    resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
-    configs, errors = schemas.get_validated_objects(resp_json, schemas.OutboundConfiguration)
-    if errors:
-        logger.error(f'{len(errors)} outbound configs have validation errors', extra={ExtraKeys.Error: errors,
-                                                                                      'portal_response': resp_json})
-    if not configs:
-        logger.warning(f'No destinations were found for inbound integration',
-                       extra={ExtraKeys.InboundIntId: inbound_id})
-    return configs
+    raise Exception(f'Failed to get outbound integrations for inbound_id {inbound_id}')
 
 
 async def update_observation_with_device_configuration(observation):
@@ -151,3 +139,9 @@ def transform_observation(stream_type: str,
         logger.error('No dispatcher found for destination', extra={**extra_dict,
                                                                    ExtraKeys.Provider: config.type_slug})
         raise TransformerNotFound(f'No dispatcher found for {stream_type} dest: {config.type_slug}')
+
+
+if __name__ == '__main__':
+    configs = get_all_outbound_configs_for_id(None, 'de671725-a9be-4116-be40-1e627c4701e9')
+
+    print(configs)
