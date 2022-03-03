@@ -23,8 +23,8 @@ DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
 def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbound_id: UUID) -> List[schemas.OutboundConfiguration]:
 
     outbound_integrations_endpoint = settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT
-    hashable = f'{outbound_integrations_endpoint}/{str(inbound_id)}'
-    cache_key = create_cache_key(hashable)
+    cache_key = create_cache_key(f'{outbound_integrations_endpoint}/{str(inbound_id)}')
+
     resp_json_bytes = destinations_cache_db.get(cache_key)
 
     if resp_json_bytes:
@@ -33,13 +33,15 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
         headers = get_auth_header()
         resp = requests.get(url=f'{outbound_integrations_endpoint}',
                             params=dict(inbound_id=inbound_id),
-                            headers=headers, verify=settings.PORTAL_SSL_VERIFY)
-        resp.raise_for_status()
-        resp_json = resp.json()
-        resp_json_str = json.dumps(resp_json)
-        # only cache if we receive results as its possible this is not mapped in portal yet
-        if resp_json:
-            destinations_cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
+                            headers=headers, verify=settings.PORTAL_SSL_VERIFY,
+                            timeout=(3.1, 20))
+
+        if resp.ok:
+            resp_json = resp.json()
+            resp_json_str = json.dumps(resp_json)
+            # only cache if we receive results as its possible this is not mapped in portal yet
+            # if resp_json:
+            #     destinations_cache_db.setex(cache_key, settings.PORTAL_CONFIG_OBJECT_CACHE_TTL, resp_json_str)
 
     resp_json = json.loads(resp_json_str)
     resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
@@ -103,7 +105,7 @@ async def ensure_device_integration(integration_id: str, device_id: str):
                 return None
             else:
                 resp_json_str = json.dumps(resp_json)
-                cache_db.setex(cache_key, settings.REDIS_CHECK_SECONDS, resp_json_str)
+                # cache_db.setex(cache_key, settings.PORTAL_CONFIG_OBJECT_CACHE_TTL, resp_json_str)
     try:
         resp_json = json.loads(resp_json_str)
         device = schemas.Device.parse_obj(resp_json)
