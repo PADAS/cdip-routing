@@ -43,7 +43,7 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
                                 verify=settings.PORTAL_SSL_VERIFY,
                                 headers=headers,
                                 timeout=DEFAULT_TIMEOUT)
-        if response.ok:
+        if response.status_code == 200:
             return schemas.OutboundConfiguration.parse_obj(response.json())
 
         raise ValueError('Request for OutboundIntegration(%s) returned status: %s, text:%s', outbound_id, response.status_code, response.text)
@@ -52,7 +52,7 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
         logger.exception('Portal returned bad response during request for outbound config detail',
                      extra={ExtraKeys.AttentionNeeded: True,
                             ExtraKeys.OutboundIntId: outbound_id,
-                            ExtraKeys.Url: response.request,
+                            ExtraKeys.Url: outbound_integrations_endpoint,
                             ExtraKeys.Error: e})
         raise
 
@@ -67,7 +67,7 @@ def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationI
                                 headers=headers,
                                 timeout=DEFAULT_TIMEOUT)
 
-        if response.ok:
+        if response.status_code == 200:
             return schemas.IntegrationInformation.parse_obj(response.json())
 
         raise ValueError('Request for InboundIntegration(%s)) returned status: %s, text:%s', integration_id, response.status_code, response.text)
@@ -233,3 +233,7 @@ def get_key_for_transformed_observation(current_key: bytes, destination_id: UUID
 
 
 
+if __name__ == '__main__':
+
+    c = get_outbound_config_detail('34891e4d-0170-4937-917d-46e79fdee082')
+    print(c)
