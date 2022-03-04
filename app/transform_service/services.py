@@ -33,9 +33,14 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
     except:
         logger.exception('Failed to get outbound integrations for inbound_id', extra={'inbound_integration_id': inbound_id})
         raise
-    else:
-        if resp.ok:
+
+    if resp.status_code == 200:
+        try:
             resp_json = resp.json()
+        except json.decoder.JSONDecodeError as jde:
+            logger.error('Failed decoding response for OutboundIntegration(%s), response text: %s', resp.text, extra={'inbound_integration_id': inbound_id})
+            raise
+        else:
             resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
             configs, errors = schemas.get_validated_objects(resp_json, schemas.OutboundConfiguration)
             return configs
