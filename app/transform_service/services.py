@@ -38,7 +38,8 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
         try:
             resp_json = resp.json()
         except json.decoder.JSONDecodeError as jde:
-            logger.error('Failed decoding response for OutboundIntegration(%s), response text: %s', resp.text, extra={'inbound_integration_id': inbound_id})
+            logger.error('Failed decoding response for OutboundConfig for Inbound(%s), response text: %s', inbound_id,
+                         resp.text, extra={'inbound_integration_id': inbound_id})
             raise
         else:
             resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
