@@ -145,9 +145,3 @@ def transform_observation(stream_type: str,
         logger.error('No dispatcher found for destination', extra={**extra_dict,
                                                                    ExtraKeys.Provider: config.type_slug})
         raise TransformerNotFound(f'No dispatcher found for {stream_type} dest: {config.type_slug}')
-
-
-if __name__ == '__main__':
-    configs = get_all_outbound_configs_for_id(None, 'de671725-a9be-4116-be40-1e627c4701e9')
-
-    print(configs)
