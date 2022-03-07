@@ -71,8 +71,13 @@ def auth_generator():
                 token = get_access_token(settings.OAUTH_TOKEN_URL,
                                                 settings.KEYCLOAK_CLIENT_ID,
                                                 settings.KEYCLOAK_CLIENT_SECRET)
-                expire_at = present + timedelta(seconds=settings.PORTAL_AUTH_TTL)
-            logger.debug('Using cached auth.')
+
+                ttl_seconds = token.expires_in - 5
+                expire_at = present + timedelta(seconds=ttl_seconds)
+            if logger.isEnabledFor(logging.DEBUG):
+                ttl = (expire_at - present).total_seconds()
+                logger.debug(f'Using cached auth, expires in {ttl} seconds.')
+
         except: # Catch all exceptions to avoid a fast, endless loop.
             logger.exception('Failed to authenticate with Portal API.')
             raise
