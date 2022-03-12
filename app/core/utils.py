@@ -2,6 +2,7 @@ import logging
 import random
 from hashlib import md5
 from typing import Dict
+from datetime import datetime, timezone, timedelta
 
 import requests
 import walrus
@@ -22,11 +23,13 @@ def get_redis_db():
 def create_cache_key(hashable_string):
     return md5(str(hashable_string).encode('utf-8')).hexdigest()
 
+class PortalAuthException(Exception):
+    pass
 
 def get_access_token(token_url: str,
                      client_id: str,
                      client_secret: str) -> schemas.OAuthToken:
-    logger.debug(f'get_access_token from {token_url} using client_id: {client_id}')
+    logger.debug('get_access_token from %s using client_id: %s', token_url, client_id)
     payload = {
         'client_id': client_id,
         'client_secret': client_secret,
@@ -36,21 +39,53 @@ def get_access_token(token_url: str,
     }
 
     response = requests.post(token_url, data=payload)
-    response.raise_for_status()
+
+    if not response.ok:
+        raise PortalAuthException('Failed getting access token from Portal. (%s)', response.text)
+
     logger.debug('get_access_token returning')
     return schemas.OAuthToken.parse_obj(response.json())
 
 
-def get_auth_header() -> Dict[str, str]:
-    token_object = get_access_token(settings.OAUTH_TOKEN_URL,
-                                    settings.KEYCLOAK_CLIENT_ID,
-                                    settings.KEYCLOAK_CLIENT_SECRET)
+auth_gen = None
+def get_auth_header(refresh=False) -> Dict[str, str]:
+    global auth_gen
+    if not auth_gen or refresh:
+        auth_gen = auth_generator()
+    token = next(auth_gen)
     return {
-        "authorization": f"{token_object.token_type} {token_object.access_token}"
+        "authorization": f"{token.token_type} {token.access_token}"
     }
 
 
-def generate_random_execption():
-    num = random.random()
-    if num > .66:
-        raise Exception()
+def auth_generator():
+    '''
+    Simple generator to provide a header and keep it for a designated TTL.
+    '''
+    expire_at = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+    while True:
+        present = datetime.now(tz=timezone.utc)
+        try:
+            if expire_at <= present:
+                token = get_access_token(settings.OAUTH_TOKEN_URL,
+                                                settings.KEYCLOAK_CLIENT_ID,
+                                                settings.KEYCLOAK_CLIENT_SECRET)
+
+                ttl_seconds = token.expires_in - 5
+                expire_at = present + timedelta(seconds=ttl_seconds)
+            if logger.isEnabledFor(logging.DEBUG):
+                ttl = (expire_at - present).total_seconds()
+                logger.debug(f'Using cached auth, expires in {ttl} seconds.')
+
+        except: # Catch all exceptions to avoid a fast, endless loop.
+            logger.exception('Failed to authenticate with Portal API.')
+            raise
+        else:
+            yield token
+
+
+if __name__ == '__main__':
+
+    while not input().startswith('q'):
+        print(get_auth_header())

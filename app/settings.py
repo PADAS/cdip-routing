@@ -22,8 +22,6 @@ PORTAL_SSL_VERIFY = env.bool('PORTAL_SSL_VERIFY', True)
 REDIS_HOST = env.str('REDIS_HOST', 'localhost')
 REDIS_PORT = env.int('REDIS_PORT', 6379)
 REDIS_DB = env.int('REDIS_DB', 3)
-# N-seconds window to keep hash of portal api response
-REDIS_CHECK_SECONDS = env.int('REDIS_CHECK_SECONDS', 120)
 
 # N-seconds to cache portal responses for configuration objects.
 PORTAL_CONFIG_OBJECT_CACHE_TTL = env.int('PORTAL_CONFIG_OBJECT_CACHE_TTL', 60)

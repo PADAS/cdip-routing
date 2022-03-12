@@ -76,7 +76,7 @@ class SmartEREventTransformer:
         self._ca_datamodel = self.get_data_model(ca_uuid=self.ca_uuid) 
 
         try:
-            self.ca = self.get_conservation_area(self.ca_uuid)
+            self.ca = self.get_conservation_area(ca_uuid=self.ca_uuid)
         except Exception as ex:
             self.logger.warning(f'Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}.')
             self.ca = None
