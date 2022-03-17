@@ -11,7 +11,7 @@ from cdip_connector.core import schemas, portal_api
 from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import get_auth_header, create_cache_key, get_redis_db
-from app.transform_service.smartconnect_transformers import SmartEREventTransformer
+from app.transform_service.smartconnect_transformers import SmartEREventTransformer, SmartERPatrolTransformer
 from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer, ERCameraTrapTransformer, \
     WPSWatchCameraTrapTransformer
 
@@ -138,8 +138,10 @@ def transform_observation(stream_type: str,
     elif ((stream_type == schemas.StreamPrefixEnum.geoevent or
            stream_type == schemas.StreamPrefixEnum.earthranger_event)
           and config.type_slug == schemas.DestinationTypes.SmartConnect.value):
-        transformer = SmartEREventTransformer(config=config, ca_datamodel=None)
-
+        transformer = SmartEREventTransformer(config=config)
+    elif (stream_type == schemas.StreamPrefixEnum.earthranger_patrol
+          and config.type_slug == schemas.DestinationTypes.SmartConnect.value):
+        transformer = SmartERPatrolTransformer(config=config)
     if transformer:
         return transformer.transform(observation)
     else:

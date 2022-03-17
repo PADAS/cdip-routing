@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+from abc import ABC
 from datetime import datetime
 from typing import List, Optional, Tuple, Union
 
@@ -8,12 +9,14 @@ import pytz
 import smartconnect
 import timezonefinder
 from cdip_connector.core import schemas
+from cdip_connector.core.schemas import ERPatrol
 from pydantic import BaseModel
 from smartconnect.models import SMARTCONNECT_DATFORMAT, \
-    IndependentIncident, ConservationArea
+    IndependentIncident, ConservationArea, Patrol
 from smartconnect.utils import guess_ca_timezone
 
 from app.subscribers import cache
+from app.transform_service.transformers import Transformer
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +54,8 @@ class SmartConnectConfigurationAdditional(BaseModel):
 def transform_ca_datamodel(*, er_event: schemas.EREvent = None, ca_datamodel: smartconnect.DataModel = None):
     ca_datamodel.get_category(er_event.event_type)
 
-class SmartEREventTransformer:
-    '''
-    Transform a single EarthRanger Event into an Independent Incident.
-    
-    TODO: apply transformation rules from SIntegrate configuration.
-    
-    '''
+
+class SMARTTransformer():
 
     def __init__(self, *, config: schemas.OutboundConfiguration = None, **kwargs):
         self._config = config
@@ -71,11 +69,11 @@ class SmartEREventTransformer:
 
         self._ca_datamodel = self.get_data_model(ca_uuid=self.ca_uuid)
 
-
         try:
             self.ca = self.get_conservation_area(ca_uuid=self.ca_uuid)
         except Exception as ex:
-            self.logger.warning(f'Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}.')
+            self.logger.warning(
+                f'Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}.')
             self.ca = None
 
         # Let the timezone fall-back to configuration in the OutboundIntegration.
@@ -83,7 +81,8 @@ class SmartEREventTransformer:
             val = self._config.additional.get('timezone', None)
             self._default_timezone = pytz.timezone(val)
         except pytz.exceptions.UnknownTimeZoneError as utze:
-            self.logger.warning(f'Configured timezone is {val}, but it is not a known timezone. Defaulting to UTC unless timezone can be inferred from the Conservation Area\'s meta-data.')
+            self.logger.warning(
+                f'Configured timezone is {val}, but it is not a known timezone. Defaulting to UTC unless timezone can be inferred from the Conservation Area\'s meta-data.')
             self._default_timezone = pytz.utc
         self.ca_timezone = guess_ca_timezone(self.ca) if self.ca and self.ca.caBoundaryJson else self._default_timezone
 
@@ -131,8 +130,6 @@ class SmartEREventTransformer:
             self.logger.exception(f'Failed to get Conservation Areas')
 
     def get_data_model(self, *, ca_uuid:str = None):
-
-
             cache_key = f'cache:smart-ca:{ca_uuid}:datamodel'
             try:
                 cached_data = cache.cache.get(cache_key)
@@ -146,6 +143,30 @@ class SmartEREventTransformer:
             ca_datamodel = self.smartconnect_client.download_datamodel(ca_uuid=self.ca_uuid)
             cache.cache.setex(name=cache_key, time=60*5, value=json.dumps(ca_datamodel.export_as_dict()))
             return ca_datamodel
+
+    def guess_location_timezone(self, *, longitude:Union[float,int]=None, latitude: Union[float,int]=None):
+        '''
+        Guess the timezone at the given location. Gracefully fall back on the timezone that's configured for this
+        OutboundConfiguration (which will in turn fall back to Utc).
+        '''
+        try:
+            predicted_timezone = timezonefinder.TimezoneFinder().timezone_at(lng=longitude, lat=latitude)
+            return pytz.timezone(predicted_timezone)
+        except:
+            return self._default_timezone
+
+
+
+class SmartEREventTransformer(SMARTTransformer, Transformer):
+    '''
+    Transform a single EarthRanger Event into an Independent Incident.
+    
+    TODO: apply transformation rules from SIntegrate configuration.
+    
+    '''
+
+    def __init__(self, *, config: schemas.OutboundConfiguration = None, **kwargs):
+        super().__init__(config=config)
 
     def resolve_category_path_for_event(self, *, event: [schemas.GeoEvent, schemas.EREvent] = None) -> str:
         '''
@@ -214,17 +235,6 @@ class SmartEREventTransformer:
             incident = self.geoevent_to_incident(geoevent=item)
 
         return json.loads(incident.json()) if incident else None
-
-    def guess_location_timezone(self, *, longitude:Union[float,int]=None, latitude: Union[float,int]=None):
-        '''
-        Guess the timezone at the given location. Gracefully fall back on the timezone that's configured for this
-        OutboundConfiguration (which will in turn fall back to Utc).
-        '''
-        try:
-            predicted_timezone = timezonefinder.TimezoneFinder().timezone_at(lng=longitude, lat=latitude)
-            return pytz.timezone(predicted_timezone)
-        except:
-            return self._default_timezone
 
     # TODO: Depreciated use event_to_incident, remove when all integrations on smart connect version > 7.4.x
     def geoevent_to_incident(self, *, geoevent: schemas.GeoEvent = None) -> IndependentIncident:
@@ -354,3 +364,72 @@ class SmartEREventTransformer:
         incident = IndependentIncident.parse_obj(incident_data)
 
         return incident
+
+
+class SmartERPatrolTransformer(SMARTTransformer, Transformer):
+    def __init__(self, *, config: schemas.OutboundConfiguration = None, **kwargs):
+        super().__init__(config=config)
+
+    def transform(self, item) -> dict:
+        patrol = self.er_patrol_to_smart_patrol(patrol=item)
+
+        return json.loads(patrol.json()) if patrol else None
+
+    def er_patrol_to_smart_patrol(self, patrol: ERPatrol):
+        # Sanitize coordinates
+        coordinates = [0, 0]
+        location_timezone = self._default_timezone
+
+        patrol_leg = patrol.patrol_segments[0]
+
+        coordinates = [patrol_leg.start_location.longitude, patrol_leg.start_location.latitude]
+        location_timezone = self.guess_location_timezone(longitude=patrol_leg.start_location.longitude,
+                                                         latitude=patrol_leg.start_location.latitude)
+        present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
+        # datetime.strptime(patrol_leg.time_range.get('start_time'), "%Y-%m-%dT%H:%M:%S.%f%z")
+        patrol_leg_start_localtime = datetime.fromisoformat(patrol_leg.time_range.get('start_time')).astimezone(location_timezone)
+
+        comment = ""
+        for note in patrol.notes:
+            comment += note.get('text') + '\n\n'
+
+        members = []
+        for patrol_leg in patrol.patrol_segments:
+            smart_member_id = patrol_leg.leader.additional.get('smart_member_id')
+            if smart_member_id not in members:
+                members.append(smart_member_id)
+
+        patrol_data = {
+            "type": "Feature",
+            "geometry": {
+                "coordinates": coordinates,
+                "type": "Point"
+            },
+            "properties": {
+                "dateTime": patrol_leg_start_localtime.strftime(SMARTCONNECT_DATFORMAT),
+
+                "smartDataType": "patrol",
+                "smartFeatureType": "patrol/start",
+                "smartAttributes": {
+                    "patrolUuid": patrol.id,
+                    "patrolLegUuid": patrol_leg.id,
+                    "team": "communityteam1",
+                    "objective": patrol.objective,
+                    "comment": comment,
+                    "isArmed": "false", # Dont think we have a way to determine this from ER Patrol
+                    "transportType": "foot", # Potential to base off ER Patrol type
+                    "mandate": "followup", # Dont think we have a way to determine this from ER Patrol
+                    "number": -999, # ???
+                    "members": members,
+                    "leader": patrol_leg.leader.additional.get('smart_member_id') # what to do if legs have different leaders?
+                }
+            }
+        }
+
+        patrol = Patrol.parse_obj(patrol_data)
+
+        return patrol
+
+
+
+

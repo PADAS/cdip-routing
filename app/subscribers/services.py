@@ -11,7 +11,7 @@ from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import get_auth_header, get_redis_db, create_cache_key
 from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher, ERCameraTrapDispatcher, \
-    SmartConnectEREventDispatcher, WPSWatchCameraTrapDispatcher
+    WPSWatchCameraTrapDispatcher, SmartConnectIndependentIncidentDispatcher, SmartConnectPatrolDispatcher
 from app.transform_service.services import transform_observation
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,10 @@ def dispatch_transformed_observation(stream_type: str,
         elif (stream_type == schemas.StreamPrefixEnum.geoevent or
               stream_type == schemas.StreamPrefixEnum.earthranger_event) and \
                 config.type_slug == schemas.DestinationTypes.SmartConnect.value:
-                dispatcher = SmartConnectEREventDispatcher(config)
+                dispatcher = SmartConnectIndependentIncidentDispatcher(config)
+        elif (stream_type == schemas.StreamPrefixEnum.earthranger_patrol and
+              config.type_slug == schemas.DestinationTypes.SmartConnect.value):
+            dispatcher = SmartConnectPatrolDispatcher(config)
         elif stream_type == schemas.StreamPrefixEnum.geoevent:
             dispatcher = ERGeoEventDispatcher(config, provider)
         elif stream_type == schemas.StreamPrefixEnum.camera_trap and \

@@ -9,7 +9,7 @@ import requests
 from cdip_connector.core import schemas
 from dasclient.dasclient import DasClient
 from smartconnect import SmartClient
-from smartconnect.models import IndependentIncident
+from smartconnect.models import IndependentIncident, Patrol
 
 from app.core.cloudstorage import get_cloud_storage
 
@@ -111,7 +111,7 @@ class ERCameraTrapDispatcher(ERDispatcher):
         return result
 
 
-class SmartConnectEREventDispatcher:
+class SmartConnectIndependentIncidentDispatcher:
     def __init__(self, config: schemas.OutboundConfiguration):
         self.config = config
 
@@ -120,6 +120,18 @@ class SmartConnectEREventDispatcher:
         item = IndependentIncident.parse_obj(item)
         smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
         smartclient.add_independent_incident(incident=item, ca_uuid=self.config.additional.get('ca_uuid'))
+        return
+
+
+class SmartConnectPatrolDispatcher:
+    def __init__(self, config: schemas.OutboundConfiguration):
+        self.config = config
+
+    def send(self, item: dict):
+
+        item = Patrol.parse_obj(item)
+        smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
+        smartclient.start_patrol(patrol=item, ca_uuid=self.config.additional.get('ca_uuid'))
         return
 
 
