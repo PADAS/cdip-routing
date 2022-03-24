@@ -156,6 +156,8 @@ def create_message(attributes, observation):
 
 def create_transformed_message(observation, destination, prefix: str):
     transformed_observation = transform_observation(prefix, destination, observation)
+    if not transformed_observation:
+        return None
     logger.debug(f'Transformed observation: {transformed_observation}')
 
     # observation_type may no longer be needed as topics are now specific to observation type

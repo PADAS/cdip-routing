@@ -7,11 +7,10 @@ from urllib.parse import urlparse
 
 import requests
 from cdip_connector.core import schemas
+from cdip_connector.core.cloudstorage import get_cloud_storage
 from dasclient.dasclient import DasClient
 from smartconnect import SmartClient
-from smartconnect.models import IndependentIncident, Patrol
-
-from app.core.cloudstorage import get_cloud_storage
+from smartconnect.models import IndependentIncident, SMARTRequest
 
 logger = logging.getLogger(__name__)
 
@@ -129,9 +128,13 @@ class SmartConnectPatrolDispatcher:
 
     def send(self, item: dict):
 
-        item = Patrol.parse_obj(item)
+        item = SMARTRequest.parse_obj(item)
+        # TODO: orchestration for posting various smart posts
         smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
-        smartclient.start_patrol(patrol=item, ca_uuid=self.config.additional.get('ca_uuid'))
+        for patrol_request in item.patrol_requests:
+            smartclient.post_smart_request(json=patrol_request.json(), ca_uuid=self.config.additional.get('ca_uuid'))
+        for waypoint_requset in item.waypoint_requests:
+            smartclient.post_smart_request(json=waypoint_requset.json(), ca_uuid=self.config.additional.get('ca_uuid'))
         return
 
 

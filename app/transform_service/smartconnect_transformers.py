@@ -9,10 +9,10 @@ import pytz
 import smartconnect
 import timezonefinder
 from cdip_connector.core import schemas
-from cdip_connector.core.schemas import ERPatrol
+from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel
 from smartconnect.models import SMARTCONNECT_DATFORMAT, \
-    IndependentIncident, ConservationArea, Patrol
+    IndependentIncident, ConservationArea, PatrolRequest, WaypointRequest, SMARTRequest
 from smartconnect.utils import guess_ca_timezone
 
 from app.subscribers import cache
@@ -376,59 +376,104 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
         return json.loads(patrol.json()) if patrol else None
 
     def er_patrol_to_smart_patrol(self, patrol: ERPatrol):
-        # Sanitize coordinates
-        coordinates = [0, 0]
-        location_timezone = self._default_timezone
+        # TODO: Determine if patrol already exists
+        existing_smart_patrol = self.smartconnect_client.get_patrol(patrol_id=patrol.id)
 
-        patrol_leg = patrol.patrol_segments[0]
+        if existing_smart_patrol:
+            pass
+            #TODO: Update flow
 
-        coordinates = [patrol_leg.start_location.longitude, patrol_leg.start_location.latitude]
-        location_timezone = self.guess_location_timezone(longitude=patrol_leg.start_location.longitude,
-                                                         latitude=patrol_leg.start_location.latitude)
-        present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
-        # datetime.strptime(patrol_leg.time_range.get('start_time'), "%Y-%m-%dT%H:%M:%S.%f%z")
-        patrol_leg_start_localtime = datetime.fromisoformat(patrol_leg.time_range.get('start_time')).astimezone(location_timezone)
+        else:  # Create Patrol
 
-        comment = ""
-        for note in patrol.notes:
-            comment += note.get('text') + '\n\n'
+            location_timezone = self._default_timezone
 
-        members = []
-        for patrol_leg in patrol.patrol_segments:
-            smart_member_id = patrol_leg.leader.additional.get('smart_member_id')
-            if smart_member_id not in members:
-                members.append(smart_member_id)
+            members = []
 
-        patrol_data = {
-            "type": "Feature",
-            "geometry": {
-                "coordinates": coordinates,
-                "type": "Point"
-            },
-            "properties": {
-                "dateTime": patrol_leg_start_localtime.strftime(SMARTCONNECT_DATFORMAT),
+            patrol_leg: ERPatrolSegment
+            # create patrol with first leg, currently ER only supports single leg patrols
+            patrol_leg = patrol.patrol_segments[0]
 
-                "smartDataType": "patrol",
-                "smartFeatureType": "patrol/start",
-                "smartAttributes": {
-                    "patrolUuid": patrol.id,
-                    "patrolLegUuid": patrol_leg.id,
-                    "team": "communityteam1",
-                    "objective": patrol.objective,
-                    "comment": comment,
-                    "isArmed": "false", # Dont think we have a way to determine this from ER Patrol
-                    "transportType": "foot", # Potential to base off ER Patrol type
-                    "mandate": "followup", # Dont think we have a way to determine this from ER Patrol
-                    "number": -999, # ???
-                    "members": members,
-                    "leader": patrol_leg.leader.additional.get('smart_member_id') # what to do if legs have different leaders?
+            # TODO: Revisit if this is the right spot to abandon the flow
+            if not patrol_leg.start_location:
+                # Need start location to pass in coordinates and determine location timezone
+                logger.warning("patrol leg contains no start location")
+                return None
+
+            if not patrol_leg.leader:
+                logger.warning("patrol leg contains no leader")
+                return None
+
+            coordinates = [patrol_leg.start_location.longitude, patrol_leg.start_location.latitude]
+            location_timezone = self.guess_location_timezone(longitude=patrol_leg.start_location.longitude,
+                                                             latitude=patrol_leg.start_location.latitude)
+            present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
+            # datetime.strptime(patrol_leg.time_range.get('start_time'), "%Y-%m-%dT%H:%M:%S.%f%z")
+            patrol_leg_start_localtime = datetime.fromisoformat(patrol_leg.time_range.get('start_time')).astimezone(location_timezone)
+
+            comment = ""
+            for note in patrol.notes:
+                comment += note.get('text') + '\n\n'
+
+            # add leg leader to members
+            if patrol_leg.leader:
+                smart_member_id = patrol_leg.leader.get('additional').get('smart_member_id')
+                if smart_member_id not in members:
+                    members.append(smart_member_id)
+
+            patrol_data = {
+                "type": "Feature",
+                "geometry": {
+                    "coordinates": coordinates,
+                    "type": "Point"
+                },
+                "properties": {
+                    "dateTime": patrol_leg_start_localtime.strftime(SMARTCONNECT_DATFORMAT),
+
+                    "smartDataType": "patrol",
+                    "smartFeatureType": "patrol/new",
+                    "smartAttributes": {
+                        "patrolUuid": patrol.id,
+                        "patrolLegUuid": patrol_leg.id,
+                        "team": "communityteam1",
+                        "objective": patrol.objective,
+                        "comment": comment,
+                        "isArmed": "false", # Dont think we have a way to determine this from ER Patrol
+                        "transportType": "foot", # Potential to base off ER Patrol type
+                        "mandate": "followup", # Dont think we have a way to determine this from ER Patrol
+                        "number": -999, # ???
+                        "members": members, # are these members specific to the leg or the patrol ?
+                        "leader": patrol_leg.leader.get('additional').get('smart_member_id') # what to do if legs have different leaders?
+                    }
                 }
             }
-        }
 
-        patrol = Patrol.parse_obj(patrol_data)
+            patrol_request = PatrolRequest.parse_obj(patrol_data)
 
-        return patrol
+            # TODO: Currently seems that a waypoint is needed to be added in order to get patrol properties back on get
+            way_point_data = {
+                "type": "Feature",
+                "geometry": {
+                    "coordinates": coordinates,
+                    "type": "Point"
+                },
+                "properties": {
+                    "dateTime": patrol_leg_start_localtime.strftime(SMARTCONNECT_DATFORMAT),
+
+                    "smartDataType": "patrol",
+                    "smartFeatureType": "waypoint/new",
+                    "smartAttributes": {
+                        "patrolUuid": patrol.id,  # required
+                        "patrolLegUuid": patrol_leg.id,  # required
+                    }
+                }
+            }
+
+            waypoint_request = WaypointRequest.parse_obj(way_point_data)
+
+            smart_request = SMARTRequest(patrol_requests=[patrol_request],
+                                         waypoint_requests=[waypoint_request])
+
+            return smart_request
 
 
 
