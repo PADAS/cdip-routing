@@ -52,7 +52,11 @@ def get_auth_header(refresh=False) -> Dict[str, str]:
     global auth_gen
     if not auth_gen or refresh:
         auth_gen = auth_generator()
-    token = next(auth_gen)
+    try:
+        token = next(auth_gen)
+    except StopIteration:
+        auth_gen = auth_generator()
+        token = next(auth_gen)
     return {
         "authorization": f"{token.token_type} {token.access_token}"
     }
@@ -80,7 +84,6 @@ def auth_generator():
 
         except: # Catch all exceptions to avoid a fast, endless loop.
             logger.exception('Failed to authenticate with Portal API.')
-            raise
         else:
             yield token
 
