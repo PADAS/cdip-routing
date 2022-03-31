@@ -390,7 +390,6 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
         incident_request.properties.smartDataType = 'patrol'
         incident_request.properties.smartAttributes.patrolUuid = patrol_id
         incident_request.properties.smartAttributes.patrolLegUuid = patrol_leg_id
-        # incident_request.properties.smartAttributes.incidentUuid = event.er_uuid
 
         return incident_request
 
@@ -404,7 +403,6 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             patrol_leg = patrol.patrol_segments[0]
 
             existing_waypoint_uuids = [waypoint.client_uuid for waypoint in patrol_waypoints] if patrol_waypoints else []
-            # patrol_event_uuids = [event.er_uuid for seg in patrol.patrol_segments for event in seg.event_details]
 
             incident_requests = []
             for event in patrol_leg.event_details:
