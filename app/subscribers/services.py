@@ -11,7 +11,7 @@ from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import get_auth_header, get_redis_db, create_cache_key
 from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher, ERCameraTrapDispatcher, \
-    WPSWatchCameraTrapDispatcher, SmartConnectIndependentIncidentDispatcher, SmartConnectPatrolDispatcher
+    WPSWatchCameraTrapDispatcher, SmartConnectIndependentIncidentDispatcher, SmartConnectDispatcher
 from app.transform_service.services import transform_observation
 
 logger = logging.getLogger(__name__)
@@ -107,13 +107,14 @@ def dispatch_transformed_observation(stream_type: str,
     if config:
         if stream_type == schemas.StreamPrefixEnum.position:
             dispatcher = ERPositionDispatcher(config, provider)
-        elif (stream_type == schemas.StreamPrefixEnum.geoevent or
-              stream_type == schemas.StreamPrefixEnum.earthranger_event) and \
+        # TODO: Handle GeoEvents in SMARTConnect Dispatcher
+        elif (stream_type == schemas.StreamPrefixEnum.geoevent) and \
                 config.type_slug == schemas.DestinationTypes.SmartConnect.value:
                 dispatcher = SmartConnectIndependentIncidentDispatcher(config)
-        elif (stream_type == schemas.StreamPrefixEnum.earthranger_patrol and
+        elif ((stream_type == schemas.StreamPrefixEnum.earthranger_patrol or
+               stream_type == schemas.StreamPrefixEnum.earthranger_event) and
               config.type_slug == schemas.DestinationTypes.SmartConnect.value):
-            dispatcher = SmartConnectPatrolDispatcher(config)
+            dispatcher = SmartConnectDispatcher(config)
         elif stream_type == schemas.StreamPrefixEnum.geoevent:
             dispatcher = ERGeoEventDispatcher(config, provider)
         elif stream_type == schemas.StreamPrefixEnum.camera_trap and \
@@ -145,7 +146,7 @@ def convert_observation_to_cdip_schema(observation):
     else:
         logger.error(f'unable to validate observation', extra={'observation': observation,
                                                                ExtraKeys.Error: errors})
-        return None
+        raise Exception('unable to validate observation')
 
 
 def create_message(attributes, observation):

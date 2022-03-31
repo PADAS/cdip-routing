@@ -12,7 +12,7 @@ from cdip_connector.core import schemas
 from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel
 from smartconnect.models import SMARTCONNECT_DATFORMAT, \
-    IndependentIncident, ConservationArea, PatrolRequest, WaypointRequest, SMARTRequest
+    SMARTRequest, ConservationArea, SMARTCompositeRequest, SMARTResponse, Patrol
 from smartconnect.utils import guess_ca_timezone
 
 from app.subscribers import cache
@@ -155,19 +155,6 @@ class SMARTTransformer():
         except:
             return self._default_timezone
 
-
-
-class SmartEREventTransformer(SMARTTransformer, Transformer):
-    '''
-    Transform a single EarthRanger Event into an Independent Incident.
-    
-    TODO: apply transformation rules from SIntegrate configuration.
-    
-    '''
-
-    def __init__(self, *, config: schemas.OutboundConfiguration = None, **kwargs):
-        super().__init__(config=config)
-
     def resolve_category_path_for_event(self, *, event: [schemas.GeoEvent, schemas.EREvent] = None) -> str:
         '''
         Favor finding a match in the CA Datamodel.
@@ -192,7 +179,7 @@ class SmartEREventTransformer(SMARTTransformer, Transformer):
 
         # Favor a match in the CA DataModel attributes dictionary.
         if attr:
-            return key, value # TODO: also lookup value in DataModel.
+            return key, value  # TODO: also lookup value in DataModel.
 
         return_key = return_value = None
         # Find in transformation rules.
@@ -203,41 +190,127 @@ class SmartEREventTransformer(SMARTTransformer, Transformer):
         else:
             logger.warning('No attribute map found for key: %s', key)
             return None, None
-        
+
         if amap.options_map:
             for options_val in amap.options_map:
-                if options_val.from_key == value: 
+                if options_val.from_key == value:
                     return_value = options_val.to_key
                     return return_key, return_value
             if amap.default_option:
                 return return_key, amap.default_option
-        
+
         return return_key, value
 
     def _resolve_attributes_for_event(self, *, event: [schemas.GeoEvent, schemas.EREvent] = None) -> dict:
-        
+
         attributes = {}
         for k, v in event.event_details.items():
 
             # er event detail values that are drop downs are received as lists
-            v = v[0] if isinstance(v,list) else v
+            v = v[0] if isinstance(v, list) else v
 
-            k,v = self._resolve_attribute(k, v)
+            k, v = self._resolve_attribute(k, v)
 
             if k:
                 attributes[k] = v
         return attributes
 
+    def event_to_incident(self, *, event: Union[schemas.EREvent, schemas.GeoEvent] = None) -> SMARTRequest:
+        """
+        Handle both geo events and er events for version > 7.0 of smart connect
+        """
+
+        is_er_event = isinstance(event, schemas.EREvent)
+
+        # Sanitize coordinates
+        coordinates = [0, 0]
+        location_timezone = self._default_timezone
+        if event.location:
+            if is_er_event:
+                coordinates = [event.location.longitude, event.location.latitude]
+                location_timezone = self.guess_location_timezone(longitude=event.location.longitude,
+                                                                 latitude=event.location.latitude)
+            else:
+                coordinates = [event.location.x, event.location.y]
+                location_timezone = self.guess_location_timezone(longitude=event.location.x,
+                                                                 latitude=event.location.y)
+
+
+        # Apply Transformation Rules
+
+        category_path = self.resolve_category_path_for_event(event=event)
+
+        if not category_path:
+            logger.info('No category found for event_type: %s', event.event_type)
+            return
+
+        attributes = self._resolve_attributes_for_event(event=event)
+
+        present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
+        event_localtime = event.time.astimezone(location_timezone)
+
+        comment = f'Report: {event.title if event.title else event.event_type}' \
+                  + f'\nImported: {present_localtime.isoformat()}'
+
+        incident_data = {
+            'type': 'Feature',
+            'geometry': {
+                'coordinates': coordinates,
+                'type': 'Point',
+            },
+
+            'properties': {
+                'dateTime': event_localtime.strftime(SMARTCONNECT_DATFORMAT),
+                'smartDataType': 'incident',
+                'smartFeatureType': 'waypoint/new',
+                'smartAttributes': {
+                    'incidentUuid': str(event.id),
+                    'comment': comment,
+                    'observationGroups': [
+                        {
+                            'observations': [
+                                {
+                                    'category': category_path,
+                                    'attributes': attributes,
+
+                                }
+                            ]
+                        }
+                    ]
+
+                }
+            }
+        }
+
+        incident = SMARTRequest.parse_obj(incident_data)
+
+        return incident
+
+
+class SmartEREventTransformer(SMARTTransformer, Transformer):
+    '''
+    Transform a single EarthRanger Event into an Independent Incident.
+    
+    '''
+
+    def __init__(self, *, config: schemas.OutboundConfiguration = None, **kwargs):
+        super().__init__(config=config)
+
     def transform(self, item) -> dict:
         if self._version == "7.4":
             incident = self.event_to_incident(event=item)
+            existing_incident = self.smartconnect_client.get_incident(incident_uuid=item.id)
+            if existing_incident:
+                # TODO Update Incident
+                return None
         else:
             incident = self.geoevent_to_incident(geoevent=item)
+        smart_request = SMARTCompositeRequest(waypoint_requests=[incident])
 
-        return json.loads(incident.json()) if incident else None
+        return json.loads(smart_request.json()) if smart_request else None
 
     # TODO: Depreciated use event_to_incident, remove when all integrations on smart connect version > 7.4.x
-    def geoevent_to_incident(self, *, geoevent: schemas.GeoEvent = None) -> IndependentIncident:
+    def geoevent_to_incident(self, *, geoevent: schemas.GeoEvent = None) -> SMARTRequest:
 
         # Sanitize coordinates
         coordinates = [geoevent.location.x, geoevent.location.y] if geoevent.location else [0, 0]
@@ -289,81 +362,9 @@ class SmartEREventTransformer(SMARTTransformer, Transformer):
             }
         }
 
-        incident = IndependentIncident.parse_obj(incident_data)
+        incident_request = SMARTRequest.parse_obj(incident_data)
 
-        return incident
-
-    def event_to_incident(self, *, event: Union[schemas.EREvent, schemas.GeoEvent] = None) -> IndependentIncident:
-        """
-        Handle both geo events and er events for version > 7.0 of smart connect
-        """
-
-        is_er_event = isinstance(event, schemas.EREvent)
-
-        # Sanitize coordinates
-        coordinates = [0, 0]
-        location_timezone = self._default_timezone
-        if event.location:
-            if is_er_event:
-                coordinates = [event.location.longitude, event.location.latitude]
-                location_timezone = self.guess_location_timezone(longitude=event.location.longitude,
-                                                                 latitude=event.location.latitude)
-            else:
-                coordinates = [event.location.x, event.location.y]
-                location_timezone = self.guess_location_timezone(longitude=event.location.x,
-                                                                 latitude=event.location.y)
-
-
-        # Apply Transformation Rules
-
-        category_path = self.resolve_category_path_for_event(event=event)
-
-        if not category_path:
-            logger.info('No category found for event_type: %s', event.event_type)
-            return
-
-        attributes = self._resolve_attributes_for_event(event=event)
-
-        present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
-        event_localtime = event.time.astimezone(location_timezone)
-
-        comment = f'Report: {event.title if event.title else event.event_type}' \
-                  + f'\nImported: {present_localtime.isoformat()}'
-
-        # TODO: Handle Update logic
-
-        incident_data = {
-            'type': 'Feature',
-            'geometry': {
-                'coordinates': coordinates,
-                'type': 'Point',
-            },
-
-            'properties': {
-                'dateTime': event_localtime.strftime(SMARTCONNECT_DATFORMAT),
-                'smartDataType': 'incident',
-                'smartFeatureType': 'waypoint/new',
-                'smartAttributes': {
-                    'comment': comment,
-                    'observationGroups': [
-                        {
-                            'observations': [
-                                {
-                                    'category': category_path,
-                                    'attributes': attributes,
-
-                                }
-                            ]
-                        }
-                    ]
-
-                }
-            }
-        }
-
-        incident = IndependentIncident.parse_obj(incident_data)
-
-        return incident
+        return incident_request
 
 
 class SmartERPatrolTransformer(SMARTTransformer, Transformer):
@@ -371,17 +372,55 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
         super().__init__(config=config)
 
     def transform(self, item) -> dict:
-        patrol = self.er_patrol_to_smart_patrol(patrol=item)
+        smart_request = self.er_patrol_to_smart_patrol(patrol=item)
 
-        return json.loads(patrol.json()) if patrol else None
+        return json.loads(smart_request.json()) if smart_request else None
+
+    def get_incident_requests_from_er_patrol_leg(self, *, patrol_id, patrol_leg: ERPatrolSegment):
+        incident_requests = []
+        incident_request: SMARTRequest
+        for event in patrol_leg.event_details:
+            incident_request = self.event_to_patrol_waypoint(patrol_id=patrol_id, patrol_leg_id=patrol_leg.id, event=event)
+            incident_request.properties.smartFeatureType = 'waypoint/new'
+            incident_requests.append(incident_request)
+
+    def event_to_patrol_waypoint(self, *, patrol_id, patrol_leg_id, event):
+        incident_request = self.event_to_incident(event=event)
+        # Associate the incident to this patrol leg
+        incident_request.properties.smartDataType = 'patrol'
+        incident_request.properties.smartAttributes.patrolUuid = patrol_id
+        incident_request.properties.smartAttributes.patrolLegUuid = patrol_leg_id
+        # incident_request.properties.smartAttributes.incidentUuid = event.er_uuid
+
+        return incident_request
 
     def er_patrol_to_smart_patrol(self, patrol: ERPatrol):
-        # TODO: Determine if patrol already exists
         existing_smart_patrol = self.smartconnect_client.get_patrol(patrol_id=patrol.id)
 
         if existing_smart_patrol:
-            pass
-            #TODO: Update flow
+            # TODO: Update patrol/patrol_leg properties if changed
+            # Get waypoints for patrol
+            patrol_waypoints = self.smartconnect_client.get_patrol_waypoints(patrol_id=patrol.id)
+            patrol_leg = patrol.patrol_segments[0]
+
+            existing_waypoint_uuids = [waypoint.client_uuid for waypoint in patrol_waypoints] if patrol_waypoints else []
+            # patrol_event_uuids = [event.er_uuid for seg in patrol.patrol_segments for event in seg.event_details]
+
+            incident_requests = []
+            for event in patrol_leg.event_details:
+                # SMART guids are stripped of dashes
+                if str(event.er_uuid).replace('-', '') not in existing_waypoint_uuids:
+                    incident_request = self.event_to_patrol_waypoint(patrol_id=patrol.id, patrol_leg_id=patrol_leg.id, event=event)
+                    incident_request.properties.smartFeatureType = 'waypoint/new'
+                    incident_requests.append(incident_request)
+                else:
+                    # TODO: Update logic for patrol waypoints
+                    pass
+
+            smart_request = SMARTCompositeRequest(waypoint_requests=incident_requests,
+                                                  patrol_requests=[])
+
+            return smart_request
 
         else:  # Create Patrol
 
@@ -410,7 +449,8 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             # datetime.strptime(patrol_leg.time_range.get('start_time'), "%Y-%m-%dT%H:%M:%S.%f%z")
             patrol_leg_start_localtime = datetime.fromisoformat(patrol_leg.time_range.get('start_time')).astimezone(location_timezone)
 
-            comment = ""
+            comment = f'Patrol: {patrol.title}' \
+                      + f'\nImported: {present_localtime.isoformat()}'
             for note in patrol.notes:
                 comment += note.get('text') + '\n\n'
 
@@ -442,39 +482,19 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                         "mandate": "followup", # Dont think we have a way to determine this from ER Patrol
                         "number": -999, # ???
                         "members": members, # are these members specific to the leg or the patrol ?
-                        "leader": patrol_leg.leader.get('additional').get('smart_member_id') # what to do if legs have different leaders?
+                        "leader": patrol_leg.leader.get('additional').get('smart_member_id')
                     }
                 }
             }
 
-            patrol_request = PatrolRequest.parse_obj(patrol_data)
+            patrol_request = SMARTRequest.parse_obj(patrol_data)
 
-            # TODO: Currently seems that a waypoint is needed to be added in order to get patrol properties back on get
-            way_point_data = {
-                "type": "Feature",
-                "geometry": {
-                    "coordinates": coordinates,
-                    "type": "Point"
-                },
-                "properties": {
-                    "dateTime": patrol_leg_start_localtime.strftime(SMARTCONNECT_DATFORMAT),
+            incident_requests = self.get_incident_requests_from_er_patrol_leg(patrol_id=patrol.id, patrol_leg=patrol_leg)
 
-                    "smartDataType": "patrol",
-                    "smartFeatureType": "waypoint/new",
-                    "smartAttributes": {
-                        "patrolUuid": patrol.id,  # required
-                        "patrolLegUuid": patrol_leg.id,  # required
-                    }
-                }
-            }
-
-            waypoint_request = WaypointRequest.parse_obj(way_point_data)
-
-            smart_request = SMARTRequest(patrol_requests=[patrol_request],
-                                         waypoint_requests=[waypoint_request])
+            smart_request = SMARTCompositeRequest(patrol_requests=[patrol_request],
+                                                  waypoint_requests=incident_requests)
 
             return smart_request
-
 
 
 

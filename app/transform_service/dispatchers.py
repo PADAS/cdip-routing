@@ -1,3 +1,4 @@
+import json
 import logging
 import mimetypes
 import os
@@ -10,7 +11,7 @@ from cdip_connector.core import schemas
 from cdip_connector.core.cloudstorage import get_cloud_storage
 from dasclient.dasclient import DasClient
 from smartconnect import SmartClient
-from smartconnect.models import IndependentIncident, SMARTRequest
+from smartconnect.models import SMARTRequest, SMARTCompositeRequest
 
 logger = logging.getLogger(__name__)
 
@@ -116,25 +117,27 @@ class SmartConnectIndependentIncidentDispatcher:
 
     def send(self, item: dict):
 
-        item = IndependentIncident.parse_obj(item)
+        item = SMARTRequest.parse_obj(item)
         smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
         smartclient.add_independent_incident(incident=item, ca_uuid=self.config.additional.get('ca_uuid'))
         return
 
 
-class SmartConnectPatrolDispatcher:
+class SmartConnectDispatcher:
     def __init__(self, config: schemas.OutboundConfiguration):
         self.config = config
 
     def send(self, item: dict):
 
-        item = SMARTRequest.parse_obj(item)
+        item = SMARTCompositeRequest.parse_obj(item)
         # TODO: orchestration for posting various smart posts
+
         smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
         for patrol_request in item.patrol_requests:
             smartclient.post_smart_request(json=patrol_request.json(), ca_uuid=self.config.additional.get('ca_uuid'))
-        for waypoint_requset in item.waypoint_requests:
-            smartclient.post_smart_request(json=waypoint_requset.json(), ca_uuid=self.config.additional.get('ca_uuid'))
+        for waypoint_request in item.waypoint_requests:
+            smartclient.post_smart_request(json=waypoint_request.json(exclude_unset=True),
+                                           ca_uuid=self.config.additional.get('ca_uuid'))
         return
 
 
