@@ -100,6 +100,8 @@ async def ensure_device_integration(integration_id: str, device_id: str):
             device_data = await portal.ensure_device(sess, str(integration_id), device_id)
 
             if device_data:
+                # temporary hack to refit response to Device schema.
+                device_data['inbound_configuration'] = device_data.get('inbound_configuration',{}).get('id', None)
                 device = schemas.Device.parse_obj(device_data)
                 cache_db.setex(cache_key, 60, device.json())
         except Exception as e:
