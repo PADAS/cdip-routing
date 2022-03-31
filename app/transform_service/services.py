@@ -74,6 +74,8 @@ async def update_observation_with_device_configuration(observation):
 
 
 async def ensure_device_integration(integration_id: str, device_id: str):
+
+    cache_ttl = 7 * 86400 # One week.
     cache_db = get_redis_db()
 
     cache_key = f'device_detail.{integration_id}.{device_id}'
@@ -103,7 +105,7 @@ async def ensure_device_integration(integration_id: str, device_id: str):
                 # temporary hack to refit response to Device schema.
                 device_data['inbound_configuration'] = device_data.get('inbound_configuration',{}).get('id', None)
                 device = schemas.Device.parse_obj(device_data)
-                cache_db.setex(cache_key, 60, device.json())
+                cache_db.setex(cache_key, cache_ttl, device.json())
         except Exception as e:
             logger.exception('Error when posting device to Portal.', extra={**extra_dict,
                                                                             ExtraKeys.Error: e,
