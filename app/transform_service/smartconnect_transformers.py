@@ -297,7 +297,7 @@ class SmartEREventTransformer(SMARTTransformer, Transformer):
         super().__init__(config=config)
 
     def transform(self, item) -> dict:
-        if self._version == "7.4":
+        if self._version and float(self._version) == "7.5":
             incident = self.event_to_incident(event=item)
             existing_incident = self.smartconnect_client.get_incident(incident_uuid=item.id)
             if existing_incident:
@@ -309,7 +309,7 @@ class SmartEREventTransformer(SMARTTransformer, Transformer):
 
         return json.loads(smart_request.json()) if smart_request else None
 
-    # TODO: Depreciated use event_to_incident, remove when all integrations on smart connect version > 7.4.x
+    # TODO: Depreciated use event_to_incident, remove when all integrations on smart connect version > 7.5.x
     def geoevent_to_incident(self, *, geoevent: schemas.GeoEvent = None) -> SMARTRequest:
 
         # Sanitize coordinates
