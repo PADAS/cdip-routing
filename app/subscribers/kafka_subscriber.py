@@ -139,7 +139,7 @@ async def process_transformed_observation(key, transformed_message):
                                 ExtraKeys.InboundIntId: integration_id,
                                 ExtraKeys.OutboundIntId: outbound_config_id,
                                 ExtraKeys.StreamType: observation_type})
-        # await process_failed_transformed_observation(key, transformed_message)
+        await process_failed_transformed_observation(key, transformed_message)
 
 
 async def process_failed_transformed_observation(key, transformed_message):
