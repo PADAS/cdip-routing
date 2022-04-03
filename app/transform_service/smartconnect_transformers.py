@@ -142,8 +142,10 @@ class SmartEREventTransformer:
         self.smartconnect_client = smartconnect.SmartClient(api=config.endpoint, username=config.login,
                                                             password=config.password)
 
-        self._ca_datamodel = self.get_data_model(ca_uuid=self.ca_uuid)
+        self._version = self._config.additional.get('version', "7.0")
+        logger.info(f"Using SMART Integration version {self._version}")
 
+        self._ca_datamodel = self.get_data_model(ca_uuid=self.ca_uuid)
 
         try:
             self.ca = self.get_conservation_area(ca_uuid=self.ca_uuid)
@@ -164,8 +166,6 @@ class SmartEREventTransformer:
         if transformation_rules_dict:
             self._transformation_rules = TransformationRules.parse_obj(transformation_rules_dict)
 
-        self._version = self._config.additional.get('version', "7.0")
-        logger.info(f"Using SMART Integration version {self._version}")
 
     def get_conservation_area(self, *, ca_uuid:str = None):
 
@@ -205,25 +205,25 @@ class SmartEREventTransformer:
 
     def get_data_model(self, *, ca_uuid:str = None):
 
-            # CA Data Model is not available for versions below 7. Use a blank.
-            if self._version.startswith('6'):
-                blank_datamodel = smartconnect.DataModel()
-                blank_datamodel.load(BLANK_DATAMODEL_CONTENT)
-                return blank_datamodel
+        # CA Data Model is not available for versions below 7. Use a blank.
+        if self._version.startswith('6'):
+            blank_datamodel = smartconnect.DataModel()
+            blank_datamodel.load(BLANK_DATAMODEL_CONTENT)
+            return blank_datamodel
 
-            cache_key = f'cache:smart-ca:{ca_uuid}:datamodel'
-            try:
-                cached_data = cache.cache.get(cache_key)
-                if cached_data:
-                    dm = smartconnect.DataModel()
-                    dm.import_from_dict(json.loads(cached_data))
-                    return dm
-            except Exception:
-                pass
+        cache_key = f'cache:smart-ca:{ca_uuid}:datamodel'
+        try:
+            cached_data = cache.cache.get(cache_key)
+            if cached_data:
+                dm = smartconnect.DataModel()
+                dm.import_from_dict(json.loads(cached_data))
+                return dm
+        except Exception:
+            pass
 
-            ca_datamodel = self.smartconnect_client.download_datamodel(ca_uuid=self.ca_uuid)
-            cache.cache.setex(name=cache_key, time=60*5, value=json.dumps(ca_datamodel.export_as_dict()))
-            return ca_datamodel
+        ca_datamodel = self.smartconnect_client.download_datamodel(ca_uuid=self.ca_uuid)
+        cache.cache.setex(name=cache_key, time=60*5, value=json.dumps(ca_datamodel.export_as_dict()))
+        return ca_datamodel
 
     def resolve_category_path_for_event(self, *, event: [schemas.GeoEvent, schemas.EREvent] = None) -> str:
         '''
