@@ -52,7 +52,7 @@ def transform_ca_datamodel(*, er_event: schemas.EREvent = None, ca_datamodel: sm
     ca_datamodel.get_category(er_event.event_type)
 
 
-blank_datamodel = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+BLANK_DATAMODEL_CONTENT = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <DataModel xmlns="http://www.smartconservationsoftware.org/xml/1.0/datamodel">
     <languages>
         <language code="en"/>
@@ -208,8 +208,7 @@ class SmartEREventTransformer:
             # CA Data Model is not available for versions below 7. Use a blank.
             if self._version.startswith('6'):
                 blank_datamodel = smartconnect.DataModel()
-                blank_datamodel._categories = []
-                blank_datamodel._attributes = []
+                blank_datamodel.load(BLANK_DATAMODEL_CONTENT)
                 return blank_datamodel
 
             cache_key = f'cache:smart-ca:{ca_uuid}:datamodel'
