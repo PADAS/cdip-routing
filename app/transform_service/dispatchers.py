@@ -134,9 +134,13 @@ class SmartConnectDispatcher:
 
         smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
         for patrol_request in item.patrol_requests:
-            smartclient.post_smart_request(json=patrol_request.json(), ca_uuid=self.config.additional.get('ca_uuid'))
+            smartclient.post_smart_request(json=patrol_request.json(exclude_none=True),
+                                           ca_uuid=self.config.additional.get('ca_uuid'))
         for waypoint_request in item.waypoint_requests:
-            smartclient.post_smart_request(json=waypoint_request.json(exclude_unset=True),
+            smartclient.post_smart_request(json=waypoint_request.json(exclude_none=True),
+                                           ca_uuid=self.config.additional.get('ca_uuid'))
+        for track_point_request in item.track_point_requests:
+            smartclient.post_smart_request(json=track_point_request.json(exclude_none=True),
                                            ca_uuid=self.config.additional.get('ca_uuid'))
         return
 

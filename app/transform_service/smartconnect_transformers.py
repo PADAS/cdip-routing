@@ -415,8 +415,29 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                     # TODO: Update logic for patrol waypoints
                     pass
 
+            track_point_requests = []
+            for track_point in patrol_leg.track_points:
+                track_point_data = {
+                    "geometry": {
+                        "coordinates": [track_point.location.longitude, track_point.location.latitude],
+                        "type": "Point"
+                    },
+                    "properties": {
+                        "dateTime": track_point.recorded_at.strftime(SMARTCONNECT_DATFORMAT),
+                        "smartDataType": "patrol",
+                        "smartFeatureType": "trackpoint/new",
+                        "smartAttributes": {
+                            "patrolLegUuid": patrol_leg.id
+                        }
+                    }
+                }
+
+                track_point_request = SMARTRequest.parse_obj(track_point_data)
+                track_point_requests.append(track_point_request)
+
             smart_request = SMARTCompositeRequest(waypoint_requests=incident_requests,
-                                                  patrol_requests=[])
+                                                  patrol_requests=[],
+                                                  track_point_requests=track_point_requests)
 
             return smart_request
 
