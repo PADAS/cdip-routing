@@ -89,7 +89,7 @@ async def ensure_device_integration(integration_id: str, device_id: str):
     except:
         pass
 
-    logger.debug('Cache miss forgithub Device %s', device_id)
+    logger.debug('Cache miss for Device %s', device_id)
 
     extra_dict = {ExtraKeys.AttentionNeeded: True,
                   ExtraKeys.InboundIntId: str(integration_id),
