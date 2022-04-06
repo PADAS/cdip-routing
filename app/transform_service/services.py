@@ -106,6 +106,7 @@ async def ensure_device_integration(integration_id: str, device_id: str):
                 device_data['inbound_configuration'] = device_data.get('inbound_configuration',{}).get('id', None)
                 device = schemas.Device.parse_obj(device_data)
                 cache_db.setex(cache_key, cache_ttl, device.json())
+                return device
         except Exception as e:
             logger.exception('Error when posting device to Portal.', extra={**extra_dict,
                                                                             ExtraKeys.Error: e,
