@@ -384,6 +384,33 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             incident_request.properties.smartFeatureType = 'waypoint/new'
             incident_requests.append(incident_request)
 
+        return incident_requests
+
+    @staticmethod
+    def get_track_point_requests_from_er_patrol_leg(*, patrol_leg: ERPatrolSegment):
+        """ SMART Connect API throws out duplicate track points so always can post new points
+            Updates are not supported by their api"""
+        track_point_requests = []
+        for track_point in patrol_leg.track_points:
+            track_point_data = {
+                "geometry": {
+                    "coordinates": [track_point.location.longitude, track_point.location.latitude],
+                    "type": "Point"
+                },
+                "properties": {
+                    "dateTime": track_point.recorded_at.strftime(SMARTCONNECT_DATFORMAT),
+                    "smartDataType": "patrol",
+                    "smartFeatureType": "trackpoint/new",
+                    "smartAttributes": {
+                        "patrolLegUuid": patrol_leg.id
+                    }
+                }
+            }
+
+            track_point_request = SMARTRequest.parse_obj(track_point_data)
+            track_point_requests.append(track_point_request)
+        return track_point_requests
+
     def event_to_patrol_waypoint(self, *, patrol_id, patrol_leg_id, event):
         incident_request = self.event_to_incident(event=event)
         # Associate the incident to this patrol leg
@@ -415,25 +442,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                     # TODO: Update logic for patrol waypoints
                     pass
 
-            track_point_requests = []
-            for track_point in patrol_leg.track_points:
-                track_point_data = {
-                    "geometry": {
-                        "coordinates": [track_point.location.longitude, track_point.location.latitude],
-                        "type": "Point"
-                    },
-                    "properties": {
-                        "dateTime": track_point.recorded_at.strftime(SMARTCONNECT_DATFORMAT),
-                        "smartDataType": "patrol",
-                        "smartFeatureType": "trackpoint/new",
-                        "smartAttributes": {
-                            "patrolLegUuid": patrol_leg.id
-                        }
-                    }
-                }
-
-                track_point_request = SMARTRequest.parse_obj(track_point_data)
-                track_point_requests.append(track_point_request)
+            track_point_requests = self.get_track_point_requests_from_er_patrol_leg(patrol_leg=patrol_leg)
 
             smart_request = SMARTCompositeRequest(waypoint_requests=incident_requests,
                                                   patrol_requests=[],
@@ -510,8 +519,11 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
 
             incident_requests = self.get_incident_requests_from_er_patrol_leg(patrol_id=patrol.id, patrol_leg=patrol_leg)
 
+            track_point_requests = self.get_track_point_requests_from_er_patrol_leg(patrol_leg=patrol_leg)
+
             smart_request = SMARTCompositeRequest(patrol_requests=[patrol_request],
-                                                  waypoint_requests=incident_requests)
+                                                  waypoint_requests=incident_requests,
+                                                  track_point_requests=track_point_requests)
 
             return smart_request
 
