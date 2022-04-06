@@ -127,7 +127,8 @@ BLANK_DATAMODEL_CONTENT = '''<?xml version="1.0" encoding="UTF-8" standalone="ye
 </DataModel>
 '''
 
-class SmartEREventTransformer:
+
+class SMARTTransformer():
     '''
     Transform a single EarthRanger Event into an Independent Incident.
     
@@ -560,14 +561,14 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             # datetime.strptime(patrol_leg.time_range.get('start_time'), "%Y-%m-%dT%H:%M:%S.%f%z")
             patrol_leg_start_localtime = datetime.fromisoformat(patrol_leg.time_range.get('start_time')).astimezone(location_timezone)
 
-            comment = f'Patrol: {patrol.title}' \
+            comment = f'ER Patrol ({patrol.serial_number}) {str(patrol.title or "")}' \
                       + f'\nImported: {present_localtime.isoformat()}'
             for note in patrol.notes:
                 comment += note.get('text') + '\n\n'
 
             # add leg leader to members
             if patrol_leg.leader:
-                smart_member_id = patrol_leg.leader.get('additional').get('smart_member_id')
+                smart_member_id = patrol_leg.leader.additional.get('smart_member_id')
                 if smart_member_id not in members:
                     members.append(smart_member_id)
 
@@ -579,21 +580,20 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                 },
                 "properties": {
                     "dateTime": patrol_leg_start_localtime.strftime(SMARTCONNECT_DATFORMAT),
-
                     "smartDataType": "patrol",
                     "smartFeatureType": "patrol/new",
                     "smartAttributes": {
                         "patrolUuid": patrol.id,
                         "patrolLegUuid": patrol_leg.id,
-                        "team": "communityteam1",
+                        "team": "communityteam1",  # Is there a sensible equivalent on the ER side ?
                         "objective": patrol.objective,
                         "comment": comment,
-                        "isArmed": "false", # Dont think we have a way to determine this from ER Patrol
-                        "transportType": "foot", # Potential to base off ER Patrol type
-                        "mandate": "followup", # Dont think we have a way to determine this from ER Patrol
+                        "isArmed": "false",  # Dont think we have a way to determine this from ER Patrol
+                        "transportType": "foot",  # Potential to base off ER Patrol type
+                        "mandate": "followup",  # Dont think we have a way to determine this from ER Patrol
                         "number": -999, # ???
                         "members": members, # are these members specific to the leg or the patrol ?
-                        "leader": patrol_leg.leader.get('additional').get('smart_member_id')
+                        "leader": patrol_leg.leader.additional.get('smart_member_id')
                     }
                 }
             }
