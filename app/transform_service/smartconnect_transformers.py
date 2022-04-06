@@ -55,7 +55,85 @@ def transform_ca_datamodel(*, er_event: schemas.EREvent = None, ca_datamodel: sm
     ca_datamodel.get_category(er_event.event_type)
 
 
-class SMARTTransformer():
+BLANK_DATAMODEL_CONTENT = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<DataModel xmlns="http://www.smartconservationsoftware.org/xml/1.0/datamodel">
+    <languages>
+        <language code="en"/>
+    </languages>
+    <attributes>
+        <attribute key="bright_ti4" isrequired="false" type="NUMERIC">
+            <aggregations aggregation="avg"/>
+            <aggregations aggregation="max"/>
+            <aggregations aggregation="min"/>
+            <aggregations aggregation="stddev_samp"/>
+            <aggregations aggregation="sum"/>
+            <aggregations aggregation="var_samp"/>
+            <names language_code="en" value="Brightness ti4"/>
+        </attribute>
+        <attribute key="bright_ti5" isrequired="false" type="NUMERIC">
+            <aggregations aggregation="avg"/>
+            <aggregations aggregation="max"/>
+            <aggregations aggregation="min"/>
+            <aggregations aggregation="stddev_samp"/>
+            <aggregations aggregation="sum"/>
+            <aggregations aggregation="var_samp"/>
+            <names language_code="en" value="Brightness ti5"/>
+        </attribute>
+        <attribute key="fireradiativepower" isrequired="false" type="TEXT">
+            <qa_regex></qa_regex>
+            <names language_code="en" value="Fire Radiative Power"/>
+        </attribute>
+        <attribute key="frp" isrequired="false" type="NUMERIC">
+            <aggregations aggregation="avg"/>
+            <aggregations aggregation="max"/>
+            <aggregations aggregation="min"/>
+            <aggregations aggregation="stddev_samp"/>
+            <aggregations aggregation="sum"/>
+            <aggregations aggregation="var_samp"/>
+            <names language_code="en" value="Fire Radiative Power"/>
+        </attribute>
+        <attribute key="confidence" isrequired="false" type="NUMERIC">
+            <aggregations aggregation="avg"/>
+            <aggregations aggregation="max"/>
+            <aggregations aggregation="min"/>
+            <aggregations aggregation="stddev_samp"/>
+            <aggregations aggregation="sum"/>
+            <aggregations aggregation="var_samp"/>
+            <names language_code="en" value="Confidence"/>
+        </attribute>
+        <attribute key="clustered_alerts" isrequired="false" type="NUMERIC">
+            <aggregations aggregation="avg"/>
+            <aggregations aggregation="max"/>
+            <aggregations aggregation="min"/>
+            <aggregations aggregation="stddev_samp"/>
+            <aggregations aggregation="sum"/>
+            <aggregations aggregation="var_samp"/>
+            <names language_code="en" value="Clustered Alerts"/>
+        </attribute>
+    </attributes>
+    <categories>
+        <category key="gfwfirealert" ismultiple="true" isactive="true" iconkey="fire">
+            <names language_code="en" value="GFW Fire Alert"/>
+            <attribute isactive="true" attributekey="bright_ti4"/>
+            <attribute isactive="true" attributekey="bright_ti5"/>
+            <attribute isactive="true" attributekey="frp"/>
+            <attribute isactive="true" attributekey="clustered_alerts"/>
+        </category>
+        <category key="gfwgladalert" ismultiple="true" isactive="true" iconkey="stump">
+            <names language_code="en" value="GFW Glad Alert"/>
+            <attribute isactive="true" attributekey="confidence"/>
+        </category>
+    </categories>
+</DataModel>
+'''
+
+class SmartEREventTransformer:
+    '''
+    Transform a single EarthRanger Event into an Independent Incident.
+    
+    TODO: apply transformation rules from SIntegrate configuration.
+    
+    '''
 
     def __init__(self, *, config: schemas.OutboundConfiguration = None, **kwargs):
         self._config = config
@@ -67,7 +145,8 @@ class SMARTTransformer():
         self.smartconnect_client = smartconnect.SmartClient(api=config.endpoint, username=config.login,
                                                             password=config.password)
 
-        self._ca_datamodel = self.get_data_model(ca_uuid=self.ca_uuid)
+        self._version = self._config.additional.get('version', "7.0")
+        logger.info(f"Using SMART Integration version {self._version}")
 
         try:
             self.ca = self.get_conservation_area(ca_uuid=self.ca_uuid)
@@ -90,8 +169,6 @@ class SMARTTransformer():
         if transformation_rules_dict:
             self._transformation_rules = TransformationRules.parse_obj(transformation_rules_dict)
 
-        self._version = self._config.additional.get('version', "7.0")
-        logger.info(f"Using SMART Integration version {self._version}")
 
     def get_conservation_area(self, *, ca_uuid:str = None):
 
@@ -130,19 +207,25 @@ class SMARTTransformer():
             self.logger.exception(f'Failed to get Conservation Areas')
 
     def get_data_model(self, *, ca_uuid:str = None):
-            cache_key = f'cache:smart-ca:{ca_uuid}:datamodel'
-            try:
-                cached_data = cache.cache.get(cache_key)
-                if cached_data:
-                    dm = smartconnect.DataModel()
-                    dm.import_from_dict(json.loads(cached_data))
-                    return dm
-            except Exception:
-                pass
+        # CA Data Model is not available for versions below 7. Use a blank.
+        if self._version.startswith('6'):
+            blank_datamodel = smartconnect.DataModel()
+            blank_datamodel.load(BLANK_DATAMODEL_CONTENT)
+            return blank_datamodel
 
-            ca_datamodel = self.smartconnect_client.download_datamodel(ca_uuid=self.ca_uuid)
-            cache.cache.setex(name=cache_key, time=60*5, value=json.dumps(ca_datamodel.export_as_dict()))
-            return ca_datamodel
+        cache_key = f'cache:smart-ca:{ca_uuid}:datamodel'
+        try:
+            cached_data = cache.cache.get(cache_key)
+            if cached_data:
+                dm = smartconnect.DataModel()
+                dm.import_from_dict(json.loads(cached_data))
+                return dm
+        except Exception:
+            pass
+
+        ca_datamodel = self.smartconnect_client.download_datamodel(ca_uuid=self.ca_uuid)
+        cache.cache.setex(name=cache_key, time=60*5, value=json.dumps(ca_datamodel.export_as_dict()))
+        return ca_datamodel
 
     def guess_location_timezone(self, *, longitude:Union[float,int]=None, latitude: Union[float,int]=None):
         '''

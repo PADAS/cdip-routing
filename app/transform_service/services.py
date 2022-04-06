@@ -74,39 +74,44 @@ async def update_observation_with_device_configuration(observation):
 
 
 async def ensure_device_integration(integration_id: str, device_id: str):
+
+    cache_ttl = 7 * 86400 # One week.
     cache_db = get_redis_db()
 
     cache_key = f'device_detail.{integration_id}.{device_id}'
-    resp_json_bytes = cache_db.get(cache_key)
+    cached = cache_db.get(cache_key)
 
-    device = None
+    try:
+        if cached:
+            device = schemas.Device.parse_raw(cached)
+            logger.debug('Using cached Device %s', device.device_id)
+            return device
+    except:
+        pass
+
+    logger.debug('Cache miss for Device %s', device_id)
+
     extra_dict = {ExtraKeys.AttentionNeeded: True,
                   ExtraKeys.InboundIntId: str(integration_id),
                   ExtraKeys.DeviceId: device_id}
 
-    if resp_json_bytes:
-        resp_json_str = resp_json_bytes.decode('utf-8')
-    else:
-        portal = portal_api.PortalApi()
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30),
+                                     connector=aiohttp.TCPConnector(ssl=False)) as sess:
+        try:
+            portal = portal_api.PortalApi()
+            device_data = await portal.ensure_device(sess, str(integration_id), device_id)
 
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30),
-                                         connector=aiohttp.TCPConnector(ssl=False)) as sess:
-            try:
-                resp_json = await portal.ensure_device(sess, str(integration_id), device_id)
-            except Exception as e:
-                logger.exception('Error when posting device to Portal.', extra={**extra_dict,
-                                                                                ExtraKeys.Error: e})
-                return None
-            else:
-                resp_json_str = json.dumps(resp_json)
-                # cache_db.setex(cache_key, settings.PORTAL_CONFIG_OBJECT_CACHE_TTL, resp_json_str)
-    try:
-        resp_json = json.loads(resp_json_str)
-        device = schemas.Device.parse_obj(resp_json)
-    except Exception as e:
-        logger.exception(f"Exception occurred parsing response from portal.ensure_device", extra={**extra_dict,
-                                                                                                  ExtraKeys.Error: e})
-    return device
+            if device_data:
+                # temporary hack to refit response to Device schema.
+                device_data['inbound_configuration'] = device_data.get('inbound_configuration',{}).get('id', None)
+                device = schemas.Device.parse_obj(device_data)
+                cache_db.setex(cache_key, cache_ttl, device.json())
+                return device
+        except Exception as e:
+            logger.exception('Error when posting device to Portal.', extra={**extra_dict,
+                                                                            ExtraKeys.Error: e,
+                                                                            "device_id": device_id})
+            return None
 
 
 class TransformerNotFound(Exception):

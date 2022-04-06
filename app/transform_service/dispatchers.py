@@ -119,8 +119,8 @@ class SmartConnectIndependentIncidentDispatcher:
 
         item = SMARTRequest.parse_obj(item)
         smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
+        logger.info('Posting IndependentIncident.', extra={"dest": self.config.endpoint})
         smartclient.add_independent_incident(incident=item, ca_uuid=self.config.additional.get('ca_uuid'))
-        return
 
 
 class SmartConnectDispatcher:
