@@ -544,14 +544,10 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             # create patrol with first leg, currently ER only supports single leg patrols
             patrol_leg = patrol.patrol_segments[0]
 
-            # TODO: Revisit if this is the right spot to abandon the flow
-            if not patrol_leg.start_location:
+            # These should already have been filtered out during sync process pull from ER, but checking again
+            if not patrol_leg.start_location or not patrol_leg.leader:
                 # Need start location to pass in coordinates and determine location timezone
-                logger.warning("patrol leg contains no start location")
-                return None
-
-            if not patrol_leg.leader:
-                logger.warning("patrol leg contains no leader")
+                logger.warning("patrol leg contains no start location or no leader")
                 return None
 
             coordinates = [patrol_leg.start_location.longitude, patrol_leg.start_location.latitude]
