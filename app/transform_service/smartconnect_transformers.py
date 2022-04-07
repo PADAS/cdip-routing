@@ -561,8 +561,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             # datetime.strptime(patrol_leg.time_range.get('start_time'), "%Y-%m-%dT%H:%M:%S.%f%z")
             patrol_leg_start_localtime = datetime.fromisoformat(patrol_leg.time_range.get('start_time')).astimezone(location_timezone)
 
-            comment = f'ER Patrol ({patrol.serial_number}) {str(patrol.title or "")}' \
-                      + f'\nImported: {present_localtime.isoformat()}'
+            comment = f'\nImported: {present_localtime.isoformat()}'
             for note in patrol.notes:
                 comment += note.get('text') + '\n\n'
 
@@ -583,6 +582,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                     "smartDataType": "patrol",
                     "smartFeatureType": "patrol/new",
                     "smartAttributes": {
+                        "patrolId": f'ER-{patrol.serial_number}',
                         "patrolUuid": patrol.id,
                         "patrolLegUuid": patrol_leg.id,
                         "team": "communityteam1",  # Is there a sensible equivalent on the ER side ?
@@ -591,7 +591,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                         "isArmed": "false",  # Dont think we have a way to determine this from ER Patrol
                         "transportType": "foot",  # Potential to base off ER Patrol type
                         "mandate": "followup",  # Dont think we have a way to determine this from ER Patrol
-                        "number": -999, # ???
+                        "number": -999,  # ???
                         "members": members, # are these members specific to the leg or the patrol ?
                         "leader": patrol_leg.leader.additional.get('smart_member_id')
                     }
