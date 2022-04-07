@@ -128,7 +128,7 @@ BLANK_DATAMODEL_CONTENT = '''<?xml version="1.0" encoding="UTF-8" standalone="ye
 '''
 
 
-class SMARTTransformer():
+class SMARTTransformer:
     '''
     Transform a single EarthRanger Event into an Independent Incident.
     
@@ -148,6 +148,7 @@ class SMARTTransformer():
 
         self._version = self._config.additional.get('version', "7.0")
         logger.info(f"Using SMART Integration version {self._version}")
+        self._ca_datamodel = self.get_data_model(ca_uuid=self.ca_uuid)
 
         try:
             self.ca = self.get_conservation_area(ca_uuid=self.ca_uuid)
@@ -381,7 +382,7 @@ class SmartEREventTransformer(SMARTTransformer, Transformer):
         super().__init__(config=config)
 
     def transform(self, item) -> dict:
-        if self._version and float(self._version) == "7.5":
+        if self._version and self._version == "7.5":
             incident = self.event_to_incident(event=item)
             existing_incident = self.smartconnect_client.get_incident(incident_uuid=item.id)
             if existing_incident:

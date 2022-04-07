@@ -234,7 +234,7 @@ def extract_fields_from_message(message):
         if not observation:
             logger.warning(f'No observation was obtained from {decoded_message}')
         if not attributes:
-            logger.warning(f'No attributes were obtained from {decoded_message}')
+            logger.debug(f'No attributes were obtained from {decoded_message}')
     else:
         logger.warning(f'message contained no payload', extra={'message': message})
         return None, None
