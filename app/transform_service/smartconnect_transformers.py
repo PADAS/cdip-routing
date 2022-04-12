@@ -349,6 +349,7 @@ class SMARTTransformer:
                 'smartDataType': 'incident',
                 'smartFeatureType': 'waypoint/new',
                 'smartAttributes': {
+                    "incidentId": f'ER-{event.serial_number}',
                     'incidentUuid': str(event.id),
                     'comment': comment,
                     'observationGroups': [
