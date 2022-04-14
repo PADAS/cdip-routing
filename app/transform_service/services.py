@@ -7,6 +7,7 @@ import aiohttp
 import requests
 import walrus
 from cdip_connector.core import schemas, portal_api
+from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
 
 from app import settings
 from app.core.local_logging import ExtraKeys
@@ -118,6 +119,10 @@ class TransformerNotFound(Exception):
     pass
 
 
+class EventTypeConflictException(Exception):
+    pass
+
+
 def transform_observation(stream_type: str,
             config: schemas.OutboundConfiguration,
             observation) -> dict:
@@ -143,13 +148,38 @@ def transform_observation(stream_type: str,
     elif ((stream_type == schemas.StreamPrefixEnum.geoevent or
            stream_type == schemas.StreamPrefixEnum.earthranger_event)
           and config.type_slug == schemas.DestinationTypes.SmartConnect.value):
-        transformer = SmartEREventTransformer(config=config)
+        observation, ca_uuid = get_ca_uuid_for_er_event(event=observation)
+        transformer = SmartEREventTransformer(config=config, ca_uuid=ca_uuid)
     elif (stream_type == schemas.StreamPrefixEnum.earthranger_patrol
           and config.type_slug == schemas.DestinationTypes.SmartConnect.value):
-        transformer = SmartERPatrolTransformer(config=config)
+        observation, ca_uuid = get_ca_uuid_for_er_patrol(patrol=observation)
+        transformer = SmartERPatrolTransformer(config=config, ca_uuid=ca_uuid)
     if transformer:
         return transformer.transform(observation)
     else:
         logger.error('No transformer found for stream type', extra={**extra_dict,
                                                                    ExtraKeys.Provider: config.type_slug})
         raise TransformerNotFound(f'No transformer found for {stream_type} dest: {config.type_slug}')
+
+
+def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
+    segment: ERPatrolSegment
+    ca_uuids = []
+    for segment in patrol.patrol_segments:
+        for event in segment.event_details:
+            event, event_ca_uuid = get_ca_uuid_for_er_event(event=event)
+            if event_ca_uuid not in ca_uuids:
+                ca_uuids.append(event_ca_uuid)
+    if len(ca_uuids) > 1:
+        raise EventTypeConflictException(f'Patrol events are mapped to more than one ca_uuid: {ca_uuids}')
+    ca_uuid = ca_uuids[0]
+    return patrol, ca_uuid
+
+
+def get_ca_uuid_for_er_event(*, event):
+    """get ca_uuid from prefix of event_type and strip it from event_type"""
+    ca_uuid = event.event_type.split('_')[0]
+    event.event_type = '_'.join(event.event_type.split('_')[1:])
+    return event, ca_uuid
+
+

@@ -136,12 +136,13 @@ class SMARTTransformer:
     
     '''
 
-    def __init__(self, *, config: schemas.OutboundConfiguration = None, **kwargs):
+    def __init__(self, *, config: schemas.OutboundConfiguration = None, ca_uuid: str, **kwargs):
         self._config = config
 
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        self.ca_uuid = self._config.additional.get('ca_uuid', None)
+        # When configured to > 1 CA, need to instantiate with specified ca_uuid
+        self.ca_uuid = self._config.additional.get('ca_uuid', None) if not ca_uuid else ca_uuid
 
         self.smartconnect_client = smartconnect.SmartClient(api=config.endpoint, username=config.login,
                                                             password=config.password)
@@ -379,8 +380,8 @@ class SmartEREventTransformer(SMARTTransformer, Transformer):
     
     '''
 
-    def __init__(self, *, config: schemas.OutboundConfiguration = None, **kwargs):
-        super().__init__(config=config)
+    def __init__(self, *, config: schemas.OutboundConfiguration = None, ca_uuid: str, **kwargs):
+        super().__init__(config=config, ca_uuid=ca_uuid)
 
     def transform(self, item) -> dict:
         if self._version and self._version == "7.5":
@@ -391,7 +392,7 @@ class SmartEREventTransformer(SMARTTransformer, Transformer):
                 return None
         else:
             incident = self.geoevent_to_incident(geoevent=item)
-        smart_request = SMARTCompositeRequest(waypoint_requests=[incident])
+        smart_request = SMARTCompositeRequest(waypoint_requests=[incident], ca_uuid=self.ca_uuid)
 
         return json.loads(smart_request.json()) if smart_request else None
 
@@ -454,8 +455,8 @@ class SmartEREventTransformer(SMARTTransformer, Transformer):
 
 
 class SmartERPatrolTransformer(SMARTTransformer, Transformer):
-    def __init__(self, *, config: schemas.OutboundConfiguration = None, **kwargs):
-        super().__init__(config=config)
+    def __init__(self, *, config: schemas.OutboundConfiguration = None, ca_uuid: str, **kwargs):
+        super().__init__(config=config, ca_uuid=ca_uuid)
 
     def transform(self, item) -> dict:
         smart_request = self.er_patrol_to_smart_patrol(patrol=item)
@@ -532,7 +533,8 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
 
             smart_request = SMARTCompositeRequest(waypoint_requests=incident_requests,
                                                   patrol_requests=[],
-                                                  track_point_requests=track_point_requests)
+                                                  track_point_requests=track_point_requests,
+                                                  ca_uuid=self.ca_uuid)
 
             return smart_request
 
@@ -604,7 +606,8 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
 
             smart_request = SMARTCompositeRequest(patrol_requests=[patrol_request],
                                                   waypoint_requests=incident_requests,
-                                                  track_point_requests=track_point_requests)
+                                                  track_point_requests=track_point_requests,
+                                                  ca_uuid=self.ca_uuid)
 
             return smart_request
 
