@@ -172,6 +172,9 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
                 ca_uuids.append(event_ca_uuid)
     if len(ca_uuids) > 1:
         raise EventTypeConflictException(f'Patrol events are mapped to more than one ca_uuid: {ca_uuids}')
+    if not ca_uuids:
+        leader_ca_uuid = segment.leader.additional.get('ca_uuid')
+        ca_uuids.append(leader_ca_uuid)
     ca_uuid = ca_uuids[0]
     return patrol, ca_uuid
 
