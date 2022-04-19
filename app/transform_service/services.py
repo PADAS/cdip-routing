@@ -11,8 +11,9 @@ from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
 
 from app import settings
 from app.core.local_logging import ExtraKeys
-from app.core.utils import get_auth_header, create_cache_key, get_redis_db
-from app.transform_service.smartconnect_transformers import SmartEREventTransformer, SmartERPatrolTransformer
+from app.core.utils import get_auth_header, get_redis_db
+from app.transform_service.smartconnect_transformers import SmartEREventTransformer, SmartERPatrolTransformer, \
+    CAConflictException, IndeterminableCAException
 from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer, ERCameraTrapTransformer, \
     WPSWatchCameraTrapTransformer
 
@@ -119,10 +120,6 @@ class TransformerNotFound(Exception):
     pass
 
 
-class EventTypeConflictException(Exception):
-    pass
-
-
 def transform_observation(stream_type: str,
             config: schemas.OutboundConfiguration,
             observation) -> dict:
@@ -171,8 +168,11 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
             if event_ca_uuid not in ca_uuids:
                 ca_uuids.append(event_ca_uuid)
     if len(ca_uuids) > 1:
-        raise EventTypeConflictException(f'Patrol events are mapped to more than one ca_uuid: {ca_uuids}')
+        raise CAConflictException(f'Patrol events are mapped to more than one ca_uuid: {ca_uuids}')
     if not ca_uuids:
+        if not segment.leader:
+            logger.warning('Patrol has no reports or subject assigned to it', extra=dict(patrol=patrol))
+            raise IndeterminableCAException('Unable to determine CA uuid for patrol')
         leader_ca_uuid = segment.leader.additional.get('ca_uuid')
         ca_uuids.append(leader_ca_uuid)
     ca_uuid = ca_uuids[0]

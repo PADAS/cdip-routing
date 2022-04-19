@@ -33,6 +33,7 @@ class OptionMap(BaseModel):
     from_key: str
     to_key: str
 
+
 class AttributeMapper(BaseModel):
     from_key: str
     to_key: str
@@ -41,14 +42,24 @@ class AttributeMapper(BaseModel):
     default_option: Optional[str]
     event_types: Optional[List[str]]
 
+
 class TransformationRules(BaseModel):
     category_map: Optional[List[CategoryPair]] = []
     attribute_map: Optional[List[AttributeMapper]] = []
+
 
 class SmartConnectConfigurationAdditional(BaseModel):
     ca_uuid: uuid.UUID
     transformation_rules: Optional[TransformationRules]
     version: Optional[str]
+
+
+class CAConflictException(Exception):
+    pass
+
+
+class IndeterminableCAException(Exception):
+    pass
 
 
 def transform_ca_datamodel(*, er_event: schemas.EREvent = None, ca_datamodel: smartconnect.DataModel = None):
