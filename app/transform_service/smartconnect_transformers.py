@@ -183,15 +183,13 @@ class SMARTTransformer:
         if transformation_rules_dict:
             self._transformation_rules = TransformationRules.parse_obj(transformation_rules_dict)
 
-
-    def get_conservation_area(self, *, ca_uuid:str = None):
-
+    def get_conservation_area(self, *, ca_uuid: str = None):
         cache_key = f'cache:smart-ca:{ca_uuid}:metadata'
-        self.logger.info('Looking up CA cached at {cache_key}.')
+        self.logger.info(f'Looking up CA cached at {cache_key}.')
         try:
             cached_data = cache.cache.get(cache_key)
             if cached_data:
-                self.logger.info('Found CA cached at {cache_key}.')
+                self.logger.info(f'Found CA cached at {cache_key}.')
                 self.ca = ConservationArea.parse_raw(cached_data)
                 return self.ca
 
@@ -208,7 +206,7 @@ class SMARTTransformer:
                     self.ca = ca
                     break
             else:
-                logger.error('Can\'t find a Conservation Area with UUID: {self.ca_uuid}')
+                logger.error(f'Can\'t find a Conservation Area with UUID: {self.ca_uuid}')
                 self.ca = None
 
             if self.ca:
