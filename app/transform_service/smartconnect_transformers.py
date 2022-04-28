@@ -1,7 +1,6 @@
 import json
 import logging
 import uuid
-from abc import ABC
 from datetime import datetime
 from typing import List, Optional, Tuple, Union
 
@@ -12,9 +11,10 @@ from cdip_connector.core import schemas
 from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel
 from smartconnect.models import SMARTCONNECT_DATFORMAT, \
-    SMARTRequest, ConservationArea, SMARTCompositeRequest, SMARTResponse, Patrol
+    SMARTRequest, ConservationArea, SMARTCompositeRequest
 from smartconnect.utils import guess_ca_timezone
 
+from app.core.utils import is_uuid
 from app.subscribers import cache
 from app.transform_service.transformers import Transformer
 
@@ -152,8 +152,15 @@ class SMARTTransformer:
 
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        # When configured to > 1 CA, need to instantiate with specified ca_uuid
-        self.ca_uuid = self._config.additional.get('ca_uuid', None) if not ca_uuid else ca_uuid
+        # Handle 0:N SMART CA Mapping
+        self.ca_uuid = ca_uuid  # priority to passed in ca_uuid
+        if not self.ca_uuid:
+            # no passed in value assumes only 1 CA is mapped
+            ca_uuids = self._config.additional.get('ca_uuids', None)
+            # if not exactly one CA mapped raise Exception
+            self.ca_uuid = ca_uuids[0] if len(ca_uuids) == 1 else None
+        if not self.ca_uuid:
+            raise IndeterminableCAException('Unable to determine CA uuid for observation')
 
         self.smartconnect_client = smartconnect.SmartClient(api=config.endpoint, username=config.login,
                                                             password=config.password)
@@ -342,10 +349,14 @@ class SMARTTransformer:
         attributes = self._resolve_attributes_for_event(event=event)
 
         present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
-        event_localtime = event.time.astimezone(location_timezone)
+        event_localtime = event.time.astimezone(location_timezone) if is_er_event \
+            else event.recorded_at.astimezone(location_timezone)
 
         comment = f'Report: {event.title if event.title else event.event_type}' \
                   + f'\nImported: {present_localtime.isoformat()}'
+
+        incident_id = f'ER-{event.serial_number}' if is_er_event else None
+        incident_uuid = str(event.id) if is_uuid(id_str=str(event.id)) else None
 
         incident_data = {
             'type': 'Feature',
@@ -359,8 +370,8 @@ class SMARTTransformer:
                 'smartDataType': 'incident',
                 'smartFeatureType': 'waypoint/new',
                 'smartAttributes': {
-                    "incidentId": f'ER-{event.serial_number}',
-                    'incidentUuid': str(event.id),
+                    "incidentId": incident_id,
+                    'incidentUuid': incident_uuid,
                     'comment': comment,
                     'observationGroups': [
                         {
@@ -383,7 +394,7 @@ class SMARTTransformer:
         return incident
 
 
-class SmartEREventTransformer(SMARTTransformer, Transformer):
+class SmartEventTransformer(SMARTTransformer, Transformer):
     '''
     Transform a single EarthRanger Event into an Independent Incident.
     

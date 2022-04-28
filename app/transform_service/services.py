@@ -6,13 +6,13 @@ from uuid import UUID
 import aiohttp
 import requests
 import walrus
-from cdip_connector.core import schemas, portal_api
+from cdip_connector.core import schemas, portal_api, cdip_settings
 from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
 
 from app import settings
 from app.core.local_logging import ExtraKeys
-from app.core.utils import get_auth_header, get_redis_db
-from app.transform_service.smartconnect_transformers import SmartEREventTransformer, SmartERPatrolTransformer, \
+from app.core.utils import get_auth_header, get_redis_db, is_uuid
+from app.transform_service.smartconnect_transformers import SmartEventTransformer, SmartERPatrolTransformer, \
     CAConflictException, IndeterminableCAException
 from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer, ERCameraTrapTransformer, \
     WPSWatchCameraTrapTransformer
@@ -30,7 +30,8 @@ def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbo
         headers = get_auth_header()
         resp = requests.get(url=f'{outbound_integrations_endpoint}',
                             params=dict(inbound_id=inbound_id),
-                            headers=headers, verify=settings.PORTAL_SSL_VERIFY,
+                            headers=headers,
+                            verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
                             timeout=(3.1, 20))
     except:
         logger.exception('Failed to get outbound integrations for inbound_id', extra={'inbound_integration_id': inbound_id})
@@ -120,9 +121,9 @@ class TransformerNotFound(Exception):
     pass
 
 
-def transform_observation(stream_type: str,
-            config: schemas.OutboundConfiguration,
-            observation) -> dict:
+def transform_observation(*, stream_type: str,
+                          config: schemas.OutboundConfiguration,
+                          observation) -> dict:
 
     transformer = None
     extra_dict = {ExtraKeys.InboundIntId: observation.integration_id,
@@ -145,8 +146,8 @@ def transform_observation(stream_type: str,
     elif ((stream_type == schemas.StreamPrefixEnum.geoevent or
            stream_type == schemas.StreamPrefixEnum.earthranger_event)
           and config.type_slug == schemas.DestinationTypes.SmartConnect.value):
-        observation, ca_uuid = get_ca_uuid_for_er_event(event=observation)
-        transformer = SmartEREventTransformer(config=config, ca_uuid=ca_uuid)
+        observation, ca_uuid = get_ca_uuid_for_event(event=observation)
+        transformer = SmartEventTransformer(config=config, ca_uuid=ca_uuid)
     elif (stream_type == schemas.StreamPrefixEnum.earthranger_patrol
           and config.type_slug == schemas.DestinationTypes.SmartConnect.value):
         observation, ca_uuid = get_ca_uuid_for_er_patrol(patrol=observation)
@@ -164,7 +165,7 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
     ca_uuids = []
     for segment in patrol.patrol_segments:
         for event in segment.event_details:
-            event, event_ca_uuid = get_ca_uuid_for_er_event(event=event)
+            event, event_ca_uuid = get_ca_uuid_for_event(event=event)
             if event_ca_uuid not in ca_uuids:
                 ca_uuids.append(event_ca_uuid)
     if len(ca_uuids) > 1:
@@ -179,10 +180,17 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
     return patrol, ca_uuid
 
 
-def get_ca_uuid_for_er_event(*, event):
+def get_ca_uuid_for_event(*, event):
     """get ca_uuid from prefix of event_type and strip it from event_type"""
-    ca_uuid = event.event_type.split('_')[0]
-    event.event_type = '_'.join(event.event_type.split('_')[1:])
+    prefix = event.event_type.split('_')[0]
+    # validation that uuid prefix exists
+    ca_uuid = prefix if is_uuid(id_str=prefix) else None
+    if ca_uuid:
+        # remove ca_uuid prefix if it exists
+        event.event_type = '_'.join(event.event_type.split('_')[1:])
     return event, ca_uuid
+
+
+
 
 

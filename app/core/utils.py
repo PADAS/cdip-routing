@@ -3,10 +3,11 @@ import random
 from hashlib import md5
 from typing import Dict
 from datetime import datetime, timezone, timedelta
+from uuid import UUID
 
 import requests
 import walrus
-from cdip_connector.core import schemas
+from cdip_connector.core import schemas, cdip_settings
 
 from app import settings
 
@@ -23,8 +24,10 @@ def get_redis_db():
 def create_cache_key(hashable_string):
     return md5(str(hashable_string).encode('utf-8')).hexdigest()
 
+
 class PortalAuthException(Exception):
     pass
+
 
 def get_access_token(token_url: str,
                      client_id: str,
@@ -33,7 +36,7 @@ def get_access_token(token_url: str,
     payload = {
         'client_id': client_id,
         'client_secret': client_secret,
-        'audience': settings.KEYCLOAK_AUDIENCE,
+        'audience': cdip_settings.KEYCLOAK_AUDIENCE,
         'grant_type': 'urn:ietf:params:oauth:grant-type:uma-ticket',
         'scope': 'openid',
     }
@@ -48,6 +51,8 @@ def get_access_token(token_url: str,
 
 
 auth_gen = None
+
+
 def get_auth_header(refresh=False) -> Dict[str, str]:
     global auth_gen
     if not auth_gen or refresh:
@@ -72,9 +77,9 @@ def auth_generator():
         present = datetime.now(tz=timezone.utc)
         try:
             if expire_at <= present:
-                token = get_access_token(settings.OAUTH_TOKEN_URL,
-                                                settings.KEYCLOAK_CLIENT_ID,
-                                                settings.KEYCLOAK_CLIENT_SECRET)
+                token = get_access_token(cdip_settings.OAUTH_TOKEN_URL,
+                                         cdip_settings.KEYCLOAK_CLIENT_ID,
+                                         cdip_settings.KEYCLOAK_CLIENT_SECRET)
 
                 ttl_seconds = token.expires_in - 5
                 expire_at = present + timedelta(seconds=ttl_seconds)
@@ -86,6 +91,14 @@ def auth_generator():
             logger.exception('Failed to authenticate with Portal API.')
         else:
             yield token
+
+
+def is_uuid(*, id_str: str):
+    try:
+        uuid_obj = UUID(id_str)
+        return True
+    except ValueError:
+        return False
 
 
 if __name__ == '__main__':
