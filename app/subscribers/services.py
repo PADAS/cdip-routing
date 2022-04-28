@@ -5,32 +5,18 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 import requests
-from cdip_connector.core import schemas, routing
+from cdip_connector.core import schemas, routing, cdip_settings
 
 from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import get_auth_header, get_redis_db, create_cache_key
 from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher, ERCameraTrapDispatcher, \
-    SmartConnectEREventDispatcher, WPSWatchCameraTrapDispatcher
+    WPSWatchCameraTrapDispatcher, SmartConnectDispatcher
 from app.transform_service.services import transform_observation
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = (3.1, 20)
-
-
-def post_message_to_transform_service(observation_type, observation, message_id):
-    logger.debug(f"Received observation: {observation}")
-    if observation_type == schemas.StreamPrefixEnum.position:
-        response = requests.post(settings.TRANSFORM_SERVICE_POSITIONS_ENDPOINT, json=observation)
-    else:
-        logger.warning(f'Observation: {observation} type: {observation_type} is not supported')
-        # TODO how to handle unsupported observation types
-    if not response.ok:
-        # TODO how to handle bad Transform Service responses ?
-        logger.error(f"Transform Service Error response: {response} "
-                     f"while processing: {message_id} "
-                     f"observation: {observation}")
 
 
 def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfiguration:
@@ -40,7 +26,7 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
     try:
         headers = get_auth_header()
         response = requests.get(url=outbound_integrations_endpoint,
-                                verify=settings.PORTAL_SSL_VERIFY,
+                                verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
                                 headers=headers,
                                 timeout=DEFAULT_TIMEOUT)
         if response.status_code == 200:
@@ -66,7 +52,7 @@ def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationI
     try:
         headers = get_auth_header()
         response = requests.get(url=inbound_integrations_endpoint,
-                                verify=settings.PORTAL_SSL_VERIFY,
+                                verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
                                 headers=headers,
                                 timeout=DEFAULT_TIMEOUT)
 
@@ -107,11 +93,13 @@ def dispatch_transformed_observation(stream_type: str,
     if config:
         if stream_type == schemas.StreamPrefixEnum.position:
             dispatcher = ERPositionDispatcher(config, provider)
-        elif (stream_type == schemas.StreamPrefixEnum.geoevent or
-              stream_type == schemas.StreamPrefixEnum.earthranger_event) and \
-                config.type_slug == schemas.DestinationTypes.SmartConnect.value:
-                dispatcher = SmartConnectEREventDispatcher(config)
-        elif stream_type == schemas.StreamPrefixEnum.geoevent:
+        elif ((stream_type == schemas.StreamPrefixEnum.earthranger_patrol or
+               stream_type == schemas.StreamPrefixEnum.earthranger_event or
+               stream_type == schemas.StreamPrefixEnum.geoevent) and
+              config.type_slug == schemas.DestinationTypes.SmartConnect.value):
+            dispatcher = SmartConnectDispatcher(config)
+        elif stream_type == schemas.StreamPrefixEnum.geoevent and \
+                config.type_slug == schemas.DestinationTypes.EarthRanger.value:
             dispatcher = ERGeoEventDispatcher(config, provider)
         elif stream_type == schemas.StreamPrefixEnum.camera_trap and \
                 config.type_slug == schemas.DestinationTypes.EarthRanger.value:
@@ -142,7 +130,7 @@ def convert_observation_to_cdip_schema(observation):
     else:
         logger.error(f'unable to validate observation', extra={'observation': observation,
                                                                ExtraKeys.Error: errors})
-        return None
+        raise Exception('unable to validate observation')
 
 
 def create_message(attributes, observation):
@@ -151,8 +139,10 @@ def create_message(attributes, observation):
     return message
 
 
-def create_transformed_message(observation, destination, prefix: str):
-    transformed_observation = transform_observation(prefix, destination, observation)
+def create_transformed_message(*, observation, destination, prefix: str):
+    transformed_observation = transform_observation(stream_type=prefix, config=destination, observation=observation)
+    if not transformed_observation:
+        return None
     logger.debug(f'Transformed observation: {transformed_observation}')
 
     # observation_type may no longer be needed as topics are now specific to observation type
@@ -228,7 +218,7 @@ def extract_fields_from_message(message):
         if not observation:
             logger.warning(f'No observation was obtained from {decoded_message}')
         if not attributes:
-            logger.warning(f'No attributes were obtained from {decoded_message}')
+            logger.debug(f'No attributes were obtained from {decoded_message}')
     else:
         logger.warning(f'message contained no payload', extra={'message': message})
         return None, None
@@ -242,7 +232,6 @@ def get_key_for_transformed_observation(current_key: bytes, destination_id: UUID
     else:
         new_key = f"{current_key.decode('utf-8')}.{str(destination_id)}"
         return new_key.encode('utf-8')
-
 
 
 if __name__ == '__main__':

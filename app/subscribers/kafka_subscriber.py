@@ -6,7 +6,7 @@ import faust
 from aiokafka.helpers import create_ssl_context
 from cdip_connector.core.routing import TopicEnum
 
-from app import settings
+from cdip_connector.core import cdip_settings
 from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
 from app.core.utils import get_redis_db
 from app.subscribers.services import extract_fields_from_message, convert_observation_to_cdip_schema, \
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 APP_ID = 'cdip-routing'
 
-cloud_enabled = settings.CONFLUENT_CLOUD_ENABLED
+cloud_enabled = cdip_settings.CONFLUENT_CLOUD_ENABLED
 if cloud_enabled:
     logger.debug(f'Entering Confluent Cloud Enabled Flow')
     cert_path = certifi.where()
@@ -30,14 +30,14 @@ if cloud_enabled:
         process. Any topics that are specified in code and utilized in the flow must be created ahead of time in the
         cloud.
     '''
-    logger.debug(f'username: {settings.CONFLUENT_CLOUD_USERNAME}, pw: {settings.CONFLUENT_CLOUD_PASSWORD}')
+    logger.debug(f'username: {cdip_settings.CONFLUENT_CLOUD_USERNAME}, pw: {cdip_settings.CONFLUENT_CLOUD_PASSWORD}')
 
     app = faust.App(
             APP_ID,
-            broker=f'{settings.KAFKA_BROKER}',
+            broker=f'{cdip_settings.KAFKA_BROKER}',
             broker_credentials=faust.SASLCredentials(
-                username=settings.CONFLUENT_CLOUD_USERNAME,
-                password=settings.CONFLUENT_CLOUD_PASSWORD,
+                username=cdip_settings.CONFLUENT_CLOUD_USERNAME,
+                password=cdip_settings.CONFLUENT_CLOUD_PASSWORD,
                 ssl_context=ssl_context,
                 mechanism="PLAIN",
             ),
@@ -48,7 +48,7 @@ if cloud_enabled:
 else:
     app = faust.App(
         APP_ID,
-        broker=f'{settings.KAFKA_BROKER}',
+        broker=f'{cdip_settings.KAFKA_BROKER}',
         value_serializer='raw',
         logging_config=DEFAULT_LOGGING
     )
@@ -93,8 +93,9 @@ async def process_observation(key, message):
 
             for destination in destinations:
                 jsonified_data = create_transformed_message(observation, destination, observation.observation_type)
-                key = get_key_for_transformed_observation(key, destination.id)
-                await observations_transformed_topic.send(key=key, value=jsonified_data)
+                if jsonified_data:
+                    key = get_key_for_transformed_observation(key, destination.id)
+                    await observations_transformed_topic.send(key=key, value=jsonified_data)
     except Exception as e:
         logger.exception(f'Exception occurred processing observation',
                          extra={ExtraKeys.AttentionNeeded: True,

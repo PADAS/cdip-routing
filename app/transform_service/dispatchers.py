@@ -1,3 +1,4 @@
+import json
 import logging
 import mimetypes
 import os
@@ -7,11 +8,10 @@ from urllib.parse import urlparse
 
 import requests
 from cdip_connector.core import schemas
+from cdip_connector.core.cloudstorage import get_cloud_storage
 from dasclient.dasclient import DasClient
 from smartconnect import SmartClient
-from smartconnect.models import IndependentIncident
-
-from app.core.cloudstorage import get_cloud_storage
+from smartconnect.models import SMARTRequest, SMARTCompositeRequest
 
 logger = logging.getLogger(__name__)
 
@@ -111,16 +111,26 @@ class ERCameraTrapDispatcher(ERDispatcher):
         return result
 
 
-class SmartConnectEREventDispatcher:
+class SmartConnectDispatcher:
     def __init__(self, config: schemas.OutboundConfiguration):
         self.config = config
 
     def send(self, item: dict):
 
-        item = IndependentIncident.parse_obj(item)
+        item = SMARTCompositeRequest.parse_obj(item)
+
+        # orchestration order of operations
         smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
-        logger.info('Posting IndependentIncident.', extra={"dest": self.config.endpoint})
-        smartclient.add_independent_incident(incident=item, ca_uuid=self.config.additional.get('ca_uuid'))
+        for patrol_request in item.patrol_requests:
+            smartclient.post_smart_request(json=patrol_request.json(exclude_none=True),
+                                           ca_uuid=item.ca_uuid)
+        for waypoint_request in item.waypoint_requests:
+            smartclient.post_smart_request(json=waypoint_request.json(exclude_none=True),
+                                           ca_uuid=item.ca_uuid)
+        for track_point_request in item.track_point_requests:
+            smartclient.post_smart_request(json=track_point_request.json(exclude_none=True),
+                                           ca_uuid=item.ca_uuid)
+        return
 
 
 class WPSWatchCameraTrapDispatcher:

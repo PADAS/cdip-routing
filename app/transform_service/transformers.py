@@ -1,15 +1,14 @@
 import json
 import logging
-from app import settings
 from abc import ABC, abstractmethod
 from urllib.parse import urlparse
 from typing import Any
 
-from cdip_connector.core import schemas
+from cdip_connector.core import schemas, cdip_settings
 
 logger = logging.getLogger(__name__)
 
-ADMIN_PORTAL_HOST = urlparse(settings.PORTAL_API_ENDPOINT).hostname
+ADMIN_PORTAL_HOST = urlparse(cdip_settings.PORTAL_API_ENDPOINT).hostname
 
 class Transformer(ABC):
     stream_type: schemas.StreamPrefixEnum
