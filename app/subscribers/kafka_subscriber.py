@@ -92,7 +92,9 @@ async def process_observation(key, message):
             destinations = get_all_outbound_configs_for_id(db, int_id)
 
             for destination in destinations:
-                jsonified_data = create_transformed_message(observation, destination, observation.observation_type)
+                jsonified_data = create_transformed_message(observation=observation,
+                                                            destination=destination,
+                                                            prefix=observation.observation_type)
                 if jsonified_data:
                     key = get_key_for_transformed_observation(key, destination.id)
                     await observations_transformed_topic.send(key=key, value=jsonified_data)
