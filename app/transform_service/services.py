@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
 
+_portal = portal_api.PortalApi()
+
 
 def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbound_id: UUID) -> List[schemas.OutboundConfiguration]:
 
@@ -78,7 +80,7 @@ async def update_observation_with_device_configuration(observation):
 
 async def ensure_device_integration(integration_id: str, device_id: str):
 
-    cache_ttl = 7 * 86400 # One week.
+    cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
     cache_db = get_redis_db()
 
     cache_key = f'device_detail.{integration_id}.{device_id}'
@@ -87,10 +89,13 @@ async def ensure_device_integration(integration_id: str, device_id: str):
     try:
         if cached:
             device = schemas.Device.parse_raw(cached)
-            logger.debug('Using cached Device %s', device.device_id)
+            logger.debug('Using cached Device %s', device.external_id)
             return device
-    except:
-        pass
+    except Exception:
+        logger.exception('Error parsing cached device', extra={ExtraKeys.AttentionNeeded: True,
+                                                               ExtraKeys.DeviceId: device_id,
+                                                               ExtraKeys.InboundIntId: integration_id,
+                                                               cached: cached})
 
     logger.debug('Cache miss for Device %s', device_id)
 
@@ -101,8 +106,7 @@ async def ensure_device_integration(integration_id: str, device_id: str):
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30),
                                      connector=aiohttp.TCPConnector(ssl=False)) as sess:
         try:
-            portal = portal_api.PortalApi()
-            device_data = await portal.ensure_device(sess, str(integration_id), device_id)
+            device_data = await _portal.ensure_device(sess, str(integration_id), device_id)
 
             if device_data:
                 # temporary hack to refit response to Device schema.
