@@ -1,6 +1,8 @@
 version: 2.1
+
 orbs:
   gcp-gcr: circleci/gcp-gcr@0.13.0
+
 commands:
   configure_git_for_commit_and_push:
     steps:
@@ -43,6 +45,23 @@ jobs:
       - run:
           name: "Build and Push Image"
           command: 'make build_and_push descriptive_gcr_path_stem="$CIRCLE_BRANCH" unique_gcr_tag="$CIRCLE_WORKFLOW_ID"'
+  check_code:
+    docker:
+      - image: us.gcr.io/cdip-prod1-78ca/sintegrate-py-toolkit:1.1.0
+        auth:
+            username: _json_key  # Default username when using a JSON key file to authenticate
+            password: $GCR_KEY_CT # This key must be in json format
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: false
+      - run:
+          name: Lint the code
+          command: ./.circleci/check_standards.sh
+      - run:
+          name: Code Analysis
+          command: ./.circleci/check_complexity.sh
+
   build:
     docker:
       - image: cimg/python:3.7.4
@@ -53,8 +72,8 @@ jobs:
       - run:
           name: Setup build parameters
           command: |
-            echo 'export GOOGLE_PROJECT_ID=$GOOGLE_PROJECT_ID_STG' >> $BASH_ENV && source $BASH_ENV
-            echo 'export GOOGLE_COMPUTE_ZONE=$GOOGLE_COMPUTE_ZONE_STG' >> $BASH_ENV && source $BASH_ENV
+            echo 'export GOOGLE_PROJECT_ID=$GOOGLE_PROJECT_ID_CT' >> $BASH_ENV && source $BASH_ENV
+            echo 'export GOOGLE_COMPUTE_ZONE=$GOOGLE_COMPUTE_ZONE_CT' >> $BASH_ENV && source $BASH_ENV
             echo 'export IMAGE_NAME=$CIRCLE_PROJECT_REPONAME' >> $BASH_ENV && source $BASH_ENV
             if [[ -z "$CIRCLE_TAG" ]]; then
               echo "No tag is defined stg an image with latest tag will be built"
@@ -90,9 +109,9 @@ jobs:
       - run:
           name: Import image and setup parameters
           command: |
-            echo 'export GOOGLE_PROJECT_ID=$GOOGLE_PROJECT_ID_STG' >> $BASH_ENV && source $BASH_ENV
-            echo 'export GOOGLE_COMPUTE_ZONE=$GOOGLE_COMPUTE_ZONE_STG' >> $BASH_ENV && source $BASH_ENV
-            echo ${GCP_PROJECT_KEY_STG} | base64 --decode --ignore-garbage > $HOME/gcloud-service-key.json
+            echo 'export GOOGLE_PROJECT_ID=$GOOGLE_PROJECT_ID_CT' >> $BASH_ENV && source $BASH_ENV
+            echo 'export GOOGLE_COMPUTE_ZONE=$GOOGLE_COMPUTE_ZONE_CT' >> $BASH_ENV && source $BASH_ENV
+            echo ${GCP_PROJECT_KEY_CT} | base64 --decode --ignore-garbage > $HOME/gcloud-service-key.json
             echo 'export GOOGLE_CLOUD_KEYS=$(cat $HOME/gcloud-service-key.json)' >> $BASH_ENV
             echo 'export IMAGE_NAME=$CIRCLE_PROJECT_REPONAME' >> $BASH_ENV && source $BASH_ENV
             if [[ -z "$CIRCLE_TAG" ]]; then
@@ -112,15 +131,34 @@ jobs:
           registry-url: us.gcr.io
 
 workflows:
-  version: 2
-  docker_build_workflow:
+  pull_request_workflow:
     jobs:
-      - build_cdip_routing_image
-      - build
+      - check_code
+      - build_cdip_routing_image:
+          requires:
+          - check_code
+      - build:
+          requires:
+          - check_code
       - push:
           requires:
           - build
           filters:
             branches:
-              only: feat/new-pipeline
-
+              only: main
+  release_workflow:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /\d+\.\d+\.\d+(-alpha\.\d+)?$/
+            branches:
+              ignore: /.*/
+      - push:
+          requires:
+            - build
+          filters:
+            tags:
+              only: /\d+\.\d+\.\d+(-alpha\.\d+)?$/
+            branches:
+              ignore: /.*/
