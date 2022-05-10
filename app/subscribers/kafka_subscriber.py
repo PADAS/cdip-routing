@@ -8,10 +8,11 @@ from cdip_connector.core.routing import TopicEnum
 
 from cdip_connector.core import cdip_settings
 from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
-from app.core.utils import get_redis_db
+from app.core.utils import ReferenceDataError
 from app.subscribers.services import extract_fields_from_message, convert_observation_to_cdip_schema, \
     create_transformed_message, get_key_for_transformed_observation, dispatch_transformed_observation, \
-    wait_until_retry_at, update_attributes_for_retry, create_retry_transformed_message
+    wait_until_retry_at, update_attributes_for_transformed_retry, create_retry_message, \
+    update_attributes_for_unprocessed_retry
 from app.transform_service.services import get_all_outbound_configs_for_id, update_observation_with_device_configuration
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,9 @@ else:
     )
 
 observations_unprocessed_topic = app.topic(TopicEnum.observations_unprocessed.value)
+observations_unprocessed_retry_short_topic = app.topic(TopicEnum.observations_unprocessed_retry_short.value)
+observations_unprocessed_retry_long_topic = app.topic(TopicEnum.observations_unprocessed_retry_long.value)
+observations_unprocessed_deadletter = app.topic(TopicEnum.observations_unprocessed_deadletter.value)
 observations_transformed_topic = app.topic(TopicEnum.observations_transformed.value)
 observations_transformed_retry_short_topic = app.topic(TopicEnum.observations_transformed_retry_short.value)
 observations_transformed_retry_long_topic = app.topic(TopicEnum.observations_transformed_retry_long.value)
@@ -61,6 +65,9 @@ observations_transformed_deadletter = app.topic(TopicEnum.observations_transform
 
 topics_dict = {
     TopicEnum.observations_unprocessed.value: observations_unprocessed_topic,
+    TopicEnum.observations_unprocessed_retry_short: observations_unprocessed_retry_short_topic,
+    TopicEnum.observations_unprocessed_retry_long: observations_unprocessed_retry_long_topic,
+    TopicEnum.observations_unprocessed_deadletter: observations_unprocessed_deadletter,
     TopicEnum.observations_transformed: observations_transformed_topic,
     TopicEnum.observations_transformed_retry_short: observations_transformed_retry_short_topic,
     TopicEnum.observations_transformed_retry_long: observations_transformed_retry_long_topic,
@@ -75,8 +82,6 @@ async def process_observation(key, message):
         logger.debug(f'observation: {raw_observation}')
         logger.debug(f'attributes: {attributes}')
 
-        db = get_redis_db()
-
         observation = convert_observation_to_cdip_schema(raw_observation)
         logger.info('received unprocessed observation', extra={ExtraKeys.DeviceId: observation.device_id,
                                                                ExtraKeys.InboundIntId: observation.integration_id,
@@ -89,7 +94,7 @@ async def process_observation(key, message):
         if observation:
             observation = await update_observation_with_device_configuration(observation)
             int_id = observation.integration_id
-            destinations = get_all_outbound_configs_for_id(db, int_id)
+            destinations = get_all_outbound_configs_for_id(int_id, observation.device_id)
 
             for destination in destinations:
                 jsonified_data = create_transformed_message(observation=observation,
@@ -98,13 +103,22 @@ async def process_observation(key, message):
                 if jsonified_data:
                     key = get_key_for_transformed_observation(key, destination.id)
                     await observations_transformed_topic.send(key=key, value=jsonified_data)
-    except Exception as e:
-        logger.exception(f'Exception occurred processing observation',
+    except ReferenceDataError:
+        logger.exception(f'Exception occurred obtaining reference data for observation',
                          extra={ExtraKeys.AttentionNeeded: True,
                                 ExtraKeys.DeviceId: observation.device_id,
                                 ExtraKeys.InboundIntId: observation.integration_id,
                                 ExtraKeys.StreamType: observation.observation_type})
-        # TODO: Implement Retry Logic
+        await process_failed_unprocessed_observation(key, message)
+
+    except Exception:
+        logger.exception(f'Unexpected Exception occurred processing observation',
+                         extra={ExtraKeys.AttentionNeeded: True,
+                                ExtraKeys.DeviceId: observation.device_id,
+                                ExtraKeys.InboundIntId: observation.integration_id,
+                                ExtraKeys.StreamType: observation.observation_type})
+        # Unexpected internal errors will be redirected straight to deadletter
+        await observations_unprocessed_deadletter.send(value=message)
 
 
 async def process_transformed_observation(key, transformed_message):
@@ -134,7 +148,7 @@ async def process_transformed_observation(key, transformed_message):
                                                                        'outbound_config_id': outbound_config_id,
                                                                        'observation_type': observation_type})
         dispatch_transformed_observation(observation_type, outbound_config_id, integration_id, transformed_observation)
-    except Exception as e:
+    except Exception:
         logger.exception(f'Exception occurred processing transformed observation',
                          extra={ExtraKeys.AttentionNeeded: True,
                                 ExtraKeys.DeviceId: device_id,
@@ -147,14 +161,14 @@ async def process_transformed_observation(key, transformed_message):
 async def process_failed_transformed_observation(key, transformed_message):
     try:
         transformed_observation, attributes = extract_fields_from_message(transformed_message)
-        attributes = update_attributes_for_retry(attributes)
+        attributes = update_attributes_for_transformed_retry(attributes)
         observation_type = attributes.get('observation_type')
         device_id = attributes.get('device_id')
         integration_id = attributes.get('integration_id')
         outbound_config_id = attributes.get('outbound_config_id')
         retry_topic_str = attributes.get('retry_topic')
         retry_attempt = attributes.get('retry_attempt')
-        retry_transformed_message = create_retry_transformed_message(transformed_observation, attributes)
+        retry_transformed_message = create_retry_message(transformed_observation, attributes)
         retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
         logger.info("Putting failed transformed observation back on queue", extra={ExtraKeys.DeviceId: device_id,
                                                                                    ExtraKeys.InboundIntId: integration_id,
@@ -168,6 +182,28 @@ async def process_failed_transformed_observation(key, transformed_message):
         await observations_transformed_deadletter.send(value=transformed_message)
 
 
+async def process_failed_unprocessed_observation(key, message):
+    try:
+        raw_observation, attributes = extract_fields_from_message(message)
+        attributes = update_attributes_for_unprocessed_retry(attributes)
+        observation_type = attributes.get('observation_type')
+        device_id = attributes.get('device_id')
+        integration_id = attributes.get('integration_id')
+        retry_topic_str = attributes.get('retry_topic')
+        retry_attempt = attributes.get('retry_attempt')
+        retry_unprocessed_message = create_retry_message(raw_observation, attributes)
+        retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
+        logger.info("Putting failed unprocessed observation back on queue", extra={ExtraKeys.DeviceId: device_id,
+                                                                                   ExtraKeys.InboundIntId: integration_id,
+                                                                                   ExtraKeys.StreamType: observation_type,
+                                                                                   ExtraKeys.RetryTopic: retry_topic_str,
+                                                                                   ExtraKeys.RetryAttempt: retry_attempt})
+        await retry_topic.send(value=retry_unprocessed_message)
+    except Exception as e:
+        # When all else fails post to dead letter
+        await observations_unprocessed_deadletter.send(value=message)
+
+
 async def process_transformed_retry_observation(key, transformed_message):
     try:
         transformed_observation, attributes = extract_fields_from_message(transformed_message)
@@ -179,10 +215,33 @@ async def process_transformed_retry_observation(key, transformed_message):
         await observations_transformed_deadletter.send(value=transformed_message)
 
 
+async def process_retry_observation(key, message):
+    try:
+        raw_observation, attributes = extract_fields_from_message(message)
+        retry_at = datetime.fromisoformat(attributes.get('retry_at'))
+        await wait_until_retry_at(retry_at)
+        await process_observation(key, message)
+    except Exception as e:
+        # When all else fails post to dead letter
+        await observations_unprocessed_deadletter.send(value=message)
+
+
 @app.agent(observations_unprocessed_topic)
 async def process_observations(streaming_data):
     async for key, message in streaming_data.items():
         await process_observation(key, message)
+
+
+@app.agent(observations_unprocessed_retry_short_topic)
+async def process_retry_short_observations(streaming_data):
+    async for key, message in streaming_data.items():
+        await process_retry_observation(key, message)
+
+
+@app.agent(observations_unprocessed_retry_long_topic)
+async def process_retry_long_observations(streaming_data):
+    async for key, message in streaming_data.items():
+        await process_retry_observation(key, message)
 
 
 @app.agent(observations_transformed_topic)

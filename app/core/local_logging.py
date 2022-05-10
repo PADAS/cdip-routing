@@ -78,5 +78,6 @@ class ExtraKeys(str, Enum):
     RetryTopic = 'retry_topic'
     RetryAt = 'retry_at'
     RetryAttempt = 'retry_attempt'
+    StatusCode = 'status_code'
 
 
