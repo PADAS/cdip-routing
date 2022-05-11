@@ -55,12 +55,12 @@ jobs:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: false
-      - run:
-          name: Lint the code
-          command: ./.circleci/check_standards.sh
-      - run:
-          name: Code Analysis
-          command: ./.circleci/check_complexity.sh
+      # - run:
+      #     name: Lint the code
+      #     command: ./.circleci/check_standards.sh
+      # - run:
+      #     name: Code Analysis
+      #     command: ./.circleci/check_complexity.sh
 
   build:
     docker:
