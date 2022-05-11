@@ -31,35 +31,37 @@ class Dispatcher(ABC):
 
 
 class ERDispatcher(Dispatcher, ABC):
-
     def __init__(self, config: schemas.OutboundConfiguration, provider: str):
         super().__init__(config)
         self.das_client = self.make_das_client(config, provider)
         # self.load_batch_size = 1000
 
     @staticmethod
-    def make_das_client(config: schemas.OutboundConfiguration, provider: str) -> DasClient:
+    def make_das_client(
+        config: schemas.OutboundConfiguration, provider: str
+    ) -> DasClient:
 
         provider_key = provider
         url_parse = urlparse(config.endpoint)
 
-        return DasClient(service_root=config.endpoint,
-                         username=config.login,
-                         password=config.password,
-                         token=config.token,
-                         token_url=f"{url_parse.scheme}://{url_parse.hostname}/oauth2/token",
-                         client_id="das_web_client",
-                         provider_key=provider_key)
+        return DasClient(
+            service_root=config.endpoint,
+            username=config.login,
+            password=config.password,
+            token=config.token,
+            token_url=f"{url_parse.scheme}://{url_parse.hostname}/oauth2/token",
+            client_id="das_web_client",
+            provider_key=provider_key,
+        )
 
     @staticmethod
     def generate_batches(data, batch_size=1000):
         num_obs = len(data)
         for start_index in range(0, num_obs, batch_size):
-            yield data[start_index: min(start_index + batch_size, num_obs)]
+            yield data[start_index : min(start_index + batch_size, num_obs)]
 
 
 class ERPositionDispatcher(ERDispatcher):
-
     def __init__(self, config, provider):
         super(ERPositionDispatcher, self).__init__(config, provider)
 
@@ -68,13 +70,12 @@ class ERPositionDispatcher(ERDispatcher):
         try:
             result = self.das_client.post_sensor_observation(position)
         except Exception as ex:
-            logger.exception(f'exception raised sending to dest {ex}')
+            logger.exception(f"exception raised sending to dest {ex}")
             raise ex
         return result
 
 
 class ERGeoEventDispatcher(ERDispatcher):
-
     def __init__(self, config, provider):
         super(ERGeoEventDispatcher, self).__init__(config, provider)
 
@@ -86,13 +87,12 @@ class ERGeoEventDispatcher(ERDispatcher):
             try:
                 results.append(self.das_client.post_report(m))
             except Exception as ex:
-                logger.exception(f'exception raised sending to dest {ex}')
+                logger.exception(f"exception raised sending to dest {ex}")
                 raise ex
         return results
 
 
 class ERCameraTrapDispatcher(ERDispatcher):
-
     def __init__(self, config, provider):
         super(ERCameraTrapDispatcher, self).__init__(config, provider)
         self.cloud_storage = get_cloud_storage()
@@ -100,11 +100,11 @@ class ERCameraTrapDispatcher(ERDispatcher):
     def send(self, camera_trap_payload: dict):
         result = None
         try:
-            file_name = camera_trap_payload.get('file')
+            file_name = camera_trap_payload.get("file")
             file = self.cloud_storage.download(file_name)
             result = self.das_client.post_camera_trap_report(camera_trap_payload, file)
         except Exception as ex:
-            logger.exception(f'exception raised sending to dest {ex}')
+            logger.exception(f"exception raised sending to dest {ex}")
             raise ex
         finally:
             self.cloud_storage.remove(file)
@@ -120,16 +120,23 @@ class SmartConnectDispatcher:
         item = SMARTCompositeRequest.parse_obj(item)
 
         # orchestration order of operations
-        smartclient = SmartClient(api=self.config.endpoint, username=self.config.login, password=self.config.password)
+        smartclient = SmartClient(
+            api=self.config.endpoint,
+            username=self.config.login,
+            password=self.config.password,
+        )
         for patrol_request in item.patrol_requests:
-            smartclient.post_smart_request(json=patrol_request.json(exclude_none=True),
-                                           ca_uuid=item.ca_uuid)
+            smartclient.post_smart_request(
+                json=patrol_request.json(exclude_none=True), ca_uuid=item.ca_uuid
+            )
         for waypoint_request in item.waypoint_requests:
-            smartclient.post_smart_request(json=waypoint_request.json(exclude_none=True),
-                                           ca_uuid=item.ca_uuid)
+            smartclient.post_smart_request(
+                json=waypoint_request.json(exclude_none=True), ca_uuid=item.ca_uuid
+            )
         for track_point_request in item.track_point_requests:
-            smartclient.post_smart_request(json=track_point_request.json(exclude_none=True),
-                                           ca_uuid=item.ca_uuid)
+            smartclient.post_smart_request(
+                json=track_point_request.json(exclude_none=True), ca_uuid=item.ca_uuid
+            )
         return
 
 
@@ -140,26 +147,35 @@ class WPSWatchCameraTrapDispatcher:
 
     def send(self, camera_trap_payload: dict):
         try:
-            file_name = camera_trap_payload.get('Attachment1')
+            file_name = camera_trap_payload.get("Attachment1")
             file = self.cloud_storage.download(file_name)
             file_data = self.get_file_data(file_name, file)
             result = self.wpswatch_post(camera_trap_payload, file_data)
         except Exception as ex:
-            logger.exception(f'exception raised sending to WPS Watch {ex}')
+            logger.exception(f"exception raised sending to WPS Watch {ex}")
             raise ex
         finally:
             self.cloud_storage.remove(file)
         return
 
     def wpswatch_post(self, camera_trap_payload, file_data=None):
-        sanitized_endpoint = self.sanitize_endpoint(f'{self.config.endpoint}/api/Upload')
-        headers = {'Wps-Api-Key': self.config.token,}
-        files = {'Attachment1': file_data}
+        sanitized_endpoint = self.sanitize_endpoint(
+            f"{self.config.endpoint}/api/Upload"
+        )
+        headers = {
+            "Wps-Api-Key": self.config.token,
+        }
+        files = {"Attachment1": file_data}
 
         body = camera_trap_payload
         try:
-            response = requests.post(sanitized_endpoint, data=body, headers=headers, files=files,
-                                    timeout=DEFAULT_TIMEOUT)
+            response = requests.post(
+                sanitized_endpoint,
+                data=body,
+                headers=headers,
+                files=files,
+                timeout=DEFAULT_TIMEOUT,
+            )
         except requests.exceptions.Timeout as ex:
             logger.exception("Timeout occurred posting to WPS Watch", extra=body)
             raise ex
@@ -171,12 +187,12 @@ class WPSWatchCameraTrapDispatcher:
         mimetype = mimetypes.types_map[file_ext]
         return file_name, file, mimetype
 
-
     @staticmethod
     def sanitize_endpoint(endpoint):
         scheme = urlparse(endpoint).scheme
         host = urlparse(endpoint).hostname
-        path = urlparse(endpoint).path.replace('//', '/')  # in case tailing forward slash configured in portal
-        sanitized_endpoint = f'{scheme}://{host}{path}'
+        path = urlparse(endpoint).path.replace(
+            "//", "/"
+        )  # in case tailing forward slash configured in portal
+        sanitized_endpoint = f"{scheme}://{host}{path}"
         return sanitized_endpoint
-
