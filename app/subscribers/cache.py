@@ -4,7 +4,9 @@ import json
 import app.settings
 
 
-cache = redis.Redis(host=app.settings.REDIS_HOST, port=app.settings.REDIS_PORT, db=app.settings.REDIS_DB)
+cache = redis.Redis(
+    host=app.settings.REDIS_HOST, port=app.settings.REDIS_PORT, db=app.settings.REDIS_DB
+)
 
 
 def ensure_patrol(patrol_label):
@@ -15,10 +17,10 @@ def ensure_patrol(patrol_label):
         return json.loads(patrol_ids)
 
     patrol_ids = {
-        'patrol_uuid': str(uuid.uuid4()),
-        'patrol_leg_uuid': str(uuid.uuid4())
-        }
+        "patrol_uuid": str(uuid.uuid4()),
+        "patrol_leg_uuid": str(uuid.uuid4()),
+    }
 
-    cache.setex(patrol_label, 86400*365, json.dumps(patrol_ids))
+    cache.setex(patrol_label, 86400 * 365, json.dumps(patrol_ids))
 
     return patrol_ids
