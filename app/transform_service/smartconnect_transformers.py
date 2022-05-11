@@ -14,7 +14,7 @@ from smartconnect.models import SMARTCONNECT_DATFORMAT, \
     SMARTRequest, ConservationArea, SMARTCompositeRequest
 from smartconnect.utils import guess_ca_timezone
 
-from app.core.utils import is_uuid
+from app.core.utils import is_uuid, ReferenceDataError
 from app.subscribers import cache
 from app.transform_service.transformers import Transformer
 
@@ -223,7 +223,8 @@ class SMARTTransformer:
             return self.ca
 
         except Exception as ex:
-            self.logger.exception(f'Failed to get Conservation Areas')
+            self.logger.exception(f'Failed to get Conservation Areas', extra=dict(ca_uuid=ca_uuid))
+            raise ReferenceDataError(f'Failed to get SMART Conservation Areas')
 
     def get_data_model(self, *, ca_uuid:str = None):
         # CA Data Model is not available for versions below 7. Use a blank.
@@ -238,12 +239,22 @@ class SMARTTransformer:
             if cached_data:
                 dm = smartconnect.DataModel()
                 dm.import_from_dict(json.loads(cached_data))
+                self.logger.debug(f'Using cached SMART Datamodel', extra={'cached_key': cache_key})
                 return dm
+
         except Exception:
             pass
 
-        ca_datamodel = self.smartconnect_client.download_datamodel(ca_uuid=self.ca_uuid)
-        cache.cache.setex(name=cache_key, time=60*5, value=json.dumps(ca_datamodel.export_as_dict()))
+        logger.debug(f'Cache miss for SMART Datamodel', extra={'cached_key': cache_key})
+
+        try:
+            ca_datamodel = self.smartconnect_client.download_datamodel(ca_uuid=self.ca_uuid)
+        except Exception as e:
+            raise ReferenceDataError('Failed downloading SMART Datamodel')
+
+        if ca_datamodel:
+            cache.cache.setex(name=cache_key, time=60*5, value=json.dumps(ca_datamodel.export_as_dict()))
+
         return ca_datamodel
 
     def guess_location_timezone(self, *, longitude:Union[float,int]=None, latitude: Union[float,int]=None):

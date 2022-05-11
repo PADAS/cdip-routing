@@ -14,6 +14,10 @@ from app import settings
 logger = logging.getLogger(__name__)
 
 
+class ReferenceDataError(Exception):
+    pass
+
+
 def get_redis_db():
     logger.debug(f"Connecting to REDIS DB :{settings.REDIS_DB} at {settings.REDIS_HOST}:{settings.REDIS_PORT}")
     return walrus.Database(host=settings.REDIS_HOST,

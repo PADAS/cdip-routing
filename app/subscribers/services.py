@@ -9,7 +9,7 @@ from cdip_connector.core import schemas, routing, cdip_settings
 
 from app import settings
 from app.core.local_logging import ExtraKeys
-from app.core.utils import get_auth_header, get_redis_db, create_cache_key
+from app.core.utils import get_auth_header, get_redis_db, create_cache_key, ReferenceDataError
 from app.transform_service.dispatchers import ERPositionDispatcher, ERGeoEventDispatcher, ERCameraTrapDispatcher, \
     WPSWatchCameraTrapDispatcher, SmartConnectDispatcher
 from app.transform_service.services import transform_observation
@@ -18,29 +18,57 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = (3.1, 20)
 
+_cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
+_cache_db = get_redis_db()
+
 
 def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfiguration:
 
+    if not outbound_id:
+        raise ValueError('integration_id must not be None')
+
+    extra_dict = {ExtraKeys.AttentionNeeded: True,
+                  ExtraKeys.OutboundIntId: str(outbound_id)}
+
+    cache_key = f'outbound_detail.{outbound_id}'
+    cached = _cache_db.get(cache_key)
+
+    if cached:
+        config = schemas.OutboundConfiguration.parse_raw(cached)
+        logger.debug('Using cached outbound integration detail', extra={**extra_dict,
+                                                                        'outbound_detail': config})
+        return config
+
+    logger.debug(f'Cache miss for outbound integration detail', extra={**extra_dict})
+
     outbound_integrations_endpoint = f'{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}'
 
-    try:
-        headers = get_auth_header()
-        response = requests.get(url=outbound_integrations_endpoint,
-                                verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
-                                headers=headers,
-                                timeout=DEFAULT_TIMEOUT)
-        if response.status_code == 200:
-            return schemas.OutboundConfiguration.parse_obj(response.json())
+    headers = get_auth_header()
+    response = requests.get(url=outbound_integrations_endpoint,
+                            verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
+                            headers=headers,
+                            timeout=DEFAULT_TIMEOUT)
+    if response.status_code == 200:
+        try:
+            resp_json = response.json()
+        except json.decoder.JSONDecodeError as jde:
+            logger.error(f'Failed decoding response for Outbound Integration Detail', extra={**extra_dict,
+                                                                                             'resp_text': response.text})
+            raise ReferenceDataError(jde.msg)
+        else:
+            config = schemas.OutboundConfiguration.parse_obj(resp_json)
+            if config:  # don't cache empty response
+                _cache_db.setex(cache_key, _cache_ttl, config.json())
+            return config
 
-        raise ValueError('Request for OutboundIntegration(%s) returned status: %s, text:%s', outbound_id, response.status_code, response.text)
-
-    except Exception as e:
+    else:
         logger.exception('Portal returned bad response during request for outbound config detail',
-                     extra={ExtraKeys.AttentionNeeded: True,
-                            ExtraKeys.OutboundIntId: outbound_id,
-                            ExtraKeys.Url: outbound_integrations_endpoint,
-                            ExtraKeys.Error: e})
-        raise
+                         extra={ExtraKeys.AttentionNeeded: True,
+                                ExtraKeys.OutboundIntId: outbound_id,
+                                ExtraKeys.Url: outbound_integrations_endpoint,
+                                ExtraKeys.StatusCode: response.status_code})
+
+        raise ReferenceDataError(f'Request for OutboundIntegration({outbound_id}) returned bad response')
 
 
 def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationInformation:
@@ -48,26 +76,48 @@ def get_inbound_integration_detail(integration_id: UUID) -> schemas.IntegrationI
     if not integration_id:
         raise ValueError('integration_id must not be None')
 
+    extra_dict = {ExtraKeys.AttentionNeeded: True,
+                  ExtraKeys.InboundIntId: str(integration_id)}
+
+    cache_key = f'inbound_detail.{integration_id}'
+    cached = _cache_db.get(cache_key)
+
+    if cached:
+        config = schemas.IntegrationInformation.parse_raw(cached)
+        logger.debug('Using cached inbound integration detail', extra={**extra_dict,
+                                                                       'integration_detail': config})
+        return config
+
+    logger.debug(f'Cache miss for inbound integration detai', extra={**extra_dict})
+
     inbound_integrations_endpoint = f'{settings.PORTAL_INBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}'
-    try:
-        headers = get_auth_header()
-        response = requests.get(url=inbound_integrations_endpoint,
-                                verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
-                                headers=headers,
-                                timeout=DEFAULT_TIMEOUT)
 
-        if response.status_code == 200:
-            return schemas.IntegrationInformation.parse_obj(response.json())
+    headers = get_auth_header()
+    response = requests.get(url=inbound_integrations_endpoint,
+                            verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
+                            headers=headers,
+                            timeout=DEFAULT_TIMEOUT)
 
-        raise ValueError('Request for InboundIntegration(%s)) returned status: %s, text:%s', integration_id, response.status_code, response.text)
-
-    except Exception as e:
+    if response.status_code == 200:
+        try:
+            resp_json = response.json()
+        except json.decoder.JSONDecodeError as jde:
+            logger.error(f'Failed decoding response for InboundIntegration Detail', extra={**extra_dict,
+                                                                                           'resp_text': response.text})
+            raise ReferenceDataError(jde.msg)
+        else:
+            config = schemas.IntegrationInformation.parse_obj(resp_json)
+            if config:  # don't cache empty response
+                _cache_db.setex(cache_key, _cache_ttl, config.json())
+            return config
+    else:
         logger.exception('Portal returned bad response during request for inbound config detail',
-                     extra={ExtraKeys.AttentionNeeded: True,
-                            ExtraKeys.InboundIntId: integration_id,
-                            ExtraKeys.Url: response.request,
-                            ExtraKeys.Error: e})
-        raise
+                         extra={ExtraKeys.AttentionNeeded: True,
+                                ExtraKeys.InboundIntId: integration_id,
+                                ExtraKeys.Url: response.request,
+                                ExtraKeys.StatusCode: response.status_code})
+
+        raise ReferenceDataError(f'Request for InboundIntegration({integration_id})')
 
 
 def dispatch_transformed_observation(stream_type: str,
@@ -157,13 +207,13 @@ def create_transformed_message(*, observation, destination, prefix: str):
     return jsonified_data
 
 
-def create_retry_transformed_message(transformed_observation, attributes):
-    retry_transformed_message = create_message(attributes, transformed_observation)
+def create_retry_message(observation, attributes):
+    retry_transformed_message = create_message(attributes, observation)
     jsonified_data = json.dumps(retry_transformed_message, default=str)
     return jsonified_data
 
 
-def update_attributes_for_retry(attributes):
+def update_attributes_for_transformed_retry(attributes):
 
     retry_topic = attributes.get('retry_topic')
     retry_attempt = attributes.get('retry_attempt')
@@ -197,11 +247,45 @@ def update_attributes_for_retry(attributes):
     return attributes
 
 
+def update_attributes_for_unprocessed_retry(attributes):
+
+    retry_topic = attributes.get('retry_topic')
+    retry_attempt = attributes.get('retry_attempt')
+    retry_at = None
+
+    if not retry_topic:
+        # first failure, initialize
+        retry_topic = routing.TopicEnum.observations_unprocessed_retry_short.value
+        retry_attempt = 1
+        retry_at = datetime.utcnow() + timedelta(minutes=settings.RETRY_SHORT_DELAY_MINUTES)
+    elif retry_topic == routing.TopicEnum.observations_unprocessed_retry_short.value:
+        if retry_attempt < settings.RETRY_SHORT_ATTEMPTS:
+            retry_attempt += 1
+            retry_at = datetime.utcnow() + timedelta(minutes=settings.RETRY_SHORT_DELAY_MINUTES)
+        else:
+            retry_topic = routing.TopicEnum.observations_unprocessed_retry_long.value
+            retry_attempt = 1
+            retry_at = datetime.utcnow() + timedelta(minutes=settings.RETRY_LONG_DELAY_MINUTES)
+    elif retry_topic == routing.TopicEnum.observations_unprocessed_retry_long.value:
+        if retry_attempt < settings.RETRY_LONG_ATTEMPTS:
+            retry_attempt += 1
+            retry_at = datetime.utcnow() + timedelta(minutes=settings.RETRY_LONG_DELAY_MINUTES)
+        else:
+            retry_topic = routing.TopicEnum.observations_unprocessed_deadletter.value
+
+    attributes['retry_topic'] = retry_topic
+    attributes['retry_attempt'] = retry_attempt
+    if retry_at:
+        attributes['retry_at'] = retry_at.isoformat()
+
+    return attributes
+
+
 async def wait_until_retry_at(retry_at: datetime):
     now = datetime.utcnow()
     wait_time_seconds = (retry_at - now).total_seconds()
     if wait_time_seconds > 0:
-        logger.info(f'Waiting to re process transformed observation',
+        logger.info(f'Waiting to re process observation',
                     extra=dict(retry_at=retry_at,
                                wait_time_seconds=wait_time_seconds))
         await asyncio.sleep(wait_time_seconds)

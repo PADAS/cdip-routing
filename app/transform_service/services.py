@@ -8,10 +8,11 @@ import requests
 import walrus
 from cdip_connector.core import schemas, portal_api, cdip_settings
 from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
+from pydantic import BaseModel, parse_obj_as
 
 from app import settings
 from app.core.local_logging import ExtraKeys
-from app.core.utils import get_auth_header, get_redis_db, is_uuid
+from app.core.utils import get_auth_header, get_redis_db, is_uuid, ReferenceDataError
 from app.transform_service.smartconnect_transformers import SmartEventTransformer, SmartERPatrolTransformer, \
     CAConflictException, IndeterminableCAException
 from app.transform_service.transformers import ERPositionTransformer, ERGeoEventTransformer, ERCameraTrapTransformer, \
@@ -21,35 +22,62 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
 
+_portal = portal_api.PortalApi()
+_cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
+_cache_db = get_redis_db()
 
-def get_all_outbound_configs_for_id(destinations_cache_db: walrus.Database, inbound_id: UUID) -> List[schemas.OutboundConfiguration]:
+
+class OutboundConfigurations(BaseModel):
+    configurations: List[schemas.OutboundConfiguration]
+
+
+def get_all_outbound_configs_for_id(inbound_id: UUID, device_id) -> List[schemas.OutboundConfiguration]:
+
+    extra_dict = {ExtraKeys.InboundIntId: str(inbound_id),
+                  ExtraKeys.DeviceId: device_id}
+
+    cache_key = f'device_destinations.{inbound_id}.{device_id}'
+    cached = _cache_db.get(cache_key)
+
+    if cached:
+        configs = OutboundConfigurations.parse_raw(cached).configurations
+        logger.debug('Using cached destinations', extra={**extra_dict,
+                                                         'destinations': configs})
+        return configs
+
+    logger.debug(f'Cache miss for device_destinations', extra={**extra_dict})
 
     outbound_integrations_endpoint = settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT
 
-    try:
-        headers = get_auth_header()
-        resp = requests.get(url=f'{outbound_integrations_endpoint}',
-                            params=dict(inbound_id=inbound_id),
-                            headers=headers,
-                            verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
-                            timeout=(3.1, 20))
-    except:
-        logger.exception('Failed to get outbound integrations for inbound_id', extra={'inbound_integration_id': inbound_id})
-        raise
+    headers = get_auth_header()
+    resp = requests.get(url=f'{outbound_integrations_endpoint}',
+                        params=dict(inbound_id=inbound_id,
+                                    device_id=device_id),
+                        headers=headers,
+                        verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
+                        timeout=(3.1, 20))
 
     if resp.status_code == 200:
         try:
             resp_json = resp.json()
         except json.decoder.JSONDecodeError as jde:
-            logger.error('Failed decoding response for OutboundConfig for Inbound(%s), response text: %s', inbound_id,
-                         resp.text, extra={'inbound_integration_id': inbound_id})
-            raise
+            logger.error(f'Failed decoding response for OutboundConfig', extra={**extra_dict,
+                                                                                'resp_text': resp.text})
+            raise ReferenceDataError(jde.msg)
         else:
             resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
-            configs, errors = schemas.get_validated_objects(resp_json, schemas.OutboundConfiguration)
-            return configs
-
-    raise Exception(f'Failed to get outbound integrations for inbound_id {inbound_id}')
+            configurations = parse_obj_as(List[schemas.OutboundConfiguration], resp_json)
+            configs = OutboundConfigurations(configurations=configurations)
+            if configurations:  # don't cache empty response
+                _cache_db.setex(cache_key, _cache_ttl, configs.json())
+            return configs.configurations
+    else:
+        logger.exception('Failed to get outbound integrations for inbound_id',
+                         extra={ExtraKeys.AttentionNeeded: True,
+                                ExtraKeys.InboundIntId: inbound_id,
+                                ExtraKeys.Url: resp.request,
+                                ExtraKeys.StatusCode: resp.status_code})
+        raise ReferenceDataError(f'Failed to get outbound integrations for inbound_id {inbound_id}')
 
 
 async def update_observation_with_device_configuration(observation):
@@ -76,39 +104,33 @@ async def update_observation_with_device_configuration(observation):
     return observation
 
 
-async def ensure_device_integration(integration_id: str, device_id: str):
-
-    cache_ttl = 7 * 86400 # One week.
-    cache_db = get_redis_db()
-
-    cache_key = f'device_detail.{integration_id}.{device_id}'
-    cached = cache_db.get(cache_key)
-
-    try:
-        if cached:
-            device = schemas.Device.parse_raw(cached)
-            logger.debug('Using cached Device %s', device.device_id)
-            return device
-    except:
-        pass
-
-    logger.debug('Cache miss for Device %s', device_id)
+async def ensure_device_integration(integration_id, device_id: str):
 
     extra_dict = {ExtraKeys.AttentionNeeded: True,
                   ExtraKeys.InboundIntId: str(integration_id),
                   ExtraKeys.DeviceId: device_id}
 
+    cache_key = f'device_detail.{integration_id}.{device_id}'
+    cached = _cache_db.get(cache_key)
+
+    if cached:
+        device = schemas.Device.parse_raw(cached)
+        logger.debug('Using cached Device %s', device.external_id)
+        return device
+
+    logger.debug('Cache miss for Device %s', device_id)
+
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30),
                                      connector=aiohttp.TCPConnector(ssl=False)) as sess:
         try:
-            portal = portal_api.PortalApi()
-            device_data = await portal.ensure_device(sess, str(integration_id), device_id)
+            device_data = await _portal.ensure_device(sess, str(integration_id), device_id)
 
             if device_data:
                 # temporary hack to refit response to Device schema.
-                device_data['inbound_configuration'] = device_data.get('inbound_configuration',{}).get('id', None)
+                device_data['inbound_configuration'] = device_data.get('inbound_configuration', {}).get('id', None)
                 device = schemas.Device.parse_obj(device_data)
-                cache_db.setex(cache_key, cache_ttl, device.json())
+                if device:  # don't cache empty response
+                    _cache_db.setex(cache_key, _cache_ttl, device.json())
                 return device
         except Exception as e:
             logger.exception('Error when posting device to Portal.', extra={**extra_dict,
