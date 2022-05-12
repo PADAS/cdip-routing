@@ -18,6 +18,10 @@ class ReferenceDataError(Exception):
     pass
 
 
+class DispatcherException(Exception):
+    pass
+
+
 def get_redis_db():
     logger.debug(
         f"Connecting to REDIS DB :{settings.REDIS_DB} at {settings.REDIS_HOST}:{settings.REDIS_PORT}"

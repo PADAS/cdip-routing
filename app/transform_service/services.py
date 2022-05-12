@@ -179,7 +179,7 @@ async def ensure_device_integration(integration_id, device_id: str):
                 "Error when posting device to Portal.",
                 extra={**extra_dict, ExtraKeys.Error: e, "device_id": device_id},
             )
-            return None
+            raise ReferenceDataError("Error when posting device to Portal.")
 
 
 class TransformerNotFound(Exception):

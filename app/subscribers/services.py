@@ -14,6 +14,7 @@ from app.core.utils import (
     get_redis_db,
     create_cache_key,
     ReferenceDataError,
+    DispatcherException,
 )
 from app.transform_service.dispatchers import (
     ERPositionDispatcher,
@@ -212,7 +213,18 @@ def dispatch_transformed_observation(
             dispatcher = WPSWatchCameraTrapDispatcher(config)
 
         if dispatcher:
-            dispatcher.send(observation)
+            try:
+                dispatcher.send(observation)
+            except Exception as e:
+                logger.error(
+                    f"Exception occurred dispatching observation",
+                    extra={
+                        **extra_dict,
+                        ExtraKeys.Provider: config.type_slug,
+                        ExtraKeys.AttentionNeeded: True,
+                    },
+                )
+                raise DispatcherException("Exception occurred dispatching observation")
         else:
             extra_dict[ExtraKeys.Provider] = config.type_slug
             logger.error(
@@ -223,11 +235,13 @@ def dispatch_transformed_observation(
                     ExtraKeys.AttentionNeeded: True,
                 },
             )
+            raise Exception("No dispatcher found")
     else:
         logger.error(
             f"No outbound config detail found",
             extra={**extra_dict, ExtraKeys.AttentionNeeded: True},
         )
+        raise ReferenceDataError
 
 
 def convert_observation_to_cdip_schema(observation):
