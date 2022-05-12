@@ -144,7 +144,7 @@ async def process_observation(key, message):
                     )
     except ReferenceDataError:
         logger.exception(
-            f"Exception occurred obtaining reference data for observation",
+            f"External error occurred obtaining reference data for observation",
             extra={
                 ExtraKeys.AttentionNeeded: True,
                 ExtraKeys.DeviceId: observation.device_id,
@@ -156,7 +156,7 @@ async def process_observation(key, message):
 
     except Exception:
         logger.exception(
-            f"Unexpected Exception occurred processing observation",
+            f"Unexpected internal exception occurred processing observation",
             extra={
                 ExtraKeys.AttentionNeeded: True,
                 ExtraKeys.DeviceId: observation.device_id,
@@ -218,7 +218,7 @@ async def process_transformed_observation(key, transformed_message):
         )
     except (DispatcherException, ReferenceDataError):
         logger.exception(
-            f"Exception occurred processing transformed observation",
+            f"External error occurred processing transformed observation",
             extra={
                 ExtraKeys.AttentionNeeded: True,
                 ExtraKeys.DeviceId: device_id,
@@ -231,7 +231,7 @@ async def process_transformed_observation(key, transformed_message):
 
     except Exception:
         logger.exception(
-            f"Unexpected error occurred processing transformed observation",
+            f"Unexpected internal error occurred processing transformed observation",
             extra={
                 ExtraKeys.AttentionNeeded: True,
                 ExtraKeys.DeviceId: device_id,
