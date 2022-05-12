@@ -7,45 +7,45 @@ from app import settings
 logging_level = settings.LOGGING_LEVEL
 
 DEFAULT_LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'json': {
-            'format': '%(asctime)s %(levelname)s %(processName)s %(thread)d %(name)s %(message)s',
-            'class': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {
+            "format": "%(asctime)s %(levelname)s %(processName)s %(thread)d %(name)s %(message)s",
+            "class": "pythonjsonlogger.jsonlogger.JsonFormatter",
         },
     },
-    'handlers': {
-        'console': {
-            'level': logging_level,
-            'class': 'logging.StreamHandler',
-            'stream': sys.stdout,
-            'formatter': 'json'
+    "handlers": {
+        "console": {
+            "level": logging_level,
+            "class": "logging.StreamHandler",
+            "stream": sys.stdout,
+            "formatter": "json",
         },
     },
-    'loggers': {
-        '': {
-            'handlers': ['console'],
-            'level': logging_level,
+    "loggers": {
+        "": {
+            "handlers": ["console"],
+            "level": logging_level,
         },
         # Reduce flood of debug messages from following modules when in debug mode
-        'mode.timers': {
-            'handlers': ['console'],
-            'level': 'WARNING',
+        "mode.timers": {
+            "handlers": ["console"],
+            "level": "WARNING",
         },
-        'aiokafka.consumer.fetcher': {
-            'handlers': ['console'],
-            'level': 'INFO',
+        "aiokafka.consumer.fetcher": {
+            "handlers": ["console"],
+            "level": "INFO",
         },
-        'aiokafka.conn': {
-            'handlers': ['console'],
-            'level': 'INFO',
+        "aiokafka.conn": {
+            "handlers": ["console"],
+            "level": "INFO",
         },
-        'aiokafka.consumer.group_coordinator': {
-            'handlers': ['console'],
-            'level': 'INFO',
+        "aiokafka.consumer.group_coordinator": {
+            "handlers": ["console"],
+            "level": "INFO",
         },
-    }
+    },
 }
 
 is_initialized = False
@@ -66,18 +66,16 @@ class ExtraKeys(str, Enum):
     def __str__(self):
         return str(self.value)
 
-    DeviceId = 'device_id'
-    InboundIntId = 'inbound_integration_id'
-    OutboundIntId = 'outbound_integration_id'
-    AttentionNeeded = 'attention_needed'
-    StreamType = 'stream_type'
-    Provider = 'provider'
-    Error = 'error'
-    Url = 'url'
-    Observation = 'observation'
-    RetryTopic = 'retry_topic'
-    RetryAt = 'retry_at'
-    RetryAttempt = 'retry_attempt'
-    StatusCode = 'status_code'
-
-
+    DeviceId = "device_id"
+    InboundIntId = "inbound_integration_id"
+    OutboundIntId = "outbound_integration_id"
+    AttentionNeeded = "attention_needed"
+    StreamType = "stream_type"
+    Provider = "provider"
+    Error = "error"
+    Url = "url"
+    Observation = "observation"
+    RetryTopic = "retry_topic"
+    RetryAt = "retry_at"
+    RetryAttempt = "retry_attempt"
+    StatusCode = "status_code"
