@@ -13,7 +13,8 @@ from app.core.utils import (
     get_auth_header,
     get_redis_db,
     create_cache_key,
-    ReferenceDataError, DispatcherException,
+    ReferenceDataError,
+    DispatcherException,
 )
 from app.transform_service.dispatchers import (
     ERPositionDispatcher,
