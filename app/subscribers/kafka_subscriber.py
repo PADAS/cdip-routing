@@ -8,7 +8,7 @@ from cdip_connector.core.routing import TopicEnum
 
 from cdip_connector.core import cdip_settings
 from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
-from app.core.utils import ReferenceDataError
+from app.core.utils import ReferenceDataError, DispatcherException
 from app.subscribers.services import (
     extract_fields_from_message,
     convert_observation_to_cdip_schema,
@@ -216,7 +216,7 @@ async def process_transformed_observation(key, transformed_message):
             integration_id,
             transformed_observation,
         )
-    except Exception:
+    except (DispatcherException, ReferenceDataError):
         logger.exception(
             f"Exception occurred processing transformed observation",
             extra={
@@ -228,6 +228,20 @@ async def process_transformed_observation(key, transformed_message):
             },
         )
         await process_failed_transformed_observation(key, transformed_message)
+
+    except Exception:
+        logger.exception(
+            f"Unexpected error occurred processing transformed observation",
+            extra={
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.DeviceId: device_id,
+                ExtraKeys.InboundIntId: integration_id,
+                ExtraKeys.OutboundIntId: outbound_config_id,
+                ExtraKeys.StreamType: observation_type,
+            },
+        )
+        # Unexpected internal errors will be redirected straight to deadletter
+        await observations_transformed_deadletter.send(value=transformed_message)
 
 
 async def process_failed_transformed_observation(key, transformed_message):
