@@ -293,7 +293,7 @@ class SMARTTransformer:
         if ca_datamodel:
             cache.cache.setex(
                 name=cache_key,
-                time=60 * 5,
+                time=60 * 60 * 12,
                 value=json.dumps(ca_datamodel.export_as_dict()),
             )
 
