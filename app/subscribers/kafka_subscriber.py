@@ -120,7 +120,7 @@ async def process_observation(key, message):
             f"Exception occurred prior to processing observation",
             extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.Observation: message},
         )
-        return
+        raise e
     try:
         if observation:
             observation = await update_observation_with_device_configuration(
@@ -147,6 +147,7 @@ async def process_observation(key, message):
             f"External error occurred obtaining reference data for observation",
             extra={
                 ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.DeadLetter: True,
                 ExtraKeys.DeviceId: observation.device_id,
                 ExtraKeys.InboundIntId: observation.integration_id,
                 ExtraKeys.StreamType: observation.observation_type,
@@ -159,6 +160,7 @@ async def process_observation(key, message):
             f"Unexpected internal exception occurred processing observation",
             extra={
                 ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.DeadLetter: True,
                 ExtraKeys.DeviceId: observation.device_id,
                 ExtraKeys.InboundIntId: observation.integration_id,
                 ExtraKeys.StreamType: observation.observation_type,
@@ -234,6 +236,7 @@ async def process_transformed_observation(key, transformed_message):
             f"Unexpected internal error occurred processing transformed observation",
             extra={
                 ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.DeadLetter: True,
                 ExtraKeys.DeviceId: device_id,
                 ExtraKeys.InboundIntId: integration_id,
                 ExtraKeys.OutboundIntId: outbound_config_id,
@@ -273,6 +276,11 @@ async def process_failed_transformed_observation(key, transformed_message):
         )
         await retry_topic.send(value=retry_transformed_message)
     except Exception as e:
+        logger.exception("Unexpected Error occurred while preparing failed transformed observation for reprocessing",
+                         extra={
+                             ExtraKeys.AttentionNeeded: True,
+                             ExtraKeys.DeadLetter: True
+                         })
         # When all else fails post to dead letter
         await observations_transformed_deadletter.send(value=transformed_message)
 
@@ -301,6 +309,11 @@ async def process_failed_unprocessed_observation(key, message):
         await retry_topic.send(value=retry_unprocessed_message)
     except Exception as e:
         # When all else fails post to dead letter
+        logger.exception("Unexpected Error occurred while preparing failed unprocessed observation for reprocessing",
+                         extra={
+                             ExtraKeys.AttentionNeeded: True,
+                             ExtraKeys.DeadLetter: True
+                         })
         await observations_unprocessed_deadletter.send(value=message)
 
 
@@ -313,6 +326,11 @@ async def process_transformed_retry_observation(key, transformed_message):
         await wait_until_retry_at(retry_at)
         await process_transformed_observation(key, transformed_message)
     except Exception as e:
+        logger.exception("Unexpected Error occurred while attempting to process failed transformed observation",
+                         extra={
+                             ExtraKeys.AttentionNeeded: True,
+                             ExtraKeys.DeadLetter: True
+                         })
         # When all else fails post to dead letter
         await observations_transformed_deadletter.send(value=transformed_message)
 
@@ -324,6 +342,11 @@ async def process_retry_observation(key, message):
         await wait_until_retry_at(retry_at)
         await process_observation(key, message)
     except Exception as e:
+        logger.exception("Unexpected Error occurred while attempting to process failed unprocessed observation",
+                         extra={
+                             ExtraKeys.AttentionNeeded: True,
+                             ExtraKeys.DeadLetter: True
+                         })
         # When all else fails post to dead letter
         await observations_unprocessed_deadletter.send(value=message)
 
@@ -331,7 +354,16 @@ async def process_retry_observation(key, message):
 @app.agent(observations_unprocessed_topic)
 async def process_observations(streaming_data):
     async for key, message in streaming_data.items():
-        await process_observation(key, message)
+        try:
+            await process_observation(key, message)
+        except Exception as e:
+            logger.exception(f"Unexpected error prior to processing observation",
+                             extra={
+                                 ExtraKeys.AttentionNeeded: True,
+                                 ExtraKeys.DeadLetter: True
+                             })
+            # When all else fails post to dead letter
+            await observations_unprocessed_deadletter.send(value=message)
 
 
 @app.agent(observations_unprocessed_retry_short_topic)
@@ -349,7 +381,16 @@ async def process_retry_long_observations(streaming_data):
 @app.agent(observations_transformed_topic)
 async def process_transformed_observations(streaming_transformed_data):
     async for key, transformed_message in streaming_transformed_data.items():
-        await process_transformed_observation(key, transformed_message)
+        try:
+            await process_transformed_observation(key, transformed_message)
+        except Exception as e:
+            logger.exception(f"Unexpected error prior to processing transformed observation",
+                             extra={
+                                 ExtraKeys.AttentionNeeded: True,
+                                 ExtraKeys.DeadLetter: True
+                             })
+            # When all else fails post to dead letter
+            await observations_transformed_deadletter.send(value=transformed_message)
 
 
 @app.agent(observations_transformed_retry_short_topic)
