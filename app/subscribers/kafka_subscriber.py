@@ -7,6 +7,8 @@ from aiokafka.helpers import create_ssl_context
 from cdip_connector.core.routing import TopicEnum
 
 from cdip_connector.core import cdip_settings
+from google.cloud.trace_v2 import TraceServiceClient, AttributeValue, types
+
 from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
 from app.core.utils import ReferenceDataError, DispatcherException
 from app.subscribers.services import (
@@ -25,7 +27,31 @@ from app.transform_service.services import (
     update_observation_with_device_configuration,
 )
 
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import (
+    BatchSpanProcessor,
+    ConsoleSpanExporter,
+    SimpleSpanProcessor
+)
+from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+
 logger = logging.getLogger(__name__)
+
+provider = TracerProvider()
+trace.set_tracer_provider(provider)
+
+# cloud_trace_client = TraceServiceClient(credentials=)
+cloud_trace_exporter = CloudTraceSpanExporter(project_id=cdip_settings.GOOGLE_PUB_SUB_PROJECT_ID)
+# TODO: use the opentelemetry.sdk.trace.export.BatchSpanProcessor for real production purposes to optimize performance
+# processor = BatchSpanProcessor(ConsoleSpanExporter())
+# provider.add_span_processor(processor)
+# provider.add_span_processor(cloud_trace_exporter)
+trace.get_tracer_provider().add_span_processor(
+    SimpleSpanProcessor(cloud_trace_exporter)
+)
+
+tracer = trace.get_tracer(__name__)
 
 APP_ID = "cdip-routing"
 
@@ -107,13 +133,14 @@ async def process_observation(key, message):
         logger.debug(f"attributes: {attributes}")
 
         observation = convert_observation_to_cdip_schema(raw_observation)
+        extra = {
+                ExtraKeys.DeviceId: observation.device_id,
+                ExtraKeys.InboundIntId: str(observation.integration_id),
+                ExtraKeys.StreamType: observation.observation_type,
+            }
         logger.info(
             "received unprocessed observation",
-            extra={
-                ExtraKeys.DeviceId: observation.device_id,
-                ExtraKeys.InboundIntId: observation.integration_id,
-                ExtraKeys.StreamType: observation.observation_type,
-            },
+            extra=extra,
         )
     except Exception as e:
         logger.exception(
@@ -122,26 +149,33 @@ async def process_observation(key, message):
         )
         raise e
     try:
-        if observation:
-            observation = await update_observation_with_device_configuration(
-                observation
-            )
-            int_id = observation.integration_id
-            destinations = get_all_outbound_configs_for_id(
-                int_id, observation.device_id
-            )
-
-            for destination in destinations:
-                jsonified_data = create_transformed_message(
-                    observation=observation,
-                    destination=destination,
-                    prefix=observation.observation_type,
+        with tracer.start_as_current_span(name="unprocessed_observation_span") as unprocessed_observation_span:
+            for extra_key, extra_value in extra.items():
+                unprocessed_observation_span.set_attribute(extra_key, extra_value)
+            if observation:
+                unprocessed_observation_span.add_event(name="begin_update_observation_with_device_configuration")
+                observation = await update_observation_with_device_configuration(
+                    observation
                 )
-                if jsonified_data:
-                    key = get_key_for_transformed_observation(key, destination.id)
-                    await observations_transformed_topic.send(
-                        key=key, value=jsonified_data
+                unprocessed_observation_span.add_event(name="end_update_observation_with_device_configuration")
+                int_id = observation.integration_id
+                unprocessed_observation_span.add_event(name="begin_get_all_outbound_configs_for_id")
+                destinations = get_all_outbound_configs_for_id(
+                    int_id, observation.device_id
+                )
+                unprocessed_observation_span.add_event(name="end_get_all_outbound_configs_for_id")
+
+                for destination in destinations:
+                    jsonified_data = create_transformed_message(
+                        observation=observation,
+                        destination=destination,
+                        prefix=observation.observation_type,
                     )
+                    if jsonified_data:
+                        key = get_key_for_transformed_observation(key, destination.id)
+                        await observations_transformed_topic.send(
+                            key=key, value=jsonified_data
+                        )
     except ReferenceDataError:
         logger.exception(
             f"External error occurred obtaining reference data for observation",
@@ -282,7 +316,7 @@ async def process_failed_transformed_observation(key, transformed_message):
                              ExtraKeys.DeadLetter: True
                          })
         # When all else fails post to dead letter
-        await observations_transformed_deadletter.send(value=transformed_message)
+        await observations_transformed_deadletter.send(key=key, value=transformed_message)
 
 
 async def process_failed_unprocessed_observation(key, message):
@@ -306,7 +340,7 @@ async def process_failed_unprocessed_observation(key, message):
                 ExtraKeys.RetryAttempt: retry_attempt,
             },
         )
-        await retry_topic.send(value=retry_unprocessed_message)
+        await retry_topic.send(key=key, value=retry_unprocessed_message)
     except Exception as e:
         # When all else fails post to dead letter
         logger.exception("Unexpected Error occurred while preparing failed unprocessed observation for reprocessing",
@@ -314,7 +348,7 @@ async def process_failed_unprocessed_observation(key, message):
                              ExtraKeys.AttentionNeeded: True,
                              ExtraKeys.DeadLetter: True
                          })
-        await observations_unprocessed_deadletter.send(value=message)
+        await observations_unprocessed_deadletter.send(key=key, value=message)
 
 
 async def process_transformed_retry_observation(key, transformed_message):
@@ -332,7 +366,7 @@ async def process_transformed_retry_observation(key, transformed_message):
                              ExtraKeys.DeadLetter: True
                          })
         # When all else fails post to dead letter
-        await observations_transformed_deadletter.send(value=transformed_message)
+        await observations_transformed_deadletter.send(key=key, value=transformed_message)
 
 
 async def process_retry_observation(key, message):
