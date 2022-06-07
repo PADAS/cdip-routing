@@ -409,8 +409,8 @@ class SMARTTransformer:
         category_path = self.resolve_category_path_for_event(event=event)
 
         if not category_path:
-            logger.info("No category found for event_type: %s", event.event_type)
-            return
+            logger.error(f"No category found for event_type: {event.event_type}")
+            raise ReferenceDataError(f"No category found for event_type: {event.event_type}")
 
         attributes = self._resolve_attributes_for_event(event=event)
 
@@ -505,8 +505,8 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
         category_path = self.resolve_category_path_for_event(event=geoevent)
 
         if not category_path:
-            logger.info("No category found for event_type: %s", geoevent.event_type)
-            return
+            logger.error(f"No category found for event_type: {geoevent.event_type}")
+            raise ReferenceDataError(f"No category found for event_type: {geoevent.event_type}")
 
         attributes = self._resolve_attributes_for_event(event=geoevent)
 
