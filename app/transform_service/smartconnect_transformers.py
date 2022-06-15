@@ -342,8 +342,6 @@ class SMARTTransformer:
 
         # Favor a match in the CA DataModel attributes dictionary.
         if attr:
-            if attr.get('type') == 'NUMERIC':
-                value = float(value)
             return key, value
 
         return_key = return_value = None
