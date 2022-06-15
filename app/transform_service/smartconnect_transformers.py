@@ -342,7 +342,9 @@ class SMARTTransformer:
 
         # Favor a match in the CA DataModel attributes dictionary.
         if attr:
-            return key, value  # TODO: also lookup value in DataModel.
+            if attr.get('type') == 'NUMERIC':
+                value = float(value)
+            return key, value
 
         return_key = return_value = None
         # Find in transformation rules.
@@ -409,8 +411,8 @@ class SMARTTransformer:
         category_path = self.resolve_category_path_for_event(event=event)
 
         if not category_path:
-            logger.error(f"No category found for event_type: {event.event_type}")
-            raise ReferenceDataError(f"No category found for event_type: {event.event_type}")
+            logger.info("No category found for event_type: %s", event.event_type)
+            return
 
         attributes = self._resolve_attributes_for_event(event=event)
 
@@ -475,11 +477,12 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
 
     def transform(self, item) -> dict:
         if self._version and self._version == "7.5":
-            incident = self.event_to_incident(event=item)
             existing_incident = self.smartconnect_client.get_incident(
                 incident_uuid=item.id
             )
-            if existing_incident:
+            if not existing_incident:
+                incident = self.event_to_incident(event=item)
+            else:
                 # TODO Update Incident
                 return None
         else:
@@ -505,8 +508,8 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
         category_path = self.resolve_category_path_for_event(event=geoevent)
 
         if not category_path:
-            logger.error(f"No category found for event_type: {geoevent.event_type}")
-            raise ReferenceDataError(f"No category found for event_type: {geoevent.event_type}")
+            logger.info("No category found for event_type: %s", geoevent.event_type)
+            return
 
         attributes = self._resolve_attributes_for_event(event=geoevent)
 
