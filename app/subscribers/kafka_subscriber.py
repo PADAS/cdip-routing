@@ -8,6 +8,7 @@ from cdip_connector.core.routing import TopicEnum
 
 from cdip_connector.core import cdip_settings
 from google.cloud.trace_v2 import TraceServiceClient, AttributeValue, types
+from opentelemetry.trace import Link
 
 from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
 from app.core.utils import ReferenceDataError, DispatcherException
@@ -27,6 +28,8 @@ from app.transform_service.services import (
     update_observation_with_device_configuration,
 )
 
+from opentelemetry.trace.span import SpanContext, NonRecordingSpan
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import (
@@ -149,7 +152,12 @@ async def process_observation(key, message):
         )
         raise e
     try:
-        with tracer.start_as_current_span(name="unprocessed_observation_span") as unprocessed_observation_span:
+        prop = TraceContextTextMapPropagator()
+        carrier = attributes.get(ExtraKeys.Carrier)
+        parent_context = prop.extract(carrier=carrier) if carrier else None
+        with tracer.start_as_current_span(name="unprocessed_observation_span",
+                                          context=parent_context) as unprocessed_observation_span:
+            # prop.inject(carrier=carrier)
             for extra_key, extra_value in extra.items():
                 unprocessed_observation_span.set_attribute(extra_key, extra_value)
             if observation:
@@ -170,6 +178,7 @@ async def process_observation(key, message):
                         observation=observation,
                         destination=destination,
                         prefix=observation.observation_type,
+                        trace_carrier=carrier
                     )
                     if jsonified_data:
                         key = get_key_for_transformed_observation(key, destination.id)
@@ -210,22 +219,32 @@ async def process_transformed_observation(key, transformed_message):
             transformed_message
         )
 
-        observation_type = attributes.get("observation_type")
-        device_id = attributes.get("device_id")
-        integration_id = attributes.get("integration_id")
-        outbound_config_id = attributes.get("outbound_config_id")
-        retry_attempt: int = attributes.get("retry_attempt") or 0
+
+        observation_type = attributes.get(ExtraKeys.StreamType)
+        device_id = attributes.get(ExtraKeys.DeviceId)
+        integration_id = attributes.get(ExtraKeys.InboundIntId)
+        outbound_config_id = attributes.get(ExtraKeys.OutboundIntId)
+        retry_attempt: int = attributes.get(ExtraKeys.RetryAttempt) or 0
+
+        extra = {
+            ExtraKeys.DeviceId: device_id,
+            ExtraKeys.InboundIntId: integration_id,
+            ExtraKeys.OutboundIntId: outbound_config_id,
+            ExtraKeys.StreamType: observation_type,
+            ExtraKeys.RetryAttempt: retry_attempt,
+        }
+
+        carrier = attributes.get(ExtraKeys.Carrier)
+
+        prop = TraceContextTextMapPropagator()
+        parent_context = prop.extract(carrier=carrier) if carrier else None
 
         logger.info(
             "received transformed observation",
-            extra={
-                ExtraKeys.DeviceId: device_id,
-                ExtraKeys.InboundIntId: integration_id,
-                ExtraKeys.OutboundIntId: outbound_config_id,
-                ExtraKeys.StreamType: observation_type,
-                ExtraKeys.RetryAttempt: retry_attempt,
-            },
+            extra=extra,
         )
+
+        logger.debug("transformed_observation", extra=dict(transformed_observation=transformed_observation))
 
     except Exception as e:
         logger.exception(
@@ -237,21 +256,19 @@ async def process_transformed_observation(key, transformed_message):
         )
         raise e
     try:
-        logger.info(
-            "Dispatching for transformed observation.",
-            extra={
-                "transformed_observation": transformed_observation,
-                "integration_id": integration_id,
-                "outbound_config_id": outbound_config_id,
-                "observation_type": observation_type,
-            },
-        )
-        dispatch_transformed_observation(
-            observation_type,
-            outbound_config_id,
-            integration_id,
-            transformed_observation,
-        )
+        with tracer.start_as_current_span(name="transformed_observation_span",
+                                          context=parent_context) as transformed_observation_span:
+            for extra_key, extra_value in extra.items():
+                transformed_observation_span.set_attribute(extra_key, extra_value)
+            dispatch_transformed_observation(
+                stream_type=observation_type,
+                outbound_config_id=outbound_config_id,
+                inbound_int_id=integration_id,
+                observation=transformed_observation,
+                span=transformed_observation_span
+            )
+            transformed_observation_span.end()
+
     except (DispatcherException, ReferenceDataError):
         logger.exception(
             f"External error occurred processing transformed observation",

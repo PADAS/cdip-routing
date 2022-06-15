@@ -164,7 +164,7 @@ def get_inbound_integration_detail(
 
 
 def dispatch_transformed_observation(
-    stream_type: str, outbound_config_id: str, inbound_int_id: str, observation
+    *, stream_type: str, outbound_config_id: str, inbound_int_id: str, observation, span
 ) -> dict:
 
     if not outbound_config_id or not inbound_int_id:
@@ -177,9 +177,12 @@ def dispatch_transformed_observation(
                 "stream_type": stream_type,
             },
         )
-
+    span.add_event(name="begin_get_outbound_config_detail")
     config = get_outbound_config_detail(outbound_config_id)
+    span.add_event(name="end_get_outbound_config_detail")
+    span.add_event(name="begin_get_inbound_integration_detail")
     inbound_integration = get_inbound_integration_detail(inbound_int_id)
+    span.add_event(name="end_get_inbound_integration_detail")
     provider = inbound_integration.provider
     extra_dict = {
         ExtraKeys.InboundIntId: inbound_int_id,
@@ -187,6 +190,7 @@ def dispatch_transformed_observation(
         ExtraKeys.StreamType: stream_type,
     }
 
+    span.add_event(name="begin_dispatch")
     if config:
         if stream_type == schemas.StreamPrefixEnum.position:
             dispatcher = ERPositionDispatcher(config, provider)
@@ -215,6 +219,7 @@ def dispatch_transformed_observation(
         if dispatcher:
             try:
                 dispatcher.send(observation)
+                span.add_event(name="end_dispatch")
             except Exception as e:
                 logger.error(
                     f"Exception occurred dispatching observation",
@@ -264,7 +269,7 @@ def create_message(attributes, observation):
     return message
 
 
-def create_transformed_message(*, observation, destination, prefix: str):
+def create_transformed_message(*, observation, destination, prefix: str, trace_carrier):
     transformed_observation = transform_observation(
         stream_type=prefix, config=destination, observation=observation
     )
@@ -272,12 +277,12 @@ def create_transformed_message(*, observation, destination, prefix: str):
         return None
     logger.debug(f"Transformed observation: {transformed_observation}")
 
-    # observation_type may no longer be needed as topics are now specific to observation type
     attributes = {
-        "observation_type": prefix,
-        "device_id": observation.device_id,
-        "outbound_config_id": str(destination.id),
-        "integration_id": observation.integration_id,
+        ExtraKeys.StreamType: prefix,
+        ExtraKeys.DeviceId: observation.device_id,
+        ExtraKeys.OutboundIntId: str(destination.id),
+        ExtraKeys.InboundIntId: observation.integration_id,
+        ExtraKeys.Carrier: trace_carrier
     }
 
     transformed_message = create_message(attributes, transformed_observation)
