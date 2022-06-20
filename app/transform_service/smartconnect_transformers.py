@@ -342,7 +342,7 @@ class SMARTTransformer:
 
         # Favor a match in the CA DataModel attributes dictionary.
         if attr:
-            return key, value  # TODO: also lookup value in DataModel.
+            return key, value
 
         return_key = return_value = None
         # Find in transformation rules.
@@ -475,11 +475,12 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
 
     def transform(self, item) -> dict:
         if self._version and self._version == "7.5":
-            incident = self.event_to_incident(event=item)
             existing_incident = self.smartconnect_client.get_incident(
                 incident_uuid=item.id
             )
-            if existing_incident:
+            if not existing_incident:
+                incident = self.event_to_incident(event=item)
+            else:
                 # TODO Update Incident
                 return None
         else:
