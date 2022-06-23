@@ -6,6 +6,7 @@ from uuid import UUID
 
 import requests
 from cdip_connector.core import schemas, routing, cdip_settings
+from urllib3.exceptions import ReadTimeoutError
 
 from app import settings
 from app.core.local_logging import ExtraKeys
@@ -61,21 +62,27 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
     )
 
     headers = get_auth_header()
-    response = requests.get(
-        url=outbound_integrations_endpoint,
-        verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
-        headers=headers,
-        timeout=DEFAULT_TIMEOUT,
-    )
+    try:
+        response = requests.get(
+            url=outbound_integrations_endpoint,
+            verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
+            headers=headers,
+            timeout=DEFAULT_TIMEOUT,
+        )
+    except ReadTimeoutError:
+        logger.error("Read Timeout", extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint})
+        raise ReferenceDataError(
+            f"Read Timeout for {outbound_integrations_endpoint}"
+        )
     if response.status_code == 200:
         try:
             resp_json = response.json()
-        except json.decoder.JSONDecodeError as jde:
+        except Exception:
             logger.error(
                 f"Failed decoding response for Outbound Integration Detail",
                 extra={**extra_dict, "resp_text": response.text},
             )
-            raise ReferenceDataError(jde.msg)
+            raise ReferenceDataError("Failed decoding response for Outbound Integration Detail")
         else:
             config = schemas.OutboundConfiguration.parse_obj(resp_json)
             if config:  # don't cache empty response
@@ -128,22 +135,28 @@ def get_inbound_integration_detail(
     )
 
     headers = get_auth_header()
-    response = requests.get(
-        url=inbound_integrations_endpoint,
-        verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
-        headers=headers,
-        timeout=DEFAULT_TIMEOUT,
-    )
+    try:
+        response = requests.get(
+            url=inbound_integrations_endpoint,
+            verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
+            headers=headers,
+            timeout=DEFAULT_TIMEOUT,
+        )
+    except ReadTimeoutError:
+        logger.error("Read Timeout", extra={**extra_dict, ExtraKeys.Url: inbound_integrations_endpoint})
+        raise ReferenceDataError(
+            f"Read Timeout for {inbound_integrations_endpoint}"
+        )
 
     if response.status_code == 200:
         try:
             resp_json = response.json()
-        except json.decoder.JSONDecodeError as jde:
+        except Exception:
             logger.error(
                 f"Failed decoding response for InboundIntegration Detail",
                 extra={**extra_dict, "resp_text": response.text},
             )
-            raise ReferenceDataError(jde.msg)
+            raise ReferenceDataError("Failed decoding response for InboundIntegration Detail")
         else:
             config = schemas.IntegrationInformation.parse_obj(resp_json)
             if config:  # don't cache empty response

@@ -9,6 +9,7 @@ import walrus
 from cdip_connector.core import schemas, portal_api, cdip_settings
 from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel, parse_obj_as
+from urllib3.exceptions import ReadTimeoutError
 
 from app import settings
 from app.core.local_logging import ExtraKeys
@@ -63,23 +64,29 @@ def get_all_outbound_configs_for_id(
     outbound_integrations_endpoint = settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT
 
     headers = get_auth_header()
-    resp = requests.get(
-        url=f"{outbound_integrations_endpoint}",
-        params=dict(inbound_id=inbound_id, device_id=device_id),
-        headers=headers,
-        verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
-        timeout=(3.1, 20),
-    )
+    try:
+        resp = requests.get(
+            url=f"{outbound_integrations_endpoint}",
+            params=dict(inbound_id=inbound_id, device_id=device_id),
+            headers=headers,
+            verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
+            timeout=(3.1, 20),
+        )
+    except ReadTimeoutError:
+        logger.error("Read Timeout", extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint})
+        raise ReferenceDataError(
+            f"Read Timeout for {outbound_integrations_endpoint}"
+        )
 
     if resp.status_code == 200:
         try:
             resp_json = resp.json()
-        except json.decoder.JSONDecodeError as jde:
+        except Exception as e:
             logger.error(
                 f"Failed decoding response for OutboundConfig",
                 extra={**extra_dict, "resp_text": resp.text},
             )
-            raise ReferenceDataError(jde.msg)
+            raise ReferenceDataError("Failed decoding response for OutboundConfig")
         else:
             resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
             configurations = parse_obj_as(
