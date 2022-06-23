@@ -190,7 +190,6 @@ async def process_observation(key, message):
             f"External error occurred obtaining reference data for observation",
             extra={
                 ExtraKeys.AttentionNeeded: True,
-                ExtraKeys.DeadLetter: True,
                 ExtraKeys.DeviceId: observation.device_id,
                 ExtraKeys.InboundIntId: observation.integration_id,
                 ExtraKeys.StreamType: observation.observation_type,
