@@ -13,13 +13,11 @@ from pydantic import BaseModel
 from smartconnect.models import (
     SMARTCONNECT_DATFORMAT,
     SMARTRequest,
-    ConservationArea,
     SMARTCompositeRequest,
 )
 from smartconnect.utils import guess_ca_timezone
 
 from app.core.utils import is_uuid, ReferenceDataError
-from app.subscribers import cache
 from app.transform_service.transformers import Transformer
 
 logger = logging.getLogger(__name__)
@@ -73,79 +71,6 @@ def transform_ca_datamodel(
     ca_datamodel.get_category(er_event.event_type)
 
 
-BLANK_DATAMODEL_CONTENT = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<DataModel xmlns="http://www.smartconservationsoftware.org/xml/1.0/datamodel">
-    <languages>
-        <language code="en"/>
-    </languages>
-    <attributes>
-        <attribute key="bright_ti4" isrequired="false" type="NUMERIC">
-            <aggregations aggregation="avg"/>
-            <aggregations aggregation="max"/>
-            <aggregations aggregation="min"/>
-            <aggregations aggregation="stddev_samp"/>
-            <aggregations aggregation="sum"/>
-            <aggregations aggregation="var_samp"/>
-            <names language_code="en" value="Brightness ti4"/>
-        </attribute>
-        <attribute key="bright_ti5" isrequired="false" type="NUMERIC">
-            <aggregations aggregation="avg"/>
-            <aggregations aggregation="max"/>
-            <aggregations aggregation="min"/>
-            <aggregations aggregation="stddev_samp"/>
-            <aggregations aggregation="sum"/>
-            <aggregations aggregation="var_samp"/>
-            <names language_code="en" value="Brightness ti5"/>
-        </attribute>
-        <attribute key="fireradiativepower" isrequired="false" type="TEXT">
-            <qa_regex></qa_regex>
-            <names language_code="en" value="Fire Radiative Power"/>
-        </attribute>
-        <attribute key="frp" isrequired="false" type="NUMERIC">
-            <aggregations aggregation="avg"/>
-            <aggregations aggregation="max"/>
-            <aggregations aggregation="min"/>
-            <aggregations aggregation="stddev_samp"/>
-            <aggregations aggregation="sum"/>
-            <aggregations aggregation="var_samp"/>
-            <names language_code="en" value="Fire Radiative Power"/>
-        </attribute>
-        <attribute key="confidence" isrequired="false" type="NUMERIC">
-            <aggregations aggregation="avg"/>
-            <aggregations aggregation="max"/>
-            <aggregations aggregation="min"/>
-            <aggregations aggregation="stddev_samp"/>
-            <aggregations aggregation="sum"/>
-            <aggregations aggregation="var_samp"/>
-            <names language_code="en" value="Confidence"/>
-        </attribute>
-        <attribute key="clustered_alerts" isrequired="false" type="NUMERIC">
-            <aggregations aggregation="avg"/>
-            <aggregations aggregation="max"/>
-            <aggregations aggregation="min"/>
-            <aggregations aggregation="stddev_samp"/>
-            <aggregations aggregation="sum"/>
-            <aggregations aggregation="var_samp"/>
-            <names language_code="en" value="Clustered Alerts"/>
-        </attribute>
-    </attributes>
-    <categories>
-        <category key="gfwfirealert" ismultiple="true" isactive="true" iconkey="fire">
-            <names language_code="en" value="GFW Fire Alert"/>
-            <attribute isactive="true" attributekey="bright_ti4"/>
-            <attribute isactive="true" attributekey="bright_ti5"/>
-            <attribute isactive="true" attributekey="frp"/>
-            <attribute isactive="true" attributekey="clustered_alerts"/>
-        </category>
-        <category key="gfwgladalert" ismultiple="true" isactive="true" iconkey="stump">
-            <names language_code="en" value="GFW Glad Alert"/>
-            <attribute isactive="true" attributekey="confidence"/>
-        </category>
-    </categories>
-</DataModel>
-"""
-
-
 class SMARTTransformer:
     """
     Transform a single EarthRanger Event into an Independent Incident.
@@ -173,16 +98,17 @@ class SMARTTransformer:
                 "Unable to determine CA uuid for observation"
             )
 
+        self._version = self._config.additional.get("version", "7.5")
+        logger.info(f"Using SMART Integration version {self._version}")
+
         self.smartconnect_client = smartconnect.SmartClient(
-            api=config.endpoint, username=config.login, password=config.password
+            api=config.endpoint, username=config.login, password=config.password, version=self._version
         )
 
-        self._version = self._config.additional.get("version", "7.0")
-        logger.info(f"Using SMART Integration version {self._version}")
-        self._ca_datamodel = self.get_data_model(ca_uuid=self.ca_uuid)
+        self._ca_datamodel = self.smartconnect_client.get_data_model(ca_uuid=self.ca_uuid)
 
         try:
-            self.ca = self.get_conservation_area(ca_uuid=self.ca_uuid)
+            self.ca = self.smartconnect_client.get_conservation_area(ca_uuid=self.ca_uuid)
         except Exception as ex:
             self.logger.warning(
                 f"Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
@@ -211,93 +137,6 @@ class SMARTTransformer:
             self._transformation_rules = TransformationRules.parse_obj(
                 transformation_rules_dict
             )
-
-    def get_conservation_area(self, *, ca_uuid: str = None):
-        cache_key = f"cache:smart-ca:{ca_uuid}:metadata"
-        self.logger.info(f"Looking up CA cached at {cache_key}.")
-        try:
-            cached_data = cache.cache.get(cache_key)
-            if cached_data:
-                self.logger.info(f"Found CA cached at {cache_key}.")
-                self.ca = ConservationArea.parse_raw(cached_data)
-                return self.ca
-
-            self.logger.info(f"Cache miss for {cache_key}")
-        except:
-            self.logger.info(f"Cache miss/error for {cache_key}")
-            pass
-
-        try:
-            self.logger.info(
-                "Querying Smart Connect for CAs at endpoint: %s, username: %s",
-                self._config.endpoint,
-                self._config.login,
-            )
-
-            for ca in self.smartconnect_client.get_conservation_areas():
-                if ca.uuid == uuid.UUID(ca_uuid):
-                    self.ca = ca
-                    break
-            else:
-                logger.error(
-                    f"Can't find a Conservation Area with UUID: {self.ca_uuid}"
-                )
-                self.ca = None
-
-            if self.ca:
-                self.logger.info(f"Caching CA metadata at {cache_key}")
-                cache.cache.setex(
-                    name=cache_key,
-                    time=60 * 5,
-                    value=json.dumps(dict(self.ca), default=str),
-                )
-
-            return self.ca
-
-        except Exception as ex:
-            self.logger.exception(
-                f"Failed to get Conservation Areas", extra=dict(ca_uuid=ca_uuid)
-            )
-            raise ReferenceDataError(f"Failed to get SMART Conservation Areas")
-
-    def get_data_model(self, *, ca_uuid: str = None):
-        # CA Data Model is not available for versions below 7. Use a blank.
-        if self._version.startswith("6"):
-            blank_datamodel = smartconnect.DataModel()
-            blank_datamodel.load(BLANK_DATAMODEL_CONTENT)
-            return blank_datamodel
-
-        cache_key = f"cache:smart-ca:{ca_uuid}:datamodel"
-        try:
-            cached_data = cache.cache.get(cache_key)
-            if cached_data:
-                dm = smartconnect.DataModel()
-                dm.import_from_dict(json.loads(cached_data))
-                self.logger.debug(
-                    f"Using cached SMART Datamodel", extra={"cached_key": cache_key}
-                )
-                return dm
-
-        except Exception:
-            pass
-
-        logger.debug(f"Cache miss for SMART Datamodel", extra={"cached_key": cache_key})
-
-        try:
-            ca_datamodel = self.smartconnect_client.download_datamodel(
-                ca_uuid=self.ca_uuid
-            )
-        except Exception as e:
-            raise ReferenceDataError("Failed downloading SMART Datamodel")
-
-        if ca_datamodel:
-            cache.cache.setex(
-                name=cache_key,
-                time=60 * 60 * 12,
-                value=json.dumps(ca_datamodel.export_as_dict()),
-            )
-
-        return ca_datamodel
 
     def guess_location_timezone(
         self, *, longitude: Union[float, int] = None, latitude: Union[float, int] = None
@@ -384,7 +223,7 @@ class SMARTTransformer:
         self, *, event: Union[schemas.EREvent, schemas.GeoEvent] = None
     ) -> SMARTRequest:
         """
-        Handle both geo events and er events for version > 7.0 of smart connect
+        Handle both geo events and er events for version > 7.5 of smart connect
         """
 
         is_er_event = isinstance(event, schemas.EREvent)
