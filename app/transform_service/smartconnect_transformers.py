@@ -17,6 +17,7 @@ from smartconnect.models import (
 )
 from smartconnect.utils import guess_ca_timezone
 
+from app.core.local_logging import ExtraKeys
 from app.core.utils import is_uuid, ReferenceDataError
 from app.transform_service.transformers import Transformer
 
@@ -105,7 +106,14 @@ class SMARTTransformer:
             api=config.endpoint, username=config.login, password=config.password, version=self._version
         )
 
-        self._ca_datamodel = self.smartconnect_client.get_data_model(ca_uuid=self.ca_uuid)
+        try:
+            self._ca_datamodel = self.smartconnect_client.get_data_model(ca_uuid=self.ca_uuid)
+        except Exception as e:
+            logger.exception(
+                f"Error getting data model for SMART CA: {self.ca_uuid}",
+                extra={ExtraKeys.Error: e},
+            )
+            raise ReferenceDataError(f"Error getting data model for SMART CA: {self.ca_uuid}")
 
         try:
             self.ca = self.smartconnect_client.get_conservation_area(ca_uuid=self.ca_uuid)
