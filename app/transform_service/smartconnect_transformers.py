@@ -17,6 +17,7 @@ from smartconnect.models import (
 )
 from smartconnect.utils import guess_ca_timezone
 
+from app.core.local_logging import ExtraKeys
 from app.core.utils import is_uuid, ReferenceDataError
 from app.transform_service.transformers import Transformer
 
@@ -102,13 +103,29 @@ class SMARTTransformer:
         logger.info(f"Using SMART Integration version {self._version}")
 
         self.smartconnect_client = smartconnect.SmartClient(
-            api=config.endpoint, username=config.login, password=config.password, version=self._version
+            api=config.endpoint,
+            username=config.login,
+            password=config.password,
+            version=self._version,
         )
 
-        self._ca_datamodel = self.smartconnect_client.get_data_model(ca_uuid=self.ca_uuid)
+        try:
+            self._ca_datamodel = self.smartconnect_client.get_data_model(
+                ca_uuid=self.ca_uuid
+            )
+        except Exception as e:
+            logger.exception(
+                f"Error getting data model for SMART CA: {self.ca_uuid}",
+                extra={ExtraKeys.Error: e},
+            )
+            raise ReferenceDataError(
+                f"Error getting data model for SMART CA: {self.ca_uuid}"
+            )
 
         try:
-            self.ca = self.smartconnect_client.get_conservation_area(ca_uuid=self.ca_uuid)
+            self.ca = self.smartconnect_client.get_conservation_area(
+                ca_uuid=self.ca_uuid
+            )
         except Exception as ex:
             self.logger.warning(
                 f"Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
@@ -249,7 +266,9 @@ class SMARTTransformer:
 
         if not category_path:
             logger.error(f"No category found for event_type: {event.event_type}")
-            raise ReferenceDataError(f"No category found for event_type: {event.event_type}")
+            raise ReferenceDataError(
+                f"No category found for event_type: {event.event_type}"
+            )
 
         attributes = self._resolve_attributes_for_event(event=event)
 
@@ -346,7 +365,9 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
 
         if not category_path:
             logger.error(f"No category found for event_type: {geoevent.event_type}")
-            raise ReferenceDataError(f"No category found for event_type: {geoevent.event_type}")
+            raise ReferenceDataError(
+                f"No category found for event_type: {geoevent.event_type}"
+            )
 
         attributes = self._resolve_attributes_for_event(event=geoevent)
 
