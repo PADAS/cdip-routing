@@ -181,6 +181,7 @@ async def process_transformed_observation(key, transformed_message):
         outbound_config_id = attributes.get("outbound_config_id")
         retry_attempt: int = attributes.get("retry_attempt") or 0
 
+        logger.debug(f"transformed_observation: {transformed_observation}")
         logger.info(
             "received transformed observation",
             extra={
@@ -205,10 +206,9 @@ async def process_transformed_observation(key, transformed_message):
         logger.info(
             "Dispatching for transformed observation.",
             extra={
-                "transformed_observation": transformed_observation,
-                "integration_id": integration_id,
-                "outbound_config_id": outbound_config_id,
-                "observation_type": observation_type,
+                ExtraKeys.InboundIntId: integration_id,
+                ExtraKeys.OutboundIntId: outbound_config_id,
+                ExtraKeys.StreamType: observation_type,
             },
         )
         dispatch_transformed_observation(
@@ -262,17 +262,27 @@ async def process_failed_transformed_observation(key, transformed_message):
             transformed_observation, attributes
         )
         retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
-        logger.info(
-            "Putting failed transformed observation back on queue",
-            extra={
+        extra_dict = {
                 ExtraKeys.DeviceId: device_id,
                 ExtraKeys.InboundIntId: integration_id,
                 ExtraKeys.OutboundIntId: outbound_config_id,
                 ExtraKeys.StreamType: observation_type,
                 ExtraKeys.RetryTopic: retry_topic_str,
                 ExtraKeys.RetryAttempt: retry_attempt,
-            },
-        )
+            }
+        if retry_topic_str != TopicEnum.observations_transformed_deadletter:
+            logger.info(
+                "Putting failed transformed observation back on queue",
+                extra=extra_dict,
+            )
+        else:
+            logger.exception(
+                "Retry attempts exceeded for transformed observation, sending to dead letter",
+                extra={
+                    **extra_dict,
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.DeadLetter: True
+                })
         await retry_topic.send(value=retry_transformed_message)
     except Exception as e:
         logger.exception("Unexpected Error occurred while preparing failed transformed observation for reprocessing",
@@ -295,16 +305,26 @@ async def process_failed_unprocessed_observation(key, message):
         retry_attempt = attributes.get("retry_attempt")
         retry_unprocessed_message = create_retry_message(raw_observation, attributes)
         retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
-        logger.info(
-            "Putting failed unprocessed observation back on queue",
-            extra={
-                ExtraKeys.DeviceId: device_id,
-                ExtraKeys.InboundIntId: integration_id,
-                ExtraKeys.StreamType: observation_type,
-                ExtraKeys.RetryTopic: retry_topic_str,
-                ExtraKeys.RetryAttempt: retry_attempt,
-            },
-        )
+        extra_dict = {
+                    ExtraKeys.DeviceId: device_id,
+                    ExtraKeys.InboundIntId: integration_id,
+                    ExtraKeys.StreamType: observation_type,
+                    ExtraKeys.RetryTopic: retry_topic_str,
+                    ExtraKeys.RetryAttempt: retry_attempt,
+                }
+        if retry_topic_str != TopicEnum.observations_transformed_deadletter:
+            logger.info(
+                "Putting failed unprocessed observation back on queue",
+                extra=extra_dict,
+            )
+        else:
+            logger.exception(
+                "Retry attempts exceeded for unprocessed observation, sending to dead letter",
+                extra={
+                    **extra_dict,
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.DeadLetter: True
+                })
         await retry_topic.send(value=retry_unprocessed_message)
     except Exception as e:
         # When all else fails post to dead letter
@@ -408,9 +428,13 @@ async def process_transformed_retry_long_observations(streaming_transformed_data
 async def log_metrics(app):
     m = app.monitor
     metrics_dict = {
+        'messages_received_by_topic': m.messages_received_by_topic,
+        'messages_sent_by_topic': m.messages_sent_by_topic,
+        'messages_active': m.messages_active,
+        'assignment_latency': m.assignment_latency,
+        'send_errors': m.send_errors,
         "rebalances": m.rebalances,
         "rebalance_return_avg": m.rebalance_return_avg,
-        # 'messages_received_by_topic': m.messages_received_by_topic,
     }
     logger.info(f"Metrics heartbeat for Consumer", extra=metrics_dict)
 

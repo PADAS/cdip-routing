@@ -51,7 +51,7 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
         config = schemas.OutboundConfiguration.parse_raw(cached)
         logger.debug(
             "Using cached outbound integration detail",
-            extra={**extra_dict, "outbound_detail": config},
+            extra={**extra_dict, ExtraKeys.AttentionNeeded: False, "outbound_detail": config},
         )
         return config
 
