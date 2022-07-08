@@ -124,7 +124,7 @@ class SmartConnectDispatcher:
             api=self.config.endpoint,
             username=self.config.login,
             password=self.config.password,
-            version=self.config.additional.get("version")
+            version=self.config.additional.get("version"),
         )
         for patrol_request in item.patrol_requests:
             smartclient.post_smart_request(

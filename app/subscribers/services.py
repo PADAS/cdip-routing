@@ -51,7 +51,11 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
         config = schemas.OutboundConfiguration.parse_raw(cached)
         logger.debug(
             "Using cached outbound integration detail",
-            extra={**extra_dict, ExtraKeys.AttentionNeeded: False, "outbound_detail": config},
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: False,
+                "outbound_detail": config,
+            },
         )
         return config
 
@@ -70,10 +74,11 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
             timeout=DEFAULT_TIMEOUT,
         )
     except ReadTimeoutError:
-        logger.error("Read Timeout", extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint})
-        raise ReferenceDataError(
-            f"Read Timeout for {outbound_integrations_endpoint}"
+        logger.error(
+            "Read Timeout",
+            extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint},
         )
+        raise ReferenceDataError(f"Read Timeout for {outbound_integrations_endpoint}")
     if response.status_code == 200:
         try:
             resp_json = response.json()
@@ -82,7 +87,9 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
                 f"Failed decoding response for Outbound Integration Detail",
                 extra={**extra_dict, "resp_text": response.text},
             )
-            raise ReferenceDataError("Failed decoding response for Outbound Integration Detail")
+            raise ReferenceDataError(
+                "Failed decoding response for Outbound Integration Detail"
+            )
         else:
             config = schemas.OutboundConfiguration.parse_obj(resp_json)
             if config:  # don't cache empty response
@@ -143,10 +150,11 @@ def get_inbound_integration_detail(
             timeout=DEFAULT_TIMEOUT,
         )
     except ReadTimeoutError:
-        logger.error("Read Timeout", extra={**extra_dict, ExtraKeys.Url: inbound_integrations_endpoint})
-        raise ReferenceDataError(
-            f"Read Timeout for {inbound_integrations_endpoint}"
+        logger.error(
+            "Read Timeout",
+            extra={**extra_dict, ExtraKeys.Url: inbound_integrations_endpoint},
         )
+        raise ReferenceDataError(f"Read Timeout for {inbound_integrations_endpoint}")
 
     if response.status_code == 200:
         try:
@@ -156,7 +164,9 @@ def get_inbound_integration_detail(
                 f"Failed decoding response for InboundIntegration Detail",
                 extra={**extra_dict, "resp_text": response.text},
             )
-            raise ReferenceDataError("Failed decoding response for InboundIntegration Detail")
+            raise ReferenceDataError(
+                "Failed decoding response for InboundIntegration Detail"
+            )
         else:
             config = schemas.IntegrationInformation.parse_obj(resp_json)
             if config:  # don't cache empty response
