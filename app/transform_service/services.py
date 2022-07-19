@@ -73,10 +73,11 @@ def get_all_outbound_configs_for_id(
             timeout=(3.1, 20),
         )
     except ReadTimeoutError:
-        logger.error("Read Timeout", extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint})
-        raise ReferenceDataError(
-            f"Read Timeout for {outbound_integrations_endpoint}"
+        logger.error(
+            "Read Timeout",
+            extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint},
         )
+        raise ReferenceDataError(f"Read Timeout for {outbound_integrations_endpoint}")
 
     if resp.status_code == 200:
         try:
