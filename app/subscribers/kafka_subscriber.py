@@ -287,7 +287,7 @@ async def process_failed_transformed_observation(key, transformed_message):
                     ExtraKeys.DeadLetter: True,
                 },
             )
-        await retry_topic.send(value=retry_transformed_message)
+        # await retry_topic.send(value=retry_transformed_message)
     except Exception as e:
         logger.exception(
             "Unexpected Error occurred while preparing failed transformed observation for reprocessing",
@@ -330,7 +330,7 @@ async def process_failed_unprocessed_observation(key, message):
                     ExtraKeys.DeadLetter: True,
                 },
             )
-        await retry_topic.send(value=retry_unprocessed_message)
+        # await retry_topic.send(value=retry_unprocessed_message)
     except Exception as e:
         # When all else fails post to dead letter
         logger.exception(

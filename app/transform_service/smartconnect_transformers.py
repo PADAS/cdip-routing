@@ -13,13 +13,14 @@ from pydantic import BaseModel
 from smartconnect.models import (
     SMARTCONNECT_DATFORMAT,
     SMARTRequest,
-    SMARTCompositeRequest,
+    SMARTCompositeRequest, SMARTResponse, SmartObservation
 )
 from smartconnect.utils import guess_ca_timezone
 
 from app.core.local_logging import ExtraKeys
 from app.core.utils import is_uuid, ReferenceDataError
 from app.transform_service.transformers import Transformer
+from packaging import version
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,10 @@ class CAConflictException(Exception):
 
 
 class IndeterminableCAException(Exception):
+    pass
+
+
+class ObservationUUIDValueException(Exception):
     pass
 
 
@@ -236,6 +241,87 @@ class SMARTTransformer:
                 attributes[k] = v
         return attributes
 
+    def event_to_observation(self, *, event: Union[schemas.EREvent, schemas.GeoEvent] = None
+    ) -> SMARTRequest:
+        """
+        Handle both geo events and er events for version > 7.5 of smart connect
+
+        Creates an observation update request. New observations are created through event_to_incident
+
+        TODO: Refactor out common code for event_to_incident
+        """
+
+        is_er_event = isinstance(event, schemas.EREvent)
+
+        # Sanitize coordinates
+        coordinates = [0, 0]
+        location_timezone = self._default_timezone
+        if event.location:
+            if is_er_event:
+                coordinates = [event.location.longitude, event.location.latitude]
+                location_timezone = self.guess_location_timezone(
+                    longitude=event.location.longitude, latitude=event.location.latitude
+                )
+            else:
+                coordinates = [event.location.x, event.location.y]
+                location_timezone = self.guess_location_timezone(
+                    longitude=event.location.x, latitude=event.location.y
+                )
+
+        # Apply Transformation Rules
+
+        category_path = self.resolve_category_path_for_event(event=event)
+
+        if not category_path:
+            logger.error(f"No category found for event_type: {event.event_type}")
+            raise ReferenceDataError(
+                f"No category found for event_type: {event.event_type}"
+            )
+
+        attributes = self._resolve_attributes_for_event(event=event)
+
+        present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
+        event_localtime = (
+            event.time.astimezone(location_timezone)
+            if is_er_event
+            else event.recorded_at.astimezone(location_timezone)
+        )
+
+        # comment = (
+        #     f"Report: {event.title if event.title else event.event_type}"
+        #     + f"\nImported: {present_localtime.isoformat()}"
+        # )
+        #
+        # incident_id = f"ER-{event.serial_number}" if is_er_event else None
+        # incident_uuid = str(event.id) if is_uuid(id_str=str(event.id)) else None
+        # storing custom uuid on reports so that the incident_uuid and observation_uuid are distinct but associated
+        observation_uuid = str(event.event_details.get('smart_observation_uuid'))
+        if not observation_uuid:
+            raise ObservationUUIDValueException
+
+        smart_data_type = "integrateincident" if is_er_event and version.parse(self._version) >= version.parse(
+            "7.5.3") else "incident"
+
+        observation_data = {
+            "type": "Feature",
+            "geometry": {
+                "coordinates": coordinates,
+                "type": "Point",
+            },
+            "properties": {
+                "dateTime": event_localtime.strftime(SMARTCONNECT_DATFORMAT),
+                "smartDataType": smart_data_type,
+                "smartFeatureType": "waypoint/observation",
+                "smartAttributes": SmartObservation(observationUuid=observation_uuid,
+                                                    category=category_path,
+                                                    attributes=attributes)
+            },
+        }
+
+        observation = SMARTRequest.parse_obj(observation_data)
+
+        return observation
+
     def event_to_incident(
         self, *, event: Union[schemas.EREvent, schemas.GeoEvent] = None
     ) -> SMARTRequest:
@@ -287,6 +373,13 @@ class SMARTTransformer:
         incident_id = f"ER-{event.serial_number}" if is_er_event else None
         incident_uuid = str(event.id) if is_uuid(id_str=str(event.id)) else None
 
+        smart_data_type = "integrateincident" if is_er_event and version.parse(self._version) >= version.parse("7.5.3") else "incident"
+
+        # storing custom uuid on reports so that the incident_uuid and observation_uuid are distinct but associated
+        observation_uuid = str(event.event_details.get('smart_observation_uuid'))
+        if not observation_uuid:
+            raise ObservationUUIDValueException
+
         incident_data = {
             "type": "Feature",
             "geometry": {
@@ -295,8 +388,8 @@ class SMARTTransformer:
             },
             "properties": {
                 "dateTime": event_localtime.strftime(SMARTCONNECT_DATFORMAT),
-                "smartDataType": "incident",
-                "smartFeatureType": "waypoint/new",
+                "smartDataType": smart_data_type,
+                "smartFeatureType": 'waypoint/new',
                 "smartAttributes": {
                     "incidentId": incident_id,
                     "incidentUuid": incident_uuid,
@@ -305,6 +398,7 @@ class SMARTTransformer:
                         {
                             "observations": [
                                 {
+                                    "observationUuid": observation_uuid,
                                     "category": category_path,
                                     "attributes": attributes,
                                 }
@@ -332,19 +426,27 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
         super().__init__(config=config, ca_uuid=ca_uuid)
 
     def transform(self, item) -> dict:
-        if self._version and self._version == "7.5":
-            existing_incident = self.smartconnect_client.get_incident(
+        waypoint_requests = []
+        if self._version and version.parse(self._version) >= version.parse("7.5"):
+            smart_response = self.smartconnect_client.get_incident(
                 incident_uuid=item.id
             )
-            if not existing_incident:
+            if not smart_response:
                 incident = self.event_to_incident(event=item)
+                waypoint_requests.append(incident)
             else:
-                # TODO Update Incident
-                return None
+                # Update Incident
+                incident = self.event_to_incident(event=item)
+                incident.properties.smartFeatureType = "waypoint"
+                waypoint_requests.append(incident)
+                # Update Observation
+                observation = self.event_to_observation(event=item)
+                waypoint_requests.append(observation)
         else:
             incident = self.geoevent_to_incident(geoevent=item)
+            waypoint_requests.append(incident)
         smart_request = SMARTCompositeRequest(
-            waypoint_requests=[incident], ca_uuid=self.ca_uuid
+            waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
         )
 
         return json.loads(smart_request.json()) if smart_request else None
