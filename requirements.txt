@@ -186,7 +186,7 @@ six==1.16.0
     #   grpcio
     #   protobuf
     #   python-dateutil
-https://github.com/PADAS/smartconnect-client/releases/download/v1.1.7/smartconnect_client-1.1.7-py3-none-any.whl
+https://github.com/PADAS/smartconnect-client/releases/download/v1.1.9/smartconnect_client-1.1.9-py3-none-any.whl
     # via -r requirements.in
 starlette==0.14.2
     # via fastapi
