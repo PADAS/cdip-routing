@@ -379,15 +379,6 @@ class SMARTTransformer:
 
         return incident_request
 
-    # def create_incident_and_observation_update_requests(self, *, event):
-    #     waypoint_requests = []
-    #     # Update Incident
-    #     incident = self.event_to_incident(event=event, smart_feature_type="waypoint")
-    #     waypoint_requests.append(incident)
-    #     # Update Observation
-    #     observation = self.event_to_observation(event=event)
-    #     waypoint_requests.append(observation)
-
 
 class SmartEventTransformer(SMARTTransformer, Transformer):
     """
