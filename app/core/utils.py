@@ -113,6 +113,11 @@ def is_uuid(*, id_str: str):
         return False
 
 
+def coalesce(*values):
+    """Return the first non-None value or None if all values are None"""
+    return next((v for v in values if v is not None), None)
+
+
 if __name__ == "__main__":
 
     while not input().startswith("q"):
