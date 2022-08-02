@@ -190,25 +190,22 @@ def dispatch_transformed_observation(
     stream_type: str, outbound_config_id: str, inbound_int_id: str, observation
 ) -> dict:
 
+    extra_dict = {
+        ExtraKeys.OutboundIntId: outbound_config_id,
+        ExtraKeys.InboundIntId: inbound_int_id,
+        ExtraKeys.Observation: observation,
+        ExtraKeys.StreamType: stream_type,
+    }
+
     if not outbound_config_id or not inbound_int_id:
         logger.error(
             "dispatch_transformed_observation - value error.",
-            extra={
-                "outbound_config_id": outbound_config_id,
-                "inbound_int_id": inbound_int_id,
-                "observation": observation,
-                "stream_type": stream_type,
-            },
+            extra=extra_dict,
         )
 
     config = get_outbound_config_detail(outbound_config_id)
     inbound_integration = get_inbound_integration_detail(inbound_int_id)
     provider = inbound_integration.provider
-    extra_dict = {
-        ExtraKeys.InboundIntId: inbound_int_id,
-        ExtraKeys.OutboundIntId: outbound_config_id,
-        ExtraKeys.StreamType: stream_type,
-    }
 
     if config:
         if stream_type == schemas.StreamPrefixEnum.position:
