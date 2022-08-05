@@ -1,5 +1,7 @@
+import base64
 import json
 import logging
+import pathlib
 import uuid
 from datetime import datetime
 from typing import List, Optional, Tuple, Union
@@ -8,6 +10,7 @@ import pytz
 import smartconnect
 import timezonefinder
 from cdip_connector.core import schemas
+from cdip_connector.core.cloudstorage import get_cloud_storage
 from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel
 from smartconnect.models import (
@@ -19,7 +22,7 @@ from smartconnect.models import (
     Geometry,
     Properties,
     SmartAttributes,
-    SmartObservationGroup,
+    SmartObservationGroup, File,
 )
 from smartconnect.utils import guess_ca_timezone
 
@@ -165,6 +168,7 @@ class SMARTTransformer:
             self._transformation_rules = TransformationRules.parse_obj(
                 transformation_rules_dict
             )
+        self.cloud_storage = get_cloud_storage()
 
     def guess_location_timezone(
         self, *, longitude: Union[float, int] = None, latitude: Union[float, int] = None
@@ -302,6 +306,17 @@ class SMARTTransformer:
         incident_id = f"ER-{event.serial_number}" if is_er_event else None
         incident_uuid = str(event.id) if is_uuid(id_str=str(event.id)) else None
 
+        # process attachments
+        attachments = []
+        for event_file in event.files:
+            file_extension = pathlib.Path(event_file.get('filename')).suffix
+            download_file_name = event_file.get('id') + file_extension
+            downloaded_file = self.cloud_storage.download(download_file_name)
+            downloaded_file_base64 = base64.b64encode(downloaded_file.getvalue()).decode()
+            file = File(filename=event_file.get('filename'),
+                        data=downloaded_file_base64)
+            attachments.append(file)
+
         smart_data_type = (
             "integrateincident"
             if is_er_event and version.parse(self._version) >= version.parse("7.5.3")
@@ -333,6 +348,7 @@ class SMARTTransformer:
                 observationGroups=[
                     SmartObservationGroup(observations=[smart_observation])
                 ],
+                attachments=attachments
             )
         )
 
@@ -641,8 +657,16 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
 
             incident_requests = []
             for event in patrol_leg.event_details:
+                # check that the event wasn't already created as independent incident and then linked to patrol
+                smart_response = self.smartconnect_client.get_incident(
+                    incident_uuid=event.id
+                )
                 # SMART guids are stripped of dashes
                 if str(event.er_uuid).replace("-", "") not in existing_waypoint_uuids:
+                    if version.parse(self._version) < '7.5.3' and smart_response:
+                        logger.info("skipping event because it already exists in destination outside of patrol")
+                        # version ^7.5.3 will allow us to create waypoint on patrol with same uuid as existing ind inc
+                        continue
                     incident_request = self.event_to_patrol_waypoint(
                         patrol_id=patrol.id,
                         patrol_leg_id=patrol_leg.id,
