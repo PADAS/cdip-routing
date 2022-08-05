@@ -22,7 +22,8 @@ from smartconnect.models import (
     Geometry,
     Properties,
     SmartAttributes,
-    SmartObservationGroup, File,
+    SmartObservationGroup,
+    File,
 )
 from smartconnect.utils import guess_ca_timezone
 
@@ -309,12 +310,15 @@ class SMARTTransformer:
         # process attachments
         attachments = []
         for event_file in event.files:
-            file_extension = pathlib.Path(event_file.get('filename')).suffix
-            download_file_name = event_file.get('id') + file_extension
+            file_extension = pathlib.Path(event_file.get("filename")).suffix
+            download_file_name = event_file.get("id") + file_extension
             downloaded_file = self.cloud_storage.download(download_file_name)
-            downloaded_file_base64 = base64.b64encode(downloaded_file.getvalue()).decode()
-            file = File(filename=event_file.get('filename'),
-                        data=downloaded_file_base64)
+            downloaded_file_base64 = base64.b64encode(
+                downloaded_file.getvalue()
+            ).decode()
+            file = File(
+                filename=event_file.get("filename"), data=downloaded_file_base64
+            )
             attachments.append(file)
 
         smart_data_type = (
@@ -348,7 +352,7 @@ class SMARTTransformer:
                 observationGroups=[
                     SmartObservationGroup(observations=[smart_observation])
                 ],
-                attachments=attachments
+                attachments=attachments,
             )
         )
 
@@ -663,8 +667,13 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                 )
                 # SMART guids are stripped of dashes
                 if str(event.er_uuid).replace("-", "") not in existing_waypoint_uuids:
-                    if version.parse(self._version) < '7.5.3' and smart_response:
-                        logger.info("skipping event because it already exists in destination outside of patrol")
+                    if (
+                        version.parse(self._version) < version.parse("7.5.3")
+                        and smart_response
+                    ):
+                        logger.info(
+                            "skipping event because it already exists in destination outside of patrol"
+                        )
                         # version ^7.5.3 will allow us to create waypoint on patrol with same uuid as existing ind inc
                         continue
                     incident_request = self.event_to_patrol_waypoint(
