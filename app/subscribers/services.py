@@ -266,17 +266,7 @@ def dispatch_transformed_observation(
 
 def convert_observation_to_cdip_schema(observation):
     schema = schemas.models_by_stream_type[observation.get("observation_type")]
-    # method requires a list
-    observations = [observation]
-    observations, errors = schemas.get_validated_objects(observations, schema)
-    if len(observations) > 0:
-        return observations[0]
-    else:
-        logger.error(
-            f"unable to validate observation",
-            extra={"observation": observation, ExtraKeys.Error: errors},
-        )
-        raise Exception("unable to validate observation")
+    return schema.parse_obj(observation)
 
 
 def create_message(attributes, observation):
