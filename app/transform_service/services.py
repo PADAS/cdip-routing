@@ -149,7 +149,7 @@ async def update_observation_with_device_configuration(observation):
             observation.subject_type = coalesce(
                 observation.subject_type, device.subject_type
             )
-            observation.subject_name = coalesce(observation.subject_name, device.name)
+            observation.subject_name = coalesce(observation.name, device.name)
 
     return observation
 
