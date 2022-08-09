@@ -1,5 +1,7 @@
+import base64
 import json
 import logging
+import pathlib
 import uuid
 from datetime import datetime
 from typing import List, Optional, Tuple, Union
@@ -8,19 +10,27 @@ import pytz
 import smartconnect
 import timezonefinder
 from cdip_connector.core import schemas
+from cdip_connector.core.cloudstorage import get_cloud_storage
 from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel
 from smartconnect.models import (
     SMARTCONNECT_DATFORMAT,
     SMARTRequest,
-    ConservationArea,
     SMARTCompositeRequest,
+    SMARTResponse,
+    SmartObservation,
+    Geometry,
+    Properties,
+    SmartAttributes,
+    SmartObservationGroup,
+    File,
 )
 from smartconnect.utils import guess_ca_timezone
 
+from app.core.local_logging import ExtraKeys
 from app.core.utils import is_uuid, ReferenceDataError
-from app.subscribers import cache
 from app.transform_service.transformers import Transformer
+from packaging import version
 
 logger = logging.getLogger(__name__)
 
@@ -67,83 +77,14 @@ class IndeterminableCAException(Exception):
     pass
 
 
+class ObservationUUIDValueException(Exception):
+    pass
+
+
 def transform_ca_datamodel(
     *, er_event: schemas.EREvent = None, ca_datamodel: smartconnect.DataModel = None
 ):
     ca_datamodel.get_category(er_event.event_type)
-
-
-BLANK_DATAMODEL_CONTENT = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<DataModel xmlns="http://www.smartconservationsoftware.org/xml/1.0/datamodel">
-    <languages>
-        <language code="en"/>
-    </languages>
-    <attributes>
-        <attribute key="bright_ti4" isrequired="false" type="NUMERIC">
-            <aggregations aggregation="avg"/>
-            <aggregations aggregation="max"/>
-            <aggregations aggregation="min"/>
-            <aggregations aggregation="stddev_samp"/>
-            <aggregations aggregation="sum"/>
-            <aggregations aggregation="var_samp"/>
-            <names language_code="en" value="Brightness ti4"/>
-        </attribute>
-        <attribute key="bright_ti5" isrequired="false" type="NUMERIC">
-            <aggregations aggregation="avg"/>
-            <aggregations aggregation="max"/>
-            <aggregations aggregation="min"/>
-            <aggregations aggregation="stddev_samp"/>
-            <aggregations aggregation="sum"/>
-            <aggregations aggregation="var_samp"/>
-            <names language_code="en" value="Brightness ti5"/>
-        </attribute>
-        <attribute key="fireradiativepower" isrequired="false" type="TEXT">
-            <qa_regex></qa_regex>
-            <names language_code="en" value="Fire Radiative Power"/>
-        </attribute>
-        <attribute key="frp" isrequired="false" type="NUMERIC">
-            <aggregations aggregation="avg"/>
-            <aggregations aggregation="max"/>
-            <aggregations aggregation="min"/>
-            <aggregations aggregation="stddev_samp"/>
-            <aggregations aggregation="sum"/>
-            <aggregations aggregation="var_samp"/>
-            <names language_code="en" value="Fire Radiative Power"/>
-        </attribute>
-        <attribute key="confidence" isrequired="false" type="NUMERIC">
-            <aggregations aggregation="avg"/>
-            <aggregations aggregation="max"/>
-            <aggregations aggregation="min"/>
-            <aggregations aggregation="stddev_samp"/>
-            <aggregations aggregation="sum"/>
-            <aggregations aggregation="var_samp"/>
-            <names language_code="en" value="Confidence"/>
-        </attribute>
-        <attribute key="clustered_alerts" isrequired="false" type="NUMERIC">
-            <aggregations aggregation="avg"/>
-            <aggregations aggregation="max"/>
-            <aggregations aggregation="min"/>
-            <aggregations aggregation="stddev_samp"/>
-            <aggregations aggregation="sum"/>
-            <aggregations aggregation="var_samp"/>
-            <names language_code="en" value="Clustered Alerts"/>
-        </attribute>
-    </attributes>
-    <categories>
-        <category key="gfwfirealert" ismultiple="true" isactive="true" iconkey="fire">
-            <names language_code="en" value="GFW Fire Alert"/>
-            <attribute isactive="true" attributekey="bright_ti4"/>
-            <attribute isactive="true" attributekey="bright_ti5"/>
-            <attribute isactive="true" attributekey="frp"/>
-            <attribute isactive="true" attributekey="clustered_alerts"/>
-        </category>
-        <category key="gfwgladalert" ismultiple="true" isactive="true" iconkey="stump">
-            <names language_code="en" value="GFW Glad Alert"/>
-            <attribute isactive="true" attributekey="confidence"/>
-        </category>
-    </categories>
-</DataModel>
-"""
 
 
 class SMARTTransformer:
@@ -173,16 +114,33 @@ class SMARTTransformer:
                 "Unable to determine CA uuid for observation"
             )
 
+        self._version = self._config.additional.get("version", "7.5")
+        logger.info(f"Using SMART Integration version {self._version}")
+
         self.smartconnect_client = smartconnect.SmartClient(
-            api=config.endpoint, username=config.login, password=config.password
+            api=config.endpoint,
+            username=config.login,
+            password=config.password,
+            version=self._version,
         )
 
-        self._version = self._config.additional.get("version", "7.0")
-        logger.info(f"Using SMART Integration version {self._version}")
-        self._ca_datamodel = self.get_data_model(ca_uuid=self.ca_uuid)
+        try:
+            self._ca_datamodel = self.smartconnect_client.get_data_model(
+                ca_uuid=self.ca_uuid
+            )
+        except Exception as e:
+            logger.exception(
+                f"Error getting data model for SMART CA: {self.ca_uuid}",
+                extra={ExtraKeys.Error: e},
+            )
+            raise ReferenceDataError(
+                f"Error getting data model for SMART CA: {self.ca_uuid}"
+            )
 
         try:
-            self.ca = self.get_conservation_area(ca_uuid=self.ca_uuid)
+            self.ca = self.smartconnect_client.get_conservation_area(
+                ca_uuid=self.ca_uuid
+            )
         except Exception as ex:
             self.logger.warning(
                 f"Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
@@ -211,93 +169,7 @@ class SMARTTransformer:
             self._transformation_rules = TransformationRules.parse_obj(
                 transformation_rules_dict
             )
-
-    def get_conservation_area(self, *, ca_uuid: str = None):
-        cache_key = f"cache:smart-ca:{ca_uuid}:metadata"
-        self.logger.info(f"Looking up CA cached at {cache_key}.")
-        try:
-            cached_data = cache.cache.get(cache_key)
-            if cached_data:
-                self.logger.info(f"Found CA cached at {cache_key}.")
-                self.ca = ConservationArea.parse_raw(cached_data)
-                return self.ca
-
-            self.logger.info(f"Cache miss for {cache_key}")
-        except:
-            self.logger.info(f"Cache miss/error for {cache_key}")
-            pass
-
-        try:
-            self.logger.info(
-                "Querying Smart Connect for CAs at endpoint: %s, username: %s",
-                self._config.endpoint,
-                self._config.login,
-            )
-
-            for ca in self.smartconnect_client.get_conservation_areas():
-                if ca.uuid == uuid.UUID(ca_uuid):
-                    self.ca = ca
-                    break
-            else:
-                logger.error(
-                    f"Can't find a Conservation Area with UUID: {self.ca_uuid}"
-                )
-                self.ca = None
-
-            if self.ca:
-                self.logger.info(f"Caching CA metadata at {cache_key}")
-                cache.cache.setex(
-                    name=cache_key,
-                    time=60 * 5,
-                    value=json.dumps(dict(self.ca), default=str),
-                )
-
-            return self.ca
-
-        except Exception as ex:
-            self.logger.exception(
-                f"Failed to get Conservation Areas", extra=dict(ca_uuid=ca_uuid)
-            )
-            raise ReferenceDataError(f"Failed to get SMART Conservation Areas")
-
-    def get_data_model(self, *, ca_uuid: str = None):
-        # CA Data Model is not available for versions below 7. Use a blank.
-        if self._version.startswith("6"):
-            blank_datamodel = smartconnect.DataModel()
-            blank_datamodel.load(BLANK_DATAMODEL_CONTENT)
-            return blank_datamodel
-
-        cache_key = f"cache:smart-ca:{ca_uuid}:datamodel"
-        try:
-            cached_data = cache.cache.get(cache_key)
-            if cached_data:
-                dm = smartconnect.DataModel()
-                dm.import_from_dict(json.loads(cached_data))
-                self.logger.debug(
-                    f"Using cached SMART Datamodel", extra={"cached_key": cache_key}
-                )
-                return dm
-
-        except Exception:
-            pass
-
-        logger.debug(f"Cache miss for SMART Datamodel", extra={"cached_key": cache_key})
-
-        try:
-            ca_datamodel = self.smartconnect_client.download_datamodel(
-                ca_uuid=self.ca_uuid
-            )
-        except Exception as e:
-            raise ReferenceDataError("Failed downloading SMART Datamodel")
-
-        if ca_datamodel:
-            cache.cache.setex(
-                name=cache_key,
-                time=60 * 60 * 12,
-                value=json.dumps(ca_datamodel.export_as_dict()),
-            )
-
-        return ca_datamodel
+        self.cloud_storage = get_cloud_storage()
 
     def guess_location_timezone(
         self, *, longitude: Union[float, int] = None, latitude: Union[float, int] = None
@@ -380,11 +252,15 @@ class SMARTTransformer:
                 attributes[k] = v
         return attributes
 
-    def event_to_incident(
-        self, *, event: Union[schemas.EREvent, schemas.GeoEvent] = None
+    def event_to_smart_request(
+        self,
+        *,
+        event: Union[schemas.EREvent, schemas.GeoEvent] = None,
+        smart_feature_type=None,
     ) -> SMARTRequest:
         """
-        Handle both geo events and er events for version > 7.0 of smart connect
+        Common code used to construct a SMART request
+
         """
 
         is_er_event = isinstance(event, schemas.EREvent)
@@ -410,7 +286,9 @@ class SMARTTransformer:
 
         if not category_path:
             logger.error(f"No category found for event_type: {event.event_type}")
-            raise ReferenceDataError(f"No category found for event_type: {event.event_type}")
+            raise ReferenceDataError(
+                f"No category found for event_type: {event.event_type}"
+            )
 
         attributes = self._resolve_attributes_for_event(event=event)
 
@@ -429,37 +307,97 @@ class SMARTTransformer:
         incident_id = f"ER-{event.serial_number}" if is_er_event else None
         incident_uuid = str(event.id) if is_uuid(id_str=str(event.id)) else None
 
-        incident_data = {
-            "type": "Feature",
-            "geometry": {
-                "coordinates": coordinates,
-                "type": "Point",
-            },
-            "properties": {
-                "dateTime": event_localtime.strftime(SMARTCONNECT_DATFORMAT),
-                "smartDataType": "incident",
-                "smartFeatureType": "waypoint/new",
-                "smartAttributes": {
-                    "incidentId": incident_id,
-                    "incidentUuid": incident_uuid,
-                    "comment": comment,
-                    "observationGroups": [
-                        {
-                            "observations": [
-                                {
-                                    "category": category_path,
-                                    "attributes": attributes,
-                                }
-                            ]
-                        }
-                    ],
-                },
-            },
-        }
+        # process attachments
+        attachments = []
+        for event_file in event.files:
+            file_extension = pathlib.Path(event_file.get("filename")).suffix
+            download_file_name = event_file.get("id") + file_extension
+            downloaded_file = self.cloud_storage.download(download_file_name)
+            downloaded_file_base64 = base64.b64encode(
+                downloaded_file.getvalue()
+            ).decode()
+            file = File(
+                filename=event_file.get("filename"), data=downloaded_file_base64
+            )
+            attachments.append(file)
 
-        incident = SMARTRequest.parse_obj(incident_data)
+        smart_data_type = (
+            "integrateincident"
+            if is_er_event and version.parse(self._version) >= version.parse("7.5.3")
+            else "incident"
+        )
 
-        return incident
+        # storing custom uuid on reports so that the incident_uuid and observation_uuid are distinct but associated
+        observation_uuid = (
+            str(event.event_details.get("smart_observation_uuid"))
+            if event.event_details.get("smart_observation_uuid")
+            else None
+        )
+        if not observation_uuid:
+            raise ObservationUUIDValueException
+
+        smart_observation = SmartObservation(
+            observationUuid=observation_uuid,
+            category=category_path,
+            attributes=attributes,
+        )
+
+        smart_attributes = (
+            smart_observation
+            if smart_feature_type == "waypoint/observation"
+            else SmartAttributes(
+                incidentId=incident_id,
+                incidentUuid=incident_uuid,
+                comment=comment,
+                observationGroups=[
+                    SmartObservationGroup(observations=[smart_observation])
+                ],
+                attachments=attachments,
+            )
+        )
+
+        smart_request = SMARTRequest(
+            type="Feature",
+            geometry=Geometry(coordinates=coordinates, type="Point"),
+            properties=Properties(
+                dateTime=event_localtime.strftime(SMARTCONNECT_DATFORMAT),
+                smartDataType=smart_data_type,
+                smartFeatureType=smart_feature_type,
+                smartAttributes=smart_attributes,
+            ),
+        )
+        return smart_request
+
+    def event_to_observation(
+        self, *, event: Union[schemas.EREvent, schemas.GeoEvent] = None
+    ) -> SMARTRequest:
+        """
+        Handle both geo events and er events for version > 7.5 of smart connect
+
+        Creates an observation update request. New observations are created through event_to_incident
+        """
+
+        observation_update_request = self.event_to_smart_request(
+            event=event, smart_feature_type="waypoint/observation"
+        )
+
+        return observation_update_request
+
+    def event_to_incident(
+        self,
+        *,
+        event: Union[schemas.EREvent, schemas.GeoEvent] = None,
+        smart_feature_type=None,
+    ) -> SMARTRequest:
+        """
+        Handle both geo events and er events for version > 7.5 of smart connect
+        """
+
+        incident_request = self.event_to_smart_request(
+            event=event, smart_feature_type=smart_feature_type
+        )
+
+        return incident_request
 
 
 class SmartEventTransformer(SMARTTransformer, Transformer):
@@ -474,19 +412,30 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
         super().__init__(config=config, ca_uuid=ca_uuid)
 
     def transform(self, item) -> dict:
-        if self._version and self._version == "7.5":
-            existing_incident = self.smartconnect_client.get_incident(
+        waypoint_requests = []
+        if self._version and version.parse(self._version) >= version.parse("7.5"):
+            smart_response = self.smartconnect_client.get_incident(
                 incident_uuid=item.id
             )
-            if not existing_incident:
-                incident = self.event_to_incident(event=item)
+            if not smart_response:
+                incident = self.event_to_incident(
+                    event=item, smart_feature_type="waypoint/new"
+                )
+                waypoint_requests.append(incident)
             else:
-                # TODO Update Incident
-                return None
+                # Update Incident
+                incident = self.event_to_incident(
+                    event=item, smart_feature_type="waypoint"
+                )
+                waypoint_requests.append(incident)
+                # Update Observation
+                observation = self.event_to_observation(event=item)
+                waypoint_requests.append(observation)
         else:
             incident = self.geoevent_to_incident(geoevent=item)
+            waypoint_requests.append(incident)
         smart_request = SMARTCompositeRequest(
-            waypoint_requests=[incident], ca_uuid=self.ca_uuid
+            waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
         )
 
         return json.loads(smart_request.json()) if smart_request else None
@@ -507,7 +456,9 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
 
         if not category_path:
             logger.error(f"No category found for event_type: {geoevent.event_type}")
-            raise ReferenceDataError(f"No category found for event_type: {geoevent.event_type}")
+            raise ReferenceDataError(
+                f"No category found for event_type: {geoevent.event_type}"
+            )
 
         attributes = self._resolve_attributes_for_event(event=geoevent)
 
@@ -572,9 +523,11 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
         incident_request: SMARTRequest
         for event in patrol_leg.event_details:
             incident_request = self.event_to_patrol_waypoint(
-                patrol_id=patrol_id, patrol_leg_id=patrol_leg.id, event=event
+                patrol_id=patrol_id,
+                patrol_leg_id=patrol_leg.id,
+                event=event,
+                smart_feature_type="waypoint/new",
             )
-            incident_request.properties.smartFeatureType = "waypoint/new"
             incident_requests.append(incident_request)
 
         return incident_requests
@@ -607,8 +560,12 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             track_point_requests.append(track_point_request)
         return track_point_requests
 
-    def event_to_patrol_waypoint(self, *, patrol_id, patrol_leg_id, event):
-        incident_request = self.event_to_incident(event=event)
+    def event_to_patrol_waypoint(
+        self, *, patrol_id, patrol_leg_id, event, smart_feature_type
+    ):
+        incident_request = self.event_to_incident(
+            event=event, smart_feature_type=smart_feature_type
+        )
         # Associate the incident to this patrol leg
         incident_request.properties.smartDataType = "patrol"
         incident_request.properties.smartAttributes.patrolUuid = patrol_id
@@ -616,16 +573,85 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
 
         return incident_request
 
+    def er_patrol_to_smart_patrol_request(
+        self, patrol: ERPatrol, patrol_leg: ERPatrolSegment, smart_feature_type: str
+    ):
+        # TODO: what should members be here?
+        members = []
+
+        # These should already have been filtered out during sync process pull from ER, but checking again
+        if not patrol_leg.start_location or not patrol_leg.leader:
+            # Need start location to pass in coordinates and determine location timezone
+            logger.warning("patrol leg contains no start location or no leader")
+            return None
+
+        coordinates = [
+            patrol_leg.start_location.longitude,
+            patrol_leg.start_location.latitude,
+        ]
+        location_timezone = self.guess_location_timezone(
+            longitude=patrol_leg.start_location.longitude,
+            latitude=patrol_leg.start_location.latitude,
+        )
+        present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
+        # datetime.strptime(patrol_leg.time_range.get('start_time'), "%Y-%m-%dT%H:%M:%S.%f%z")
+        patrol_leg_start_localtime = datetime.fromisoformat(
+            patrol_leg.time_range.get("start_time")
+        ).astimezone(location_timezone)
+
+        comment = f"\nImported: {present_localtime.isoformat()}"
+        for note in patrol.notes:
+            comment += note.get("text") + "\n\n"
+
+        # add leg leader to members
+        if patrol_leg.leader:
+            smart_member_id = patrol_leg.leader.additional.get("smart_member_id")
+            if smart_member_id not in members:
+                members.append(smart_member_id)
+
+        patrol_request = SMARTRequest(
+            type="Feature",
+            geometry=Geometry(coordinates=coordinates, type="Point"),
+            properties=Properties(
+                dateTime=patrol_leg_start_localtime.strftime(SMARTCONNECT_DATFORMAT),
+                smartDataType="patrol",
+                smartFeatureType=smart_feature_type,
+                smartAttributes=SmartAttributes(
+                    patrolId=f"ER-{patrol.serial_number}",
+                    patrolUuid=patrol.id,
+                    patrolLegUuid=patrol_leg.id,
+                    team="communityteam1",  # Is there a sensible equivalent on the ER side ?
+                    objective=patrol.objective,
+                    comment=comment,
+                    isArmed="false",
+                    # Dont think we have a way to determine this from ER Patrol
+                    transportType="foot",  # Potential to base off ER Patrol type
+                    mandate="followup",
+                    # Dont think we have a way to determine this from ER Patrol
+                    members=members,  # are these members specific to the leg or the patrol ?
+                    leader=patrol_leg.leader.additional.get("smart_member_id"),
+                ),
+            ),
+        )
+        return patrol_request
+
     def er_patrol_to_smart_patrol(self, patrol: ERPatrol):
         existing_smart_patrol = self.smartconnect_client.get_patrol(patrol_id=patrol.id)
 
         if existing_smart_patrol:
-            # TODO: Update patrol/patrol_leg properties if changed
+            patrol_leg = patrol.patrol_segments[0]
+
+            # Update patrol/patrol_leg properties if changed
+            patrol_requests = []
+            patrol_request = self.er_patrol_to_smart_patrol_request(
+                patrol=patrol, patrol_leg=patrol_leg, smart_feature_type="patrol"
+            )
+            patrol_requests.append(patrol_request)
+
             # Get waypoints for patrol
             patrol_waypoints = self.smartconnect_client.get_patrol_waypoints(
                 patrol_id=patrol.id
             )
-            patrol_leg = patrol.patrol_segments[0]
 
             existing_waypoint_uuids = (
                 [waypoint.client_uuid for waypoint in patrol_waypoints]
@@ -635,16 +661,40 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
 
             incident_requests = []
             for event in patrol_leg.event_details:
+                # check that the event wasn't already created as independent incident and then linked to patrol
+                smart_response = self.smartconnect_client.get_incident(
+                    incident_uuid=event.id
+                )
                 # SMART guids are stripped of dashes
                 if str(event.er_uuid).replace("-", "") not in existing_waypoint_uuids:
+                    if (
+                        version.parse(self._version) < version.parse("7.5.3")
+                        and smart_response
+                    ):
+                        logger.info(
+                            "skipping event because it already exists in destination outside of patrol"
+                        )
+                        # version ^7.5.3 will allow us to create waypoint on patrol with same uuid as existing ind inc
+                        continue
                     incident_request = self.event_to_patrol_waypoint(
-                        patrol_id=patrol.id, patrol_leg_id=patrol_leg.id, event=event
+                        patrol_id=patrol.id,
+                        patrol_leg_id=patrol_leg.id,
+                        event=event,
+                        smart_feature_type="waypoint/new",
                     )
-                    incident_request.properties.smartFeatureType = "waypoint/new"
                     incident_requests.append(incident_request)
                 else:
-                    # TODO: Update logic for patrol waypoints
-                    pass
+                    incident_request = self.event_to_patrol_waypoint(
+                        patrol_id=patrol.id,
+                        patrol_leg_id=patrol_leg.id,
+                        event=event,
+                        smart_feature_type="waypoint",
+                    )
+                    incident_requests.append(incident_request)
+
+                    # Update Observation
+                    observation = self.event_to_observation(event=event)
+                    incident_requests.append(observation)
 
             track_point_requests = self.get_track_point_requests_from_er_patrol_leg(
                 patrol_leg=patrol_leg
@@ -652,7 +702,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
 
             smart_request = SMARTCompositeRequest(
                 waypoint_requests=incident_requests,
-                patrol_requests=[],
+                patrol_requests=patrol_requests,
                 track_point_requests=track_point_requests,
                 ca_uuid=self.ca_uuid,
             )
@@ -661,71 +711,13 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
 
         else:  # Create Patrol
 
-            location_timezone = self._default_timezone
-
-            members = []
-
             patrol_leg: ERPatrolSegment
             # create patrol with first leg, currently ER only supports single leg patrols
             patrol_leg = patrol.patrol_segments[0]
 
-            # These should already have been filtered out during sync process pull from ER, but checking again
-            if not patrol_leg.start_location or not patrol_leg.leader:
-                # Need start location to pass in coordinates and determine location timezone
-                logger.warning("patrol leg contains no start location or no leader")
-                return None
-
-            coordinates = [
-                patrol_leg.start_location.longitude,
-                patrol_leg.start_location.latitude,
-            ]
-            location_timezone = self.guess_location_timezone(
-                longitude=patrol_leg.start_location.longitude,
-                latitude=patrol_leg.start_location.latitude,
+            patrol_request = self.er_patrol_to_smart_patrol_request(
+                patrol=patrol, patrol_leg=patrol_leg, smart_feature_type="patrol/new"
             )
-            present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
-            # datetime.strptime(patrol_leg.time_range.get('start_time'), "%Y-%m-%dT%H:%M:%S.%f%z")
-            patrol_leg_start_localtime = datetime.fromisoformat(
-                patrol_leg.time_range.get("start_time")
-            ).astimezone(location_timezone)
-
-            comment = f"\nImported: {present_localtime.isoformat()}"
-            for note in patrol.notes:
-                comment += note.get("text") + "\n\n"
-
-            # add leg leader to members
-            if patrol_leg.leader:
-                smart_member_id = patrol_leg.leader.additional.get("smart_member_id")
-                if smart_member_id not in members:
-                    members.append(smart_member_id)
-
-            patrol_data = {
-                "type": "Feature",
-                "geometry": {"coordinates": coordinates, "type": "Point"},
-                "properties": {
-                    "dateTime": patrol_leg_start_localtime.strftime(
-                        SMARTCONNECT_DATFORMAT
-                    ),
-                    "smartDataType": "patrol",
-                    "smartFeatureType": "patrol/new",
-                    "smartAttributes": {
-                        "patrolId": f"ER-{patrol.serial_number}",
-                        "patrolUuid": patrol.id,
-                        "patrolLegUuid": patrol_leg.id,
-                        "team": "communityteam1",  # Is there a sensible equivalent on the ER side ?
-                        "objective": patrol.objective,
-                        "comment": comment,
-                        "isArmed": "false",  # Dont think we have a way to determine this from ER Patrol
-                        "transportType": "foot",  # Potential to base off ER Patrol type
-                        "mandate": "followup",  # Dont think we have a way to determine this from ER Patrol
-                        "number": -999,  # ???
-                        "members": members,  # are these members specific to the leg or the patrol ?
-                        "leader": patrol_leg.leader.additional.get("smart_member_id"),
-                    },
-                },
-            }
-
-            patrol_request = SMARTRequest.parse_obj(patrol_data)
 
             incident_requests = self.get_incident_requests_from_er_patrol_leg(
                 patrol_id=patrol.id, patrol_leg=patrol_leg

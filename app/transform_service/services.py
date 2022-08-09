@@ -13,7 +13,13 @@ from urllib3.exceptions import ReadTimeoutError
 
 from app import settings
 from app.core.local_logging import ExtraKeys
-from app.core.utils import get_auth_header, get_redis_db, is_uuid, ReferenceDataError
+from app.core.utils import (
+    get_auth_header,
+    get_redis_db,
+    is_uuid,
+    ReferenceDataError,
+    coalesce,
+)
 from app.transform_service.smartconnect_transformers import (
     SmartEventTransformer,
     SmartERPatrolTransformer,
@@ -73,10 +79,11 @@ def get_all_outbound_configs_for_id(
             timeout=(3.1, 20),
         )
     except ReadTimeoutError:
-        logger.error("Read Timeout", extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint})
-        raise ReferenceDataError(
-            f"Read Timeout for {outbound_integrations_endpoint}"
+        logger.error(
+            "Read Timeout",
+            extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint},
         )
+        raise ReferenceDataError(f"Read Timeout for {outbound_integrations_endpoint}")
 
     if resp.status_code == 200:
         try:
@@ -138,9 +145,11 @@ async def update_observation_with_device_configuration(observation):
                 observation.title += f" - {device.name}"
 
         # add admin portal configured subject type
-        if isinstance(observation, schemas.Position) and not observation.subject_type:
-            if device and device.subject_type:
-                observation.subject_type = device.subject_type
+        if isinstance(observation, schemas.Position):
+            observation.subject_type = coalesce(
+                observation.subject_type, device.subject_type
+            )
+            observation.name = coalesce(observation.name, device.name)
 
     return observation
 

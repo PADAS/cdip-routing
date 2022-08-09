@@ -51,7 +51,11 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
         config = schemas.OutboundConfiguration.parse_raw(cached)
         logger.debug(
             "Using cached outbound integration detail",
-            extra={**extra_dict, "outbound_detail": config},
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: False,
+                "outbound_detail": config,
+            },
         )
         return config
 
@@ -70,10 +74,11 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
             timeout=DEFAULT_TIMEOUT,
         )
     except ReadTimeoutError:
-        logger.error("Read Timeout", extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint})
-        raise ReferenceDataError(
-            f"Read Timeout for {outbound_integrations_endpoint}"
+        logger.error(
+            "Read Timeout",
+            extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint},
         )
+        raise ReferenceDataError(f"Read Timeout for {outbound_integrations_endpoint}")
     if response.status_code == 200:
         try:
             resp_json = response.json()
@@ -82,7 +87,9 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
                 f"Failed decoding response for Outbound Integration Detail",
                 extra={**extra_dict, "resp_text": response.text},
             )
-            raise ReferenceDataError("Failed decoding response for Outbound Integration Detail")
+            raise ReferenceDataError(
+                "Failed decoding response for Outbound Integration Detail"
+            )
         else:
             config = schemas.OutboundConfiguration.parse_obj(resp_json)
             if config:  # don't cache empty response
@@ -143,10 +150,11 @@ def get_inbound_integration_detail(
             timeout=DEFAULT_TIMEOUT,
         )
     except ReadTimeoutError:
-        logger.error("Read Timeout", extra={**extra_dict, ExtraKeys.Url: inbound_integrations_endpoint})
-        raise ReferenceDataError(
-            f"Read Timeout for {inbound_integrations_endpoint}"
+        logger.error(
+            "Read Timeout",
+            extra={**extra_dict, ExtraKeys.Url: inbound_integrations_endpoint},
         )
+        raise ReferenceDataError(f"Read Timeout for {inbound_integrations_endpoint}")
 
     if response.status_code == 200:
         try:
@@ -156,7 +164,9 @@ def get_inbound_integration_detail(
                 f"Failed decoding response for InboundIntegration Detail",
                 extra={**extra_dict, "resp_text": response.text},
             )
-            raise ReferenceDataError("Failed decoding response for InboundIntegration Detail")
+            raise ReferenceDataError(
+                "Failed decoding response for InboundIntegration Detail"
+            )
         else:
             config = schemas.IntegrationInformation.parse_obj(resp_json)
             if config:  # don't cache empty response
@@ -180,15 +190,17 @@ def dispatch_transformed_observation(
     *, stream_type: str, outbound_config_id: str, inbound_int_id: str, observation, span
 ) -> dict:
 
+    extra_dict = {
+        ExtraKeys.OutboundIntId: outbound_config_id,
+        ExtraKeys.InboundIntId: inbound_int_id,
+        ExtraKeys.Observation: observation,
+        ExtraKeys.StreamType: stream_type,
+    }
+
     if not outbound_config_id or not inbound_int_id:
         logger.error(
             "dispatch_transformed_observation - value error.",
-            extra={
-                "outbound_config_id": outbound_config_id,
-                "inbound_int_id": inbound_int_id,
-                "observation": observation,
-                "stream_type": stream_type,
-            },
+            extra=extra_dict,
         )
     span.add_event(name="begin_get_outbound_config_detail")
     config = get_outbound_config_detail(outbound_config_id)
@@ -197,11 +209,6 @@ def dispatch_transformed_observation(
     inbound_integration = get_inbound_integration_detail(inbound_int_id)
     span.add_event(name="end_get_inbound_integration_detail")
     provider = inbound_integration.provider
-    extra_dict = {
-        ExtraKeys.InboundIntId: inbound_int_id,
-        ExtraKeys.OutboundIntId: outbound_config_id,
-        ExtraKeys.StreamType: stream_type,
-    }
 
     span.add_event(name="begin_dispatch")
     if config:
@@ -264,17 +271,7 @@ def dispatch_transformed_observation(
 
 def convert_observation_to_cdip_schema(observation):
     schema = schemas.models_by_stream_type[observation.get("observation_type")]
-    # method requires a list
-    observations = [observation]
-    observations, errors = schemas.get_validated_objects(observations, schema)
-    if len(observations) > 0:
-        return observations[0]
-    else:
-        logger.error(
-            f"unable to validate observation",
-            extra={"observation": observation, ExtraKeys.Error: errors},
-        )
-        raise Exception("unable to validate observation")
+    return schema.parse_obj(observation)
 
 
 def create_message(attributes, observation):
