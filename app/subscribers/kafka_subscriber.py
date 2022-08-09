@@ -368,15 +368,18 @@ async def process_failed_unprocessed_observation(key, message):
         retry_attempt = attributes.get("retry_attempt")
         retry_unprocessed_message = create_retry_message(raw_observation, attributes)
         retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
+
+        extra_dict = {
+            ExtraKeys.DeviceId: device_id,
+            ExtraKeys.InboundIntId: integration_id,
+            ExtraKeys.StreamType: observation_type,
+            ExtraKeys.RetryTopic: retry_topic_str,
+            ExtraKeys.RetryAttempt: retry_attempt,
+        }
+
         logger.info(
             "Putting failed unprocessed observation back on queue",
-            extra={
-                ExtraKeys.DeviceId: device_id,
-                ExtraKeys.InboundIntId: integration_id,
-                ExtraKeys.StreamType: observation_type,
-                ExtraKeys.RetryTopic: retry_topic_str,
-                ExtraKeys.RetryAttempt: retry_attempt,
-            },
+            extra=extra_dict,
         )
         await retry_topic.send(key=key, value=retry_unprocessed_message)
     except Exception as e:
