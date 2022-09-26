@@ -284,10 +284,11 @@ def create_transformed_message(*, observation, destination, prefix: str):
 
     # observation_type may no longer be needed as topics are now specific to observation type
     attributes = {
-        "observation_type": prefix,
-        "device_id": observation.device_id,
-        "outbound_config_id": str(destination.id),
-        "integration_id": observation.integration_id,
+        ExtraKeys.StreamType: prefix,
+        ExtraKeys.DeviceId: observation.device_id,
+        ExtraKeys.OutboundIntId: str(destination.id),
+        ExtraKeys.InboundIntId: observation.integration_id,
+        ExtraKeys.ObservationId: observation.id
     }
 
     transformed_message = create_message(attributes, transformed_observation)

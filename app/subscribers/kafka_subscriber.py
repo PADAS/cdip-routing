@@ -115,6 +115,8 @@ async def process_observation(key, message):
                 ExtraKeys.DeviceId: observation.device_id,
                 ExtraKeys.InboundIntId: observation.integration_id,
                 ExtraKeys.StreamType: observation.observation_type,
+                ExtraKeys.ObservationId: observation.id,
+                ExtraKeys.TracingMilestone: True,
             },
         )
     except Exception as e:
@@ -177,11 +179,12 @@ async def process_transformed_observation(key, transformed_message):
             transformed_message
         )
 
-        observation_type = attributes.get("observation_type")
-        device_id = attributes.get("device_id")
-        integration_id = attributes.get("integration_id")
-        outbound_config_id = attributes.get("outbound_config_id")
-        retry_attempt: int = attributes.get("retry_attempt") or 0
+        observation_type = attributes.get(ExtraKeys.StreamType)
+        device_id = attributes.get(ExtraKeys.DeviceId)
+        integration_id = attributes.get(ExtraKeys.InboundIntId)
+        outbound_config_id = attributes.get(ExtraKeys.OutboundIntId)
+        retry_attempt: int = attributes.get(ExtraKeys.RetryAttempt) or 0
+        observation_id = attributes.get(ExtraKeys.ObservationId)
 
         logger.debug(f"transformed_observation: {transformed_observation}")
         logger.info(
@@ -192,6 +195,8 @@ async def process_transformed_observation(key, transformed_message):
                 ExtraKeys.OutboundIntId: outbound_config_id,
                 ExtraKeys.StreamType: observation_type,
                 ExtraKeys.RetryAttempt: retry_attempt,
+                ExtraKeys.TracingMilestone: True,
+                ExtraKeys.ObservationId: observation_id
             },
         )
 

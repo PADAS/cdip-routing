@@ -66,6 +66,7 @@ class ExtraKeys(str, Enum):
     def __str__(self):
         return str(self.value)
 
+    ObservationId = "observation_id"
     DeviceId = "device_id"
     InboundIntId = "inbound_integration_id"
     OutboundIntId = "outbound_integration_id"
@@ -80,3 +81,4 @@ class ExtraKeys(str, Enum):
     RetryAttempt = "retry_attempt"
     StatusCode = "status_code"
     DeadLetter = "dead_letter"
+    TracingMilestone = "tracing_milestone"
