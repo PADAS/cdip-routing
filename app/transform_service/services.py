@@ -203,9 +203,9 @@ class TransformerNotFound(Exception):
 
 
 def transform_observation(
-    *, stream_type: str, config: schemas.OutboundConfiguration, observation
+    *, config: schemas.OutboundConfiguration, observation
 ) -> dict:
-
+    stream_type = observation.observation_type
     transformer = None
     extra_dict = {
         ExtraKeys.InboundIntId: observation.integration_id,

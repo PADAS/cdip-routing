@@ -81,4 +81,17 @@ class ExtraKeys(str, Enum):
     RetryAttempt = "retry_attempt"
     StatusCode = "status_code"
     DeadLetter = "dead_letter"
+
+
+class Tracing(str, Enum):
+    def __str__(self):
+        return str(self.value)
+
+    TimeStamp = "time_stamp"
     TracingMilestone = "tracing_milestone"
+    Latency = "latency_seconds"
+    # milestones
+    MilestoneSensorsAPIReceived = "sensors_api_received"
+    MilestoneUnprocessedObservationReceived = "unprocessed_observation_received"
+    MilestoneTransformedObservationReceived = "transformed_observation_received"
+    MilestoneTransformedObservationDispatched = "transformed_observation_dispatched"

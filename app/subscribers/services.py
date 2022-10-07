@@ -186,7 +186,7 @@ def get_inbound_integration_detail(
         raise ReferenceDataError(f"Request for InboundIntegration({integration_id})")
 
 
-def dispatch_transformed_observation(
+def dispatch_transformed_observation(*,
     stream_type: str, outbound_config_id: str, inbound_int_id: str, observation
 ) -> dict:
 
@@ -274,9 +274,9 @@ def create_message(attributes, observation):
     return message
 
 
-def create_transformed_message(*, observation, destination, prefix: str):
+def create_transformed_message(*, observation, destination, tracing_dict):
     transformed_observation = transform_observation(
-        stream_type=prefix, config=destination, observation=observation
+        config=destination, observation=observation
     )
     if not transformed_observation:
         return None
@@ -284,11 +284,12 @@ def create_transformed_message(*, observation, destination, prefix: str):
 
     # observation_type may no longer be needed as topics are now specific to observation type
     attributes = {
-        ExtraKeys.StreamType: prefix,
+        ExtraKeys.StreamType: observation.observation_type,
         ExtraKeys.DeviceId: observation.device_id,
         ExtraKeys.OutboundIntId: str(destination.id),
         ExtraKeys.InboundIntId: observation.integration_id,
-        ExtraKeys.ObservationId: observation.id
+        ExtraKeys.ObservationId: observation.id,
+        **tracing_dict
     }
 
     transformed_message = create_message(attributes, transformed_observation)

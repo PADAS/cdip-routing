@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import certifi
 import faust
@@ -7,7 +7,7 @@ from aiokafka.helpers import create_ssl_context
 from cdip_connector.core.routing import TopicEnum
 
 from cdip_connector.core import cdip_settings
-from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
+from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys, Tracing
 from app.core.utils import ReferenceDataError, DispatcherException
 from app.subscribers.services import (
     extract_fields_from_message,
@@ -108,6 +108,13 @@ async def process_observation(key, message):
         logger.debug(f"observation: {raw_observation}")
         logger.debug(f"attributes: {attributes}")
 
+        observation_processing_start = attributes.get(Tracing.MilestoneSensorsAPIReceived)
+        latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
+        tracing_dict = {Tracing.TracingMilestone: True,
+                        Tracing.MilestoneSensorsAPIReceived: observation_processing_start,
+                        Tracing.MilestoneUnprocessedObservationReceived: datetime.utcnow(),
+                        Tracing.Latency: latency_delta}
+
         observation = convert_observation_to_cdip_schema(raw_observation)
         logger.info(
             "received unprocessed observation",
@@ -116,7 +123,7 @@ async def process_observation(key, message):
                 ExtraKeys.InboundIntId: observation.integration_id,
                 ExtraKeys.StreamType: observation.observation_type,
                 ExtraKeys.ObservationId: observation.id,
-                ExtraKeys.TracingMilestone: True,
+                **tracing_dict
             },
         )
     except Exception as e:
@@ -139,7 +146,7 @@ async def process_observation(key, message):
                 jsonified_data = create_transformed_message(
                     observation=observation,
                     destination=destination,
-                    prefix=observation.observation_type,
+                    tracing_dict=tracing_dict
                 )
                 if jsonified_data:
                     key = get_key_for_transformed_observation(key, destination.id)
@@ -186,6 +193,13 @@ async def process_transformed_observation(key, transformed_message):
         retry_attempt: int = attributes.get(ExtraKeys.RetryAttempt) or 0
         observation_id = attributes.get(ExtraKeys.ObservationId)
 
+        observation_processing_start = attributes.get(Tracing.MilestoneSensorsAPIReceived)
+        latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
+        tracing_dict = {Tracing.TracingMilestone: True,
+                        Tracing.MilestoneSensorsAPIReceived: observation_processing_start,
+                        Tracing.MilestoneUnprocessedObservationReceived: datetime.utcnow(),
+                        Tracing.Latency: latency_delta}
+
         logger.debug(f"transformed_observation: {transformed_observation}")
         logger.info(
             "received transformed observation",
@@ -195,8 +209,8 @@ async def process_transformed_observation(key, transformed_message):
                 ExtraKeys.OutboundIntId: outbound_config_id,
                 ExtraKeys.StreamType: observation_type,
                 ExtraKeys.RetryAttempt: retry_attempt,
-                ExtraKeys.TracingMilestone: True,
-                ExtraKeys.ObservationId: observation_id
+                ExtraKeys.ObservationId: observation_id,
+                **tracing_dict
             },
         )
 
@@ -210,19 +224,27 @@ async def process_transformed_observation(key, transformed_message):
         )
         raise e
     try:
+        dispatch_transformed_observation(
+            stream_type=observation_type,
+            outbound_config_id=outbound_config_id,
+            inbound_int_id=integration_id,
+            observation=transformed_observation
+        )
+
+        observation_processing_start = attributes.get(Tracing.MilestoneSensorsAPIReceived)
+        latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
+        tracing_dict = {Tracing.TracingMilestone: True,
+                        Tracing.MilestoneSensorsAPIReceived: observation_processing_start,
+                        Tracing.MilestoneTransformedObservationDispatched: datetime.utcnow(),
+                        Tracing.Latency: latency_delta}
         logger.info(
-            "Dispatching for transformed observation.",
+            "Dispatched transformed observation.",
             extra={
                 ExtraKeys.InboundIntId: integration_id,
                 ExtraKeys.OutboundIntId: outbound_config_id,
                 ExtraKeys.StreamType: observation_type,
+                **tracing_dict
             },
-        )
-        dispatch_transformed_observation(
-            observation_type,
-            outbound_config_id,
-            integration_id,
-            transformed_observation,
         )
     except (DispatcherException, ReferenceDataError):
         logger.exception(
@@ -292,7 +314,7 @@ async def process_failed_transformed_observation(key, transformed_message):
                     ExtraKeys.DeadLetter: True,
                 },
             )
-        await retry_topic.send(value=retry_transformed_message)
+        # await retry_topic.send(value=retry_transformed_message)
     except Exception as e:
         logger.exception(
             "Unexpected Error occurred while preparing failed transformed observation for reprocessing",
@@ -335,7 +357,7 @@ async def process_failed_unprocessed_observation(key, message):
                     ExtraKeys.DeadLetter: True,
                 },
             )
-        await retry_topic.send(value=retry_unprocessed_message)
+        # await retry_topic.send(value=retry_unprocessed_message)
     except Exception as e:
         # When all else fails post to dead letter
         logger.exception(
