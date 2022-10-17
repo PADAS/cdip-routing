@@ -7,7 +7,7 @@ from aiokafka.helpers import create_ssl_context
 from cdip_connector.core.routing import TopicEnum
 
 from cdip_connector.core import cdip_settings
-from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys, Tracing
+from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys, Tracing, init_tracing_dict
 from app.core.utils import ReferenceDataError, DispatcherException
 from app.subscribers.services import (
     extract_fields_from_message,
@@ -109,12 +109,8 @@ async def process_observation(key, message):
         logger.debug(f"attributes: {attributes}")
 
         observation_processing_start = attributes.get(Tracing.ObservationProcessingStart)
-        latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
-        tracing_dict = {Tracing.TracingMilestone: True,
-                        Tracing.ObservationProcessingStart: observation_processing_start,
-                        Tracing.MilestoneLabel: Tracing.MilestoneUnprocessedObservationReceived,
-                        Tracing.MilestoneUnprocessedObservationReceived: datetime.utcnow(),
-                        Tracing.Latency: latency_delta}
+        tracing_dict = init_tracing_dict(observation_processing_start=observation_processing_start,
+                                         milestone=Tracing.MilestoneUnprocessedObservationReceived)
 
         observation = convert_observation_to_cdip_schema(raw_observation)
         logger.info(
@@ -195,12 +191,8 @@ async def process_transformed_observation(key, transformed_message):
         observation_id = attributes.get(ExtraKeys.ObservationId)
 
         observation_processing_start = attributes.get(Tracing.ObservationProcessingStart)
-        latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
-        tracing_dict = {Tracing.TracingMilestone: True,
-                        Tracing.ObservationProcessingStart: observation_processing_start,
-                        Tracing.MilestoneLabel: Tracing.MilestoneUnprocessedObservationReceived,
-                        Tracing.MilestoneUnprocessedObservationReceived: datetime.utcnow(),
-                        Tracing.Latency: latency_delta}
+        tracing_dict = init_tracing_dict(observation_processing_start=observation_processing_start,
+                                         milestone=Tracing.MilestoneTransformedObservationReceived)
 
         logger.debug(f"transformed_observation: {transformed_observation}")
         logger.info(
@@ -234,11 +226,9 @@ async def process_transformed_observation(key, transformed_message):
         )
 
         observation_processing_start = attributes.get(Tracing.ObservationProcessingStart)
-        latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
-        tracing_dict = {Tracing.TracingMilestone: True,
-                        Tracing.MilestoneLabel: Tracing.MilestoneTransformedObservationDispatched,
-                        Tracing.MilestoneTransformedObservationDispatched: datetime.utcnow(),
-                        Tracing.Latency: latency_delta}
+        tracing_dict = init_tracing_dict(observation_processing_start=observation_processing_start,
+                                         milestone=Tracing.MilestoneTransformedObservationDispatched)
+
         logger.info(
             "Dispatched transformed observation.",
             extra={

@@ -1,6 +1,7 @@
 import sys
 import logging
 import logging.config
+from datetime import datetime
 from enum import Enum
 from app import settings
 
@@ -96,3 +97,14 @@ class Tracing(str, Enum):
     MilestoneUnprocessedObservationReceived = "unprocessed_observation_received"
     MilestoneTransformedObservationReceived = "transformed_observation_received"
     MilestoneTransformedObservationDispatched = "transformed_observation_dispatched"
+
+
+def init_tracing_dict(*, observation_processing_start, milestone):
+    tracing_dict = {Tracing.TracingMilestone: True,
+                    Tracing.MilestoneLabel: milestone}
+    if observation_processing_start:
+        latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
+        tracing_dict = {Tracing.ObservationProcessingStart: observation_processing_start,
+                        Tracing.Latency: latency_delta}
+
+    return tracing_dict
