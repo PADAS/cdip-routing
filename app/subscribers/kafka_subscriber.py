@@ -108,10 +108,11 @@ async def process_observation(key, message):
         logger.debug(f"observation: {raw_observation}")
         logger.debug(f"attributes: {attributes}")
 
-        observation_processing_start = attributes.get(Tracing.MilestoneSensorsAPIReceived)
+        observation_processing_start = attributes.get(Tracing.ObservationProcessingStart)
         latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
         tracing_dict = {Tracing.TracingMilestone: True,
-                        Tracing.MilestoneSensorsAPIReceived: observation_processing_start,
+                        Tracing.ObservationProcessingStart: observation_processing_start,
+                        Tracing.MilestoneLabel: Tracing.MilestoneUnprocessedObservationReceived,
                         Tracing.MilestoneUnprocessedObservationReceived: datetime.utcnow(),
                         Tracing.Latency: latency_delta}
 
@@ -193,10 +194,11 @@ async def process_transformed_observation(key, transformed_message):
         retry_attempt: int = attributes.get(ExtraKeys.RetryAttempt) or 0
         observation_id = attributes.get(ExtraKeys.ObservationId)
 
-        observation_processing_start = attributes.get(Tracing.MilestoneSensorsAPIReceived)
+        observation_processing_start = attributes.get(Tracing.ObservationProcessingStart)
         latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
         tracing_dict = {Tracing.TracingMilestone: True,
-                        Tracing.MilestoneSensorsAPIReceived: observation_processing_start,
+                        Tracing.ObservationProcessingStart: observation_processing_start,
+                        Tracing.MilestoneLabel: Tracing.MilestoneUnprocessedObservationReceived,
                         Tracing.MilestoneUnprocessedObservationReceived: datetime.utcnow(),
                         Tracing.Latency: latency_delta}
 
@@ -231,10 +233,10 @@ async def process_transformed_observation(key, transformed_message):
             observation=transformed_observation
         )
 
-        observation_processing_start = attributes.get(Tracing.MilestoneSensorsAPIReceived)
+        observation_processing_start = attributes.get(Tracing.ObservationProcessingStart)
         latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
         tracing_dict = {Tracing.TracingMilestone: True,
-                        Tracing.MilestoneSensorsAPIReceived: observation_processing_start,
+                        Tracing.MilestoneLabel: Tracing.MilestoneTransformedObservationDispatched,
                         Tracing.MilestoneTransformedObservationDispatched: datetime.utcnow(),
                         Tracing.Latency: latency_delta}
         logger.info(

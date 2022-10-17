@@ -89,9 +89,10 @@ class Tracing(str, Enum):
 
     TimeStamp = "time_stamp"
     TracingMilestone = "tracing_milestone"
+    MilestoneLabel = "milestone_label"
     Latency = "latency_seconds"
-    # milestones
-    MilestoneSensorsAPIReceived = "sensors_api_received"
+    # milestonesTracing.MilestoneSensorsAPIReceived
+    ObservationProcessingStart = "observation_processing_start"
     MilestoneUnprocessedObservationReceived = "unprocessed_observation_received"
     MilestoneTransformedObservationReceived = "transformed_observation_received"
     MilestoneTransformedObservationDispatched = "transformed_observation_dispatched"
