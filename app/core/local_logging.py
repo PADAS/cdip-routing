@@ -104,7 +104,5 @@ def init_tracing_dict(*, observation_processing_start, milestone):
                     Tracing.MilestoneLabel: milestone}
     if observation_processing_start:
         latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
-        tracing_dict = {Tracing.ObservationProcessingStart: observation_processing_start,
-                        Tracing.Latency: latency_delta}
-
+        tracing_dict[Tracing.Latency] = latency_delta
     return tracing_dict
