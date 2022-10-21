@@ -108,9 +108,9 @@ async def process_observation(key, message):
         logger.debug(f"observation: {raw_observation}")
         logger.debug(f"attributes: {attributes}")
 
-        observation_processing_start = attributes.get(Tracing.ObservationProcessingStart)
+        observation_processing_start = attributes.get(Tracing.ObservationProcessingStart.value)
         tracing_dict = init_tracing_dict(observation_processing_start=observation_processing_start,
-                                         milestone=Tracing.MilestoneUnprocessedObservationReceived)
+                                         milestone=Tracing.MilestoneUnprocessedObservationReceived.value)
 
         observation = convert_observation_to_cdip_schema(raw_observation)
         logger.info(
@@ -190,9 +190,9 @@ async def process_transformed_observation(key, transformed_message):
         retry_attempt: int = attributes.get(ExtraKeys.RetryAttempt) or 0
         observation_id = attributes.get(ExtraKeys.ObservationId)
 
-        observation_processing_start = attributes.get(Tracing.ObservationProcessingStart)
+        observation_processing_start = attributes.get(Tracing.ObservationProcessingStart.value)
         tracing_dict = init_tracing_dict(observation_processing_start=observation_processing_start,
-                                         milestone=Tracing.MilestoneTransformedObservationReceived)
+                                         milestone=Tracing.MilestoneTransformedObservationReceived.value)
 
         logger.debug(f"transformed_observation: {transformed_observation}")
         logger.info(

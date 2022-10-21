@@ -100,9 +100,10 @@ class Tracing(str, Enum):
 
 
 def init_tracing_dict(*, observation_processing_start, milestone):
-    tracing_dict = {Tracing.TracingMilestone: True,
-                    Tracing.MilestoneLabel: milestone}
+    tracing_dict = {Tracing.TracingMilestone.value: True,
+                    Tracing.MilestoneLabel.value: milestone,
+                    Tracing.ObservationProcessingStart.value: observation_processing_start}
     if observation_processing_start:
         latency_delta = (datetime.utcnow() - datetime.fromisoformat(observation_processing_start)).total_seconds()
-        tracing_dict[Tracing.Latency] = latency_delta
+        tracing_dict[Tracing.Latency.value] = latency_delta
     return tracing_dict
