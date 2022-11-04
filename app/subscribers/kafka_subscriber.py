@@ -5,8 +5,8 @@ import certifi
 import faust
 from aiokafka.helpers import create_ssl_context
 from cdip_connector.core.routing import TopicEnum
-
 from cdip_connector.core import cdip_settings
+from opentelemetry.trace import SpanKind
 from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
 from app.core.utils import ReferenceDataError, DispatcherException
 from app.subscribers.services import (
@@ -24,8 +24,9 @@ from app.transform_service.services import (
     get_all_outbound_configs_for_id,
     update_observation_with_device_configuration,
 )
-
 import app.settings as routing_settings
+from app.core import tracing  #  Opentelemetry Tracing
+from opentelemetry import context
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ topics_dict = {
 }
 
 
+@tracing.faust_instrumentation.load_context
 async def process_observation(key, message):
     """
     Handle one message that has not yet been processed.
@@ -108,97 +110,110 @@ async def process_observation(key, message):
     it decorates it with Device-specific information fetched from
     Gundi's portal.
     """
-    try:
-        logger.debug(f"message received: {message}")
-        raw_observation, attributes = extract_fields_from_message(message)
-        logger.debug(f"observation: {raw_observation}")
-        logger.debug(f"attributes: {attributes}")
+    # Trace observations with Open Telemetry
+    with tracing.tracer.start_as_current_span(
+            "routing_service.process_observation", kind=SpanKind.CONSUMER
+    ) as current_span:
+        current_span.add_event(name="routing_service.observations_received_at_consumer")
+        current_span.set_attribute("message", str(message))
+        current_span.set_attribute("environment", "local-dev")
+        current_span.set_attribute("service", "cdip-routing")
+        try:
+            logger.debug(f"message received: {message}")
+            raw_observation, attributes = extract_fields_from_message(message)
+            logger.debug(f"observation: {raw_observation}")
+            logger.debug(f"attributes: {attributes}")
 
-        observation = convert_observation_to_cdip_schema(raw_observation)
-        logger.info(
-            "received unprocessed observation",
-            extra={
-                ExtraKeys.DeviceId: observation.device_id,
-                ExtraKeys.InboundIntId: observation.integration_id,
-                ExtraKeys.StreamType: observation.observation_type,
-            },
-        )
-    except Exception as e:
-        logger.exception(
-            f"Exception occurred prior to processing observation",
-            extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.Observation: message},
-        )
-        raise e
-
-    try:
-        if observation:
-
-            observation = await update_observation_with_device_configuration(
-                observation
-            )
-            int_id = observation.integration_id
-            destinations = get_all_outbound_configs_for_id(
-                int_id, observation.device_id
-            )
-
-            if len(destinations) < 1:
-                logger.warning(
-                    "Updating observation with Device info, but it has no Destinations. This is a configuration error.",
-                    extra={
-                        ExtraKeys.DeviceId: observation.device_id,
-                        ExtraKeys.InboundIntId: observation.integration_id,
-                        ExtraKeys.StreamType: observation.observation_type,
-                        ExtraKeys.AttentionNeeded: True,
-                    },
-                )
-
-            for destination in destinations:
-                jsonified_data = create_transformed_message(
-                    observation=observation,
-                    destination=destination,
-                    prefix=observation.observation_type,
-                )
-
-                if jsonified_data:
-                    key = get_key_for_transformed_observation(key, destination.id)
-                    await observations_transformed_topic.send(
-                        key=key, value=jsonified_data
-                    )
-        else:
-            logger.error(
-                "Logic error, expecting 'observation' to be not None.",
+            observation = convert_observation_to_cdip_schema(raw_observation)
+            logger.info(
+                "received unprocessed observation",
                 extra={
                     ExtraKeys.DeviceId: observation.device_id,
                     ExtraKeys.InboundIntId: observation.integration_id,
                     ExtraKeys.StreamType: observation.observation_type,
-                    ExtraKeys.AttentionNeeded: True
                 },
             )
-    except ReferenceDataError:
-        logger.exception(
-            f"External error occurred obtaining reference data for observation",
-            extra={
-                ExtraKeys.AttentionNeeded: True,
-                ExtraKeys.DeviceId: observation.device_id,
-                ExtraKeys.InboundIntId: observation.integration_id,
-                ExtraKeys.StreamType: observation.observation_type,
-            },
-        )
-        await process_failed_unprocessed_observation(key, message)
+        except Exception as e:
+            logger.exception(
+                f"Exception occurred prior to processing observation",
+                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.Observation: message},
+            )
+            raise e
 
-    except Exception:
-        logger.exception(
-            f"Unexpected internal exception occurred processing observation",
-            extra={
-                ExtraKeys.AttentionNeeded: True,
-                ExtraKeys.DeadLetter: True,
-                ExtraKeys.DeviceId: observation.device_id,
-                ExtraKeys.InboundIntId: observation.integration_id,
-                ExtraKeys.StreamType: observation.observation_type,
-            },
-        )
-        # Unexpected internal errors will be redirected straight to deadletter
-        await observations_unprocessed_deadletter.send(value=message)
+        try:
+            if observation:
+
+                observation = await update_observation_with_device_configuration(
+                    observation
+                )
+                int_id = observation.integration_id
+                destinations = get_all_outbound_configs_for_id(
+                    int_id, observation.device_id
+                )
+
+                if len(destinations) < 1:
+                    logger.warning(
+                        "Updating observation with Device info, but it has no Destinations. This is a configuration error.",
+                        extra={
+                            ExtraKeys.DeviceId: observation.device_id,
+                            ExtraKeys.InboundIntId: observation.integration_id,
+                            ExtraKeys.StreamType: observation.observation_type,
+                            ExtraKeys.AttentionNeeded: True,
+                        },
+                    )
+
+                for destination in destinations:
+                    jsonified_data = create_transformed_message(
+                        observation=observation,
+                        destination=destination,
+                        prefix=observation.observation_type,
+                    )
+
+                    if jsonified_data:
+                        key = get_key_for_transformed_observation(key, destination.id)
+                        with tracing.tracer.start_as_current_span(  # Trace observations with Open Telemetry
+                                "routing_service.observations_transformed_topic.send", kind=SpanKind.PRODUCER
+                        ):
+                            tracing_headers = tracing.faust_instrumentation.build_context_headers()
+                            await observations_transformed_topic.send(
+                                key=key, value=jsonified_data, headers=tracing_headers  # Tracing context
+                            )
+                            current_span.add_event(name="routing_service.transformed_observation_sent_to_dispatcher")
+            else:
+                logger.error(
+                    "Logic error, expecting 'observation' to be not None.",
+                    extra={
+                        ExtraKeys.DeviceId: observation.device_id,
+                        ExtraKeys.InboundIntId: observation.integration_id,
+                        ExtraKeys.StreamType: observation.observation_type,
+                        ExtraKeys.AttentionNeeded: True
+                    },
+                )
+        except ReferenceDataError:
+            logger.exception(
+                f"External error occurred obtaining reference data for observation",
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.DeviceId: observation.device_id,
+                    ExtraKeys.InboundIntId: observation.integration_id,
+                    ExtraKeys.StreamType: observation.observation_type,
+                },
+            )
+            await process_failed_unprocessed_observation(key, message)
+
+        except Exception:
+            logger.exception(
+                f"Unexpected internal exception occurred processing observation",
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.DeadLetter: True,
+                    ExtraKeys.DeviceId: observation.device_id,
+                    ExtraKeys.InboundIntId: observation.integration_id,
+                    ExtraKeys.StreamType: observation.observation_type,
+                },
+            )
+            # Unexpected internal errors will be redirected straight to deadletter
+            await observations_unprocessed_deadletter.send(value=message)
 
 
 async def process_transformed_observation(key, transformed_message):
