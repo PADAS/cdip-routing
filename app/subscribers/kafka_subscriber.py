@@ -217,80 +217,101 @@ async def process_observation(key, message):
 
 
 async def process_transformed_observation(key, transformed_message):
-    try:
-        transformed_observation, attributes = extract_fields_from_message(
-            transformed_message
-        )
+    # ToDo: Implement a Faust instrumentor class and contribute with open telemetry?
+    faust_event_headers = faust.streams.current_event().headers
+    ctx, links = tracing.get_tracing_context_from_kafka(headers=faust_event_headers.items())
+    context.attach(ctx)
+    #######################################################################
+    #######################################################################
+    # Open Telemetry Metrics Test
+    #######################################################################
+    with tracing.tracer.start_as_current_span("process_transformed_observation", links=links, kind=SpanKind.CONSUMER) as current_span:
+        current_span.add_event(name="transformed_observation_received_at_consumer")
+        current_span.set_attribute("transformed_message", str(transformed_message))
+        current_span.set_attribute("environment", "local-dev")
+        current_span.set_attribute("service", "cdip-routing")
+        try:
+            transformed_observation, attributes = extract_fields_from_message(
+                transformed_message
+            )
 
-        observation_type = attributes.get("observation_type")
-        device_id = attributes.get("device_id")
-        integration_id = attributes.get("integration_id")
-        outbound_config_id = attributes.get("outbound_config_id")
-        retry_attempt: int = attributes.get("retry_attempt") or 0
+            observation_type = attributes.get("observation_type")
+            device_id = attributes.get("device_id")
+            integration_id = attributes.get("integration_id")
+            outbound_config_id = attributes.get("outbound_config_id")
+            retry_attempt: int = attributes.get("retry_attempt") or 0
 
-        logger.debug(f"transformed_observation: {transformed_observation}")
-        logger.info(
-            "received transformed observation",
-            extra={
-                ExtraKeys.DeviceId: device_id,
-                ExtraKeys.InboundIntId: integration_id,
-                ExtraKeys.OutboundIntId: outbound_config_id,
-                ExtraKeys.StreamType: observation_type,
-                ExtraKeys.RetryAttempt: retry_attempt,
-            },
-        )
+            logger.debug(f"transformed_observation: {transformed_observation}")
+            logger.info(
+                "received transformed observation",
+                extra={
+                    ExtraKeys.DeviceId: device_id,
+                    ExtraKeys.InboundIntId: integration_id,
+                    ExtraKeys.OutboundIntId: outbound_config_id,
+                    ExtraKeys.StreamType: observation_type,
+                    ExtraKeys.RetryAttempt: retry_attempt,
+                },
+            )
 
-    except Exception as e:
-        logger.exception(
-            f"Exception occurred prior to dispatching transformed observation",
-            extra={
-                ExtraKeys.AttentionNeeded: True,
-                ExtraKeys.Observation: transformed_message,
-            },
-        )
-        raise e
-    try:
-        logger.info(
-            "Dispatching for transformed observation.",
-            extra={
-                ExtraKeys.InboundIntId: integration_id,
-                ExtraKeys.OutboundIntId: outbound_config_id,
-                ExtraKeys.StreamType: observation_type,
-            },
-        )
-        dispatch_transformed_observation(
-            observation_type,
-            outbound_config_id,
-            integration_id,
-            transformed_observation,
-        )
-    except (DispatcherException, ReferenceDataError):
-        logger.exception(
-            f"External error occurred processing transformed observation",
-            extra={
-                ExtraKeys.AttentionNeeded: True,
-                ExtraKeys.DeviceId: device_id,
-                ExtraKeys.InboundIntId: integration_id,
-                ExtraKeys.OutboundIntId: outbound_config_id,
-                ExtraKeys.StreamType: observation_type,
-            },
-        )
-        await process_failed_transformed_observation(key, transformed_message)
+        except Exception as e:
+            logger.exception(
+                f"Exception occurred prior to dispatching transformed observation",
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.Observation: transformed_message,
+                },
+            )
+            raise e
+        try:
+            logger.info(
+                "Dispatching for transformed observation.",
+                extra={
+                    ExtraKeys.InboundIntId: integration_id,
+                    ExtraKeys.OutboundIntId: outbound_config_id,
+                    ExtraKeys.StreamType: observation_type,
+                },
+            )
+            #######################################################################
+            # Open Telemetry Metrics Test
+            #######################################################################
+            with tracing.tracer.start_as_current_span(
+                    "dispatch_transformed_observation",
+                    kind=SpanKind.CONSUMER
+            ) as current_span:
+                dispatch_transformed_observation(
+                    observation_type,
+                    outbound_config_id,
+                    integration_id,
+                    transformed_observation,
+                )
+                current_span.add_event(name="observation_dispatched_successfully")
+        except (DispatcherException, ReferenceDataError):
+            logger.exception(
+                f"External error occurred processing transformed observation",
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.DeviceId: device_id,
+                    ExtraKeys.InboundIntId: integration_id,
+                    ExtraKeys.OutboundIntId: outbound_config_id,
+                    ExtraKeys.StreamType: observation_type,
+                },
+            )
+            await process_failed_transformed_observation(key, transformed_message)
 
-    except Exception:
-        logger.exception(
-            f"Unexpected internal error occurred processing transformed observation",
-            extra={
-                ExtraKeys.AttentionNeeded: True,
-                ExtraKeys.DeadLetter: True,
-                ExtraKeys.DeviceId: device_id,
-                ExtraKeys.InboundIntId: integration_id,
-                ExtraKeys.OutboundIntId: outbound_config_id,
-                ExtraKeys.StreamType: observation_type,
-            },
-        )
-        # Unexpected internal errors will be redirected straight to deadletter
-        await observations_transformed_deadletter.send(value=transformed_message)
+        except Exception:
+            logger.exception(
+                f"Unexpected internal error occurred processing transformed observation",
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.DeadLetter: True,
+                    ExtraKeys.DeviceId: device_id,
+                    ExtraKeys.InboundIntId: integration_id,
+                    ExtraKeys.OutboundIntId: outbound_config_id,
+                    ExtraKeys.StreamType: observation_type,
+                },
+            )
+            # Unexpected internal errors will be redirected straight to deadletter
+            await observations_transformed_deadletter.send(value=transformed_message)
 
 
 async def process_failed_transformed_observation(key, transformed_message):

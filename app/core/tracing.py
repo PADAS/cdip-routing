@@ -1,5 +1,5 @@
 # Open telemetry metrics (Distributed Tracing)
-from opentelemetry import context, propagate, trace
+from opentelemetry import propagate, trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
@@ -11,6 +11,8 @@ from opentelemetry.propagate import set_global_textmap
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.instrumentation.confluent_kafka import ConfluentKafkaInstrumentor
+from opentelemetry.trace import Link
+from opentelemetry.instrumentation.confluent_kafka.utils import _kafka_getter, _kafka_setter
 
 
 def configure_tracer(name: str, version: str = ""):
@@ -53,11 +55,6 @@ def get_tracing_context_from_kafka(headers):
     # Open Telemetry Metrics Test
     #######################################################################
     # ToDo: Implement an instrumentor for faust
-    # Retrieve context from Kafka headers
-    # PROPAGATOR = propagate.get_global_textmap()
-    from opentelemetry import propagate
-    from opentelemetry.trace import Link
-    from opentelemetry.instrumentation.confluent_kafka.utils import _kafka_getter
     ctx = propagate.extract(carrier=headers, getter=_kafka_getter)
     links = []
     if ctx:
@@ -65,3 +62,10 @@ def get_tracing_context_from_kafka(headers):
             if hasattr(item, "get_span_context"):
                 links.append(Link(context=item.get_span_context()))
     return ctx, links
+
+
+def inject_tracing_context_into_kafka(headers):
+    propagate.inject(
+        headers,
+        setter=_kafka_setter,
+    )
