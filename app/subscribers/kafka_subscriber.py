@@ -225,8 +225,8 @@ async def process_transformed_observation(key, transformed_message):
     #######################################################################
     # Open Telemetry Metrics Test
     #######################################################################
-    with tracing.tracer.start_as_current_span("process_transformed_observation", links=links, kind=SpanKind.CONSUMER) as current_span:
-        current_span.add_event(name="transformed_observation_received_at_consumer")
+    with tracing.tracer.start_as_current_span("routing_service.process_transformed_observation", kind=SpanKind.CONSUMER) as current_span:
+        current_span.add_event(name="routing_service.transformed_observation_received_at_dispatcher")
         current_span.set_attribute("transformed_message", str(transformed_message))
         current_span.set_attribute("environment", "local-dev")
         current_span.set_attribute("service", "cdip-routing")
@@ -275,7 +275,7 @@ async def process_transformed_observation(key, transformed_message):
             # Open Telemetry Metrics Test
             #######################################################################
             with tracing.tracer.start_as_current_span(
-                    "dispatch_transformed_observation",
+                    "routing_service.dispatch_transformed_observation",
                     kind=SpanKind.CONSUMER
             ) as current_span:
                 dispatch_transformed_observation(
@@ -284,7 +284,8 @@ async def process_transformed_observation(key, transformed_message):
                     integration_id,
                     transformed_observation,
                 )
-                current_span.add_event(name="observation_dispatched_successfully")
+                current_span.set_attribute("is_dispatched_successfully", True)
+                current_span.add_event(name="routing_service.observation_dispatched_successfully")
         except (DispatcherException, ReferenceDataError):
             logger.exception(
                 f"External error occurred processing transformed observation",
