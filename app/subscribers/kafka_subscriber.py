@@ -225,7 +225,7 @@ async def process_transformed_observation(key, transformed_message):
     #######################################################################
     # Open Telemetry Metrics Test
     #######################################################################
-    with tracing.tracer.start_as_current_span("routing_service.process_transformed_observation", kind=SpanKind.CONSUMER) as current_span:
+    with tracing.tracer.start_as_current_span("routing_service.process_transformed_observation", links=links, kind=SpanKind.CONSUMER) as current_span:
         current_span.add_event(name="routing_service.transformed_observation_received_at_dispatcher")
         current_span.set_attribute("transformed_message", str(transformed_message))
         current_span.set_attribute("environment", "local-dev")
@@ -276,7 +276,7 @@ async def process_transformed_observation(key, transformed_message):
             #######################################################################
             with tracing.tracer.start_as_current_span(
                     "routing_service.dispatch_transformed_observation",
-                    kind=SpanKind.CONSUMER
+                    kind=SpanKind.CLIENT
             ) as current_span:
                 dispatch_transformed_observation(
                     observation_type,

@@ -239,5 +239,7 @@ opentelemetry-instrumentation-aiohttp-client==0.34b0
     # Manually added
 opentelemetry-instrumentation-confluent-kafka==0.35b0
     # Manually added
+opentelemetry-exporter-otlp-proto-http==1.14.0
+    # Manually added
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
