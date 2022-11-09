@@ -225,12 +225,11 @@ async def process_transformed_observation(key, transformed_message):
             observation=transformed_observation
         )
 
-        observation_processing_start = attributes.get(Tracing.ObservationProcessingStart)
         tracing_dict = init_tracing_dict(observation_processing_start=observation_processing_start,
                                          milestone=Tracing.MilestoneTransformedObservationDispatched)
 
         logger.info(
-            "Dispatched transformed observation.",
+            "dispatched transformed observation",
             extra={
                 ExtraKeys.InboundIntId: integration_id,
                 ExtraKeys.OutboundIntId: outbound_config_id,
