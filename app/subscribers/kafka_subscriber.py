@@ -102,6 +102,12 @@ topics_dict = {
 
 
 async def process_observation(key, message):
+    """
+    Handle one message that has not yet been processed.
+    This function transforms a message into an appropriate Model and
+    it decorates it with Device-specific information fetched from
+    Gundi's portal.
+    """
     try:
         logger.debug(f"message received: {message}")
         raw_observation, attributes = extract_fields_from_message(message)
@@ -123,8 +129,10 @@ async def process_observation(key, message):
             extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.Observation: message},
         )
         raise e
+
     try:
         if observation:
+
             observation = await update_observation_with_device_configuration(
                 observation
             )
@@ -133,17 +141,39 @@ async def process_observation(key, message):
                 int_id, observation.device_id
             )
 
+            if len(destinations) < 1:
+                logger.warning(
+                    "Updating observation with Device info, but it has no Destinations. This is a configuration error.",
+                    extra={
+                        ExtraKeys.DeviceId: observation.device_id,
+                        ExtraKeys.InboundIntId: observation.integration_id,
+                        ExtraKeys.StreamType: observation.observation_type,
+                        ExtraKeys.AttentionNeeded: True,
+                    },
+                )
+
             for destination in destinations:
                 jsonified_data = create_transformed_message(
                     observation=observation,
                     destination=destination,
                     prefix=observation.observation_type,
                 )
+
                 if jsonified_data:
                     key = get_key_for_transformed_observation(key, destination.id)
                     await observations_transformed_topic.send(
                         key=key, value=jsonified_data
                     )
+        else:
+            logger.error(
+                "Logic error, expecting 'observation' to be not None.",
+                extra={
+                    ExtraKeys.DeviceId: observation.device_id,
+                    ExtraKeys.InboundIntId: observation.integration_id,
+                    ExtraKeys.StreamType: observation.observation_type,
+                    ExtraKeys.AttentionNeeded: True
+                },
+            )
     except ReferenceDataError:
         logger.exception(
             f"External error occurred obtaining reference data for observation",

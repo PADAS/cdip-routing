@@ -309,17 +309,18 @@ class SMARTTransformer:
 
         # process attachments
         attachments = []
-        for event_file in event.files:
-            file_extension = pathlib.Path(event_file.get("filename")).suffix
-            download_file_name = event_file.get("id") + file_extension
-            downloaded_file = self.cloud_storage.download(download_file_name)
-            downloaded_file_base64 = base64.b64encode(
-                downloaded_file.getvalue()
-            ).decode()
-            file = File(
-                filename=event_file.get("filename"), data=downloaded_file_base64
-            )
-            attachments.append(file)
+        if is_er_event:
+            for event_file in event.files:
+                file_extension = pathlib.Path(event_file.get("filename")).suffix
+                download_file_name = event_file.get("id") + file_extension
+                downloaded_file = self.cloud_storage.download(download_file_name)
+                downloaded_file_base64 = base64.b64encode(
+                    downloaded_file.getvalue()
+                ).decode()
+                file = File(
+                    filename=event_file.get("filename"), data=downloaded_file_base64
+                )
+                attachments.append(file)
 
         smart_data_type = (
             "integrateincident"
@@ -333,7 +334,7 @@ class SMARTTransformer:
             if event.event_details.get("smart_observation_uuid")
             else None
         )
-        if not observation_uuid:
+        if is_er_event and not observation_uuid:
             raise ObservationUUIDValueException
 
         smart_observation = SmartObservation(
