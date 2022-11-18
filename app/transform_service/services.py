@@ -172,9 +172,10 @@ async def ensure_device_integration(integration_id, device_id: str):
 
     logger.debug("Cache miss for Device %s", device_id)
 
+    # Rely on default (read:5m). This ought to be fine here, since a busy Portal means we
+    # need to wait anyway.
     async with aiohttp.ClientSession(
-        timeout=aiohttp.ClientTimeout(total=30),
-        connector=aiohttp.TCPConnector(ssl=False),
+            connector=aiohttp.TCPConnector(ssl=cdip_settings.CDIP_ADMIN_SSL_VERIFY),
     ) as sess:
         try:
             device_data = await _portal.ensure_device(
@@ -193,7 +194,7 @@ async def ensure_device_integration(integration_id, device_id: str):
         except Exception as e:
             logger.exception(
                 "Error when posting device to Portal.",
-                extra={**extra_dict, ExtraKeys.Error: e, "device_id": device_id},
+                extra={**extra_dict, "device_id": device_id},
             )
             raise ReferenceDataError("Error when posting device to Portal.")
 
