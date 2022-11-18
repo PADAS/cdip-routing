@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-
 import certifi
 import faust
 from aiokafka.helpers import create_ssl_context
@@ -25,8 +24,9 @@ from app.transform_service.services import (
     update_observation_with_device_configuration,
 )
 import app.settings as routing_settings
-from app.core import tracing  #  Opentelemetry Tracing
 from opentelemetry import context
+from app.core import tracing
+
 
 logger = logging.getLogger(__name__)
 
@@ -216,19 +216,14 @@ async def process_observation(key, message):
             await observations_unprocessed_deadletter.send(value=message)
 
 
+@tracing.faust_instrumentation.load_context
 async def process_transformed_observation(key, transformed_message):
-    # ToDo: Implement a Faust instrumentor class and contribute with open telemetry?
-    faust_event_headers = faust.streams.current_event().headers
-    ctx, links = tracing.get_tracing_context_from_kafka(headers=faust_event_headers.items())
-    context.attach(ctx)
-    #######################################################################
-    #######################################################################
-    # Open Telemetry Metrics Test
-    #######################################################################
-    with tracing.tracer.start_as_current_span("routing_service.process_transformed_observation", links=links, kind=SpanKind.CONSUMER) as current_span:
+    with tracing.tracer.start_as_current_span(
+            "routing_service.process_transformed_observation", kind=SpanKind.CONSUMER
+    ) as current_span:
         current_span.add_event(name="routing_service.transformed_observation_received_at_dispatcher")
         current_span.set_attribute("transformed_message", str(transformed_message))
-        current_span.set_attribute("environment", "local-dev")
+        current_span.set_attribute("environment", "local")
         current_span.set_attribute("service", "cdip-routing")
         try:
             transformed_observation, attributes = extract_fields_from_message(
@@ -271,12 +266,8 @@ async def process_transformed_observation(key, transformed_message):
                     ExtraKeys.StreamType: observation_type,
                 },
             )
-            #######################################################################
-            # Open Telemetry Metrics Test
-            #######################################################################
             with tracing.tracer.start_as_current_span(
-                    "routing_service.dispatch_transformed_observation",
-                    kind=SpanKind.CLIENT
+                    "routing_service.dispatch_transformed_observation", kind=SpanKind.CLIENT
             ) as current_span:
                 dispatch_transformed_observation(
                     observation_type,
