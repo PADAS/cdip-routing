@@ -116,7 +116,7 @@ async def process_observation(key, message):
     ) as current_span:
         current_span.add_event(name="routing_service.observations_received_at_consumer")
         current_span.set_attribute("message", str(message))
-        current_span.set_attribute("environment", "local-dev")
+        current_span.set_attribute("environment", routing_settings.TRACE_ENVIRONMENT)
         current_span.set_attribute("service", "cdip-routing")
         try:
             logger.debug(f"message received: {message}")
@@ -232,7 +232,7 @@ async def process_transformed_observation(key, transformed_message):
             name="routing_service.transformed_observation_received_at_dispatcher"
         )
         current_span.set_attribute("transformed_message", str(transformed_message))
-        current_span.set_attribute("environment", "local")
+        current_span.set_attribute("environment", routing_settings.TRACE_ENVIRONMENT)
         current_span.set_attribute("service", "cdip-routing")
         try:
             transformed_observation, attributes = extract_fields_from_message(

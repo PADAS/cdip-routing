@@ -40,3 +40,6 @@ ROUTING_CONCURRENCY_TRANSFORMED_RETRY_SHORT = env.int(
 ROUTING_CONCURRENCY_TRANSFORMED_RETRY_LONG = env.int(
     "ROUTING_CONCURRENCY_TRANSFORMED_RETRY_LONG", 10
 )
+
+# Used in OTel traces/spans to set the 'environment' attribute, used on metrics calculation
+TRACE_ENVIRONMENT = env.str("TRACE_ENVIRONMENT", "dev")
