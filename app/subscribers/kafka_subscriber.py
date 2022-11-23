@@ -112,7 +112,7 @@ async def process_observation(key, message):
     """
     # Trace observations with Open Telemetry
     with tracing.tracer.start_as_current_span(
-            "routing_service.process_observation", kind=SpanKind.CONSUMER
+        "routing_service.process_observation", kind=SpanKind.CONSUMER
     ) as current_span:
         current_span.add_event(name="routing_service.observations_received_at_consumer")
         current_span.set_attribute("message", str(message))
@@ -172,13 +172,20 @@ async def process_observation(key, message):
                     if jsonified_data:
                         key = get_key_for_transformed_observation(key, destination.id)
                         with tracing.tracer.start_as_current_span(  # Trace observations with Open Telemetry
-                                "routing_service.observations_transformed_topic.send", kind=SpanKind.PRODUCER
+                            "routing_service.observations_transformed_topic.send",
+                            kind=SpanKind.PRODUCER,
                         ):
-                            tracing_headers = tracing.faust_instrumentation.build_context_headers()
-                            await observations_transformed_topic.send(
-                                key=key, value=jsonified_data, headers=tracing_headers  # Tracing context
+                            tracing_headers = (
+                                tracing.faust_instrumentation.build_context_headers()
                             )
-                            current_span.add_event(name="routing_service.transformed_observation_sent_to_dispatcher")
+                            await observations_transformed_topic.send(
+                                key=key,
+                                value=jsonified_data,
+                                headers=tracing_headers,  # Tracing context
+                            )
+                            current_span.add_event(
+                                name="routing_service.transformed_observation_sent_to_dispatcher"
+                            )
             else:
                 logger.error(
                     "Logic error, expecting 'observation' to be not None.",
@@ -186,7 +193,7 @@ async def process_observation(key, message):
                         ExtraKeys.DeviceId: observation.device_id,
                         ExtraKeys.InboundIntId: observation.integration_id,
                         ExtraKeys.StreamType: observation.observation_type,
-                        ExtraKeys.AttentionNeeded: True
+                        ExtraKeys.AttentionNeeded: True,
                     },
                 )
         except ReferenceDataError:
@@ -219,9 +226,11 @@ async def process_observation(key, message):
 @tracing.faust_instrumentation.load_context
 async def process_transformed_observation(key, transformed_message):
     with tracing.tracer.start_as_current_span(
-            "routing_service.process_transformed_observation", kind=SpanKind.CONSUMER
+        "routing_service.process_transformed_observation", kind=SpanKind.CONSUMER
     ) as current_span:
-        current_span.add_event(name="routing_service.transformed_observation_received_at_dispatcher")
+        current_span.add_event(
+            name="routing_service.transformed_observation_received_at_dispatcher"
+        )
         current_span.set_attribute("transformed_message", str(transformed_message))
         current_span.set_attribute("environment", "local")
         current_span.set_attribute("service", "cdip-routing")
@@ -267,7 +276,7 @@ async def process_transformed_observation(key, transformed_message):
                 },
             )
             with tracing.tracer.start_as_current_span(
-                    "routing_service.dispatch_transformed_observation", kind=SpanKind.CLIENT
+                "routing_service.dispatch_transformed_observation", kind=SpanKind.CLIENT
             ) as current_span:
                 dispatch_transformed_observation(
                     observation_type,
@@ -276,7 +285,9 @@ async def process_transformed_observation(key, transformed_message):
                     transformed_observation,
                 )
                 current_span.set_attribute("is_dispatched_successfully", True)
-                current_span.add_event(name="routing_service.observation_dispatched_successfully")
+                current_span.add_event(
+                    name="routing_service.observation_dispatched_successfully"
+                )
         except (DispatcherException, ReferenceDataError):
             logger.exception(
                 f"External error occurred processing transformed observation",
