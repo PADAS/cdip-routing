@@ -151,7 +151,12 @@ async def process_observation(key, message):
                     int_id, observation.device_id
                 )
 
+                current_span.set_attribute("destinations_qty", len(destinations))
+                current_span.set_attribute("destinations", str(destinations))
                 if len(destinations) < 1:
+                    current_span.add_event(
+                        name="routing_service.observation_has_no_destinations"
+                    )
                     logger.warning(
                         "Updating observation with Device info, but it has no Destinations. This is a configuration error.",
                         extra={
