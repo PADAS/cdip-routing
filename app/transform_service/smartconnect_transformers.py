@@ -248,9 +248,15 @@ class SMARTTransformer:
         attributes = {}
         for k, v in event.event_details.items():
 
-            # er event detail values that are drop downs are received as lists
-            v = v[0] if isinstance(v, list) and len(v) > 0 else v
-
+            # some event details are lists like updates
+            if isinstance(v, list):
+                if len(v) > 0:
+                    v = v[0]
+                else:
+                    logger.warning(f"event detail value is list with no entries",
+                                   extra=dict(event_serial_num=event.serial_number,
+                                              event_detail_name=k,
+                                              event_detail_value=v))
             k, v = self._resolve_attribute(k, v)
 
             if k:
