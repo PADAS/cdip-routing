@@ -218,6 +218,11 @@ class SMARTTransformer:
 
         return_key = return_value = None
         # Find in transformation rules.
+        if not hasattr(self, "_transformation_rules") \
+                or not self._transformation_rules \
+                or not self._transformation_rules.attribute_map:
+            logger.warning(f"No transform rules or attribute map found for config: {self._config.id}")
+            return None, None
         for amap in self._transformation_rules.attribute_map:
             if amap.from_key == key:
                 return_key = amap.to_key
@@ -244,7 +249,7 @@ class SMARTTransformer:
         for k, v in event.event_details.items():
 
             # er event detail values that are drop downs are received as lists
-            v = v[0] if isinstance(v, list) else v
+            v = v[0] if isinstance(v, list) and len(v) > 0 else v
 
             k, v = self._resolve_attribute(k, v)
 
@@ -538,7 +543,10 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
         """SMART Connect API throws out duplicate track points so always can post new points
         Updates are not supported by their api"""
         track_point_requests = []
-        for track_point in patrol_leg.track_points:
+        # only process most recent 100 track-points until we solve for processing large amounts of track points
+        patrol_track_points = sorted(patrol_leg.track_points, key=lambda x: x.recorded_at)[-100:] \
+            if len(patrol_leg.track_points) > 100 else patrol_leg.track_points
+        for track_point in patrol_track_points:
             track_point_data = {
                 "geometry": {
                     "coordinates": [
