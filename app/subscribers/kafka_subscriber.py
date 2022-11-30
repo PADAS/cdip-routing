@@ -214,8 +214,9 @@ async def process_observation(key, message):
             await process_failed_unprocessed_observation(key, message)
 
         except Exception:
+            error_msg = "Unexpected internal exception occurred processing observation"
             logger.exception(
-                f"Unexpected internal exception occurred processing observation",
+                error_msg,
                 extra={
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.DeadLetter: True,
@@ -225,7 +226,12 @@ async def process_observation(key, message):
                 },
             )
             # Unexpected internal errors will be redirected straight to deadletter
+            current_span.set_attribute("error", error_msg)
             await observations_unprocessed_deadletter.send(value=message)
+            current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+            current_span.add_event(
+                name="routing_service.observation_sent_to_dead_letter_queue"
+            )
 
 
 @tracing.faust_instrumentation.load_context
@@ -307,8 +313,11 @@ async def process_transformed_observation(key, transformed_message):
             await process_failed_transformed_observation(key, transformed_message)
 
         except Exception:
+            error_msg = (
+                "Unexpected internal error occurred processing transformed observation"
+            )
             logger.exception(
-                f"Unexpected internal error occurred processing transformed observation",
+                error_msg,
                 extra={
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.DeadLetter: True,
@@ -319,133 +328,180 @@ async def process_transformed_observation(key, transformed_message):
                 },
             )
             # Unexpected internal errors will be redirected straight to deadletter
+            current_span.set_attribute("error", error_msg)
             await observations_transformed_deadletter.send(value=transformed_message)
+            current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+            current_span.add_event(
+                name="routing_service.observation_sent_to_dead_letter_queue"
+            )
 
 
+@tracing.faust_instrumentation.load_context
 async def process_failed_transformed_observation(key, transformed_message):
-    try:
-        transformed_observation, attributes = extract_fields_from_message(
-            transformed_message
-        )
-        attributes = update_attributes_for_transformed_retry(attributes)
-        observation_type = attributes.get("observation_type")
-        device_id = attributes.get("device_id")
-        integration_id = attributes.get("integration_id")
-        outbound_config_id = attributes.get("outbound_config_id")
-        retry_topic_str = attributes.get("retry_topic")
-        retry_attempt = attributes.get("retry_attempt")
-        retry_transformed_message = create_retry_message(
-            transformed_observation, attributes
-        )
-        retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
-        extra_dict = {
-            ExtraKeys.DeviceId: device_id,
-            ExtraKeys.InboundIntId: integration_id,
-            ExtraKeys.OutboundIntId: outbound_config_id,
-            ExtraKeys.StreamType: observation_type,
-            ExtraKeys.RetryTopic: retry_topic_str,
-            ExtraKeys.RetryAttempt: retry_attempt,
-            ExtraKeys.Observation: transformed_observation,
-        }
-        if retry_topic_str != TopicEnum.observations_transformed_deadletter.value:
-            logger.info(
-                "Putting failed transformed observation back on queue",
-                extra=extra_dict,
+    with tracing.tracer.start_as_current_span(
+        "routing_service.process_failed_transformed_observation", kind=SpanKind.CONSUMER
+    ) as current_span:
+        try:
+            transformed_observation, attributes = extract_fields_from_message(
+                transformed_message
             )
-        else:
+            attributes = update_attributes_for_transformed_retry(attributes)
+            observation_type = attributes.get("observation_type")
+            device_id = attributes.get("device_id")
+            integration_id = attributes.get("integration_id")
+            outbound_config_id = attributes.get("outbound_config_id")
+            retry_topic_str = attributes.get("retry_topic")
+            retry_attempt = attributes.get("retry_attempt")
+            retry_transformed_message = create_retry_message(
+                transformed_observation, attributes
+            )
+            retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
+            extra_dict = {
+                ExtraKeys.DeviceId: device_id,
+                ExtraKeys.InboundIntId: integration_id,
+                ExtraKeys.OutboundIntId: outbound_config_id,
+                ExtraKeys.StreamType: observation_type,
+                ExtraKeys.RetryTopic: retry_topic_str,
+                ExtraKeys.RetryAttempt: retry_attempt,
+                ExtraKeys.Observation: transformed_observation,
+            }
+            if retry_topic_str != TopicEnum.observations_transformed_deadletter.value:
+                logger.info(
+                    "Putting failed transformed observation back on queue",
+                    extra=extra_dict,
+                )
+            else:
+                logger.exception(
+                    "Retry attempts exceeded for transformed observation, sending to dead letter",
+                    extra={
+                        **extra_dict,
+                        ExtraKeys.AttentionNeeded: True,
+                        ExtraKeys.DeadLetter: True,
+                    },
+                )
+            # await retry_topic.send(value=retry_transformed_message)
+        except Exception as e:
+            error_msg = "Unexpected Error occurred while preparing failed transformed observation for reprocessing"
             logger.exception(
-                "Retry attempts exceeded for transformed observation, sending to dead letter",
-                extra={
-                    **extra_dict,
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.DeadLetter: True,
-                },
+                error_msg,
+                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
             )
-        # await retry_topic.send(value=retry_transformed_message)
-    except Exception as e:
-        logger.exception(
-            "Unexpected Error occurred while preparing failed transformed observation for reprocessing",
-            extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
-        )
-        # When all else fails post to dead letter
-        await observations_transformed_deadletter.send(value=transformed_message)
+            # When all else fails post to dead letter
+            current_span.set_attribute("error", error_msg)
+            await observations_transformed_deadletter.send(value=transformed_message)
+            current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+            current_span.add_event(
+                name="routing_service.observation_sent_to_dead_letter_queue"
+            )
 
 
+@tracing.faust_instrumentation.load_context
 async def process_failed_unprocessed_observation(key, message):
-    try:
-        raw_observation, attributes = extract_fields_from_message(message)
-        attributes = update_attributes_for_unprocessed_retry(attributes)
-        observation_type = attributes.get("observation_type")
-        device_id = attributes.get("device_id")
-        integration_id = attributes.get("integration_id")
-        retry_topic_str = attributes.get("retry_topic")
-        retry_attempt = attributes.get("retry_attempt")
-        retry_unprocessed_message = create_retry_message(raw_observation, attributes)
-        retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
-        extra_dict = {
-            ExtraKeys.DeviceId: device_id,
-            ExtraKeys.InboundIntId: integration_id,
-            ExtraKeys.StreamType: observation_type,
-            ExtraKeys.RetryTopic: retry_topic_str,
-            ExtraKeys.RetryAttempt: retry_attempt,
-            ExtraKeys.Observation: raw_observation,
-        }
-        if retry_topic_str != TopicEnum.observations_transformed_deadletter.value:
-            logger.info(
-                "Putting failed unprocessed observation back on queue",
-                extra=extra_dict,
+    with tracing.tracer.start_as_current_span(
+        "routing_service.process_failed_unprocessed_observation", kind=SpanKind.CONSUMER
+    ) as current_span:
+        try:
+            raw_observation, attributes = extract_fields_from_message(message)
+            attributes = update_attributes_for_unprocessed_retry(attributes)
+            observation_type = attributes.get("observation_type")
+            device_id = attributes.get("device_id")
+            integration_id = attributes.get("integration_id")
+            retry_topic_str = attributes.get("retry_topic")
+            retry_attempt = attributes.get("retry_attempt")
+            retry_unprocessed_message = create_retry_message(
+                raw_observation, attributes
             )
-        else:
+            retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
+            extra_dict = {
+                ExtraKeys.DeviceId: device_id,
+                ExtraKeys.InboundIntId: integration_id,
+                ExtraKeys.StreamType: observation_type,
+                ExtraKeys.RetryTopic: retry_topic_str,
+                ExtraKeys.RetryAttempt: retry_attempt,
+                ExtraKeys.Observation: raw_observation,
+            }
+            if retry_topic_str != TopicEnum.observations_transformed_deadletter.value:
+                logger.info(
+                    "Putting failed unprocessed observation back on queue",
+                    extra=extra_dict,
+                )
+            else:
+                logger.exception(
+                    "Retry attempts exceeded for unprocessed observation, sending to dead letter",
+                    extra={
+                        **extra_dict,
+                        ExtraKeys.AttentionNeeded: True,
+                        ExtraKeys.DeadLetter: True,
+                    },
+                )
+            # await retry_topic.send(value=retry_unprocessed_message)
+        except Exception as e:
+            # When all else fails post to dead letter
+            error_msg = "Unexpected Error occurred while preparing failed unprocessed observation for reprocessing"
             logger.exception(
-                "Retry attempts exceeded for unprocessed observation, sending to dead letter",
-                extra={
-                    **extra_dict,
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.DeadLetter: True,
-                },
+                error_msg,
+                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
             )
-        # await retry_topic.send(value=retry_unprocessed_message)
-    except Exception as e:
-        # When all else fails post to dead letter
-        logger.exception(
-            "Unexpected Error occurred while preparing failed unprocessed observation for reprocessing",
-            extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
-        )
-        await observations_unprocessed_deadletter.send(value=message)
+            current_span.set_attribute("error", error_msg)
+            await observations_unprocessed_deadletter.send(value=message)
+            current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+            current_span.add_event(
+                name="routing_service.observation_sent_to_dead_letter_queue"
+            )
 
 
+@tracing.faust_instrumentation.load_context
 async def process_transformed_retry_observation(key, transformed_message):
-    try:
-        transformed_observation, attributes = extract_fields_from_message(
-            transformed_message
-        )
-        retry_at = datetime.fromisoformat(attributes.get("retry_at"))
-        await wait_until_retry_at(retry_at)
-        await process_transformed_observation(key, transformed_message)
-    except Exception as e:
-        logger.exception(
-            "Unexpected Error occurred while attempting to process failed transformed observation",
-            extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
-        )
-        # When all else fails post to dead letter
-        await observations_transformed_deadletter.send(value=transformed_message)
+    with tracing.tracer.start_as_current_span(
+        "routing_service.process_transformed_retry_observation", kind=SpanKind.CONSUMER
+    ) as current_span:
+        try:
+            transformed_observation, attributes = extract_fields_from_message(
+                transformed_message
+            )
+            retry_at = datetime.fromisoformat(attributes.get("retry_at"))
+            await wait_until_retry_at(retry_at)
+            await process_transformed_observation(key, transformed_message)
+        except Exception as e:
+            error_msg = "Unexpected Error occurred while attempting to process failed transformed observation"
+            logger.exception(
+                error_msg,
+                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
+            )
+            # When all else fails post to dead letter
+            current_span.set_attribute("error", error_msg)
+            await observations_transformed_deadletter.send(value=transformed_message)
+            current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+            current_span.add_event(
+                name="routing_service.observation_sent_to_dead_letter_queue"
+            )
 
 
 async def process_retry_observation(key, message):
-    try:
-        raw_observation, attributes = extract_fields_from_message(message)
-        retry_at = datetime.fromisoformat(attributes.get("retry_at"))
-        await wait_until_retry_at(retry_at)
-        await process_observation(key, message)
-    except Exception as e:
-        logger.exception(
-            "Unexpected Error occurred while attempting to process failed unprocessed observation",
-            extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
-        )
-        # When all else fails post to dead letter
-        await observations_unprocessed_deadletter.send(value=message)
+    # When all else fails post to dead letter
+    with tracing.tracer.start_as_current_span(
+        "routing_service.process_retry_observation", kind=SpanKind.CONSUMER
+    ) as current_span:
+        try:
+            raw_observation, attributes = extract_fields_from_message(message)
+            retry_at = datetime.fromisoformat(attributes.get("retry_at"))
+            await wait_until_retry_at(retry_at)
+            await process_observation(key, message)
+        except Exception as e:
+            error_msg = "Unexpected Error occurred while attempting to process failed unprocessed observation"
+            logger.exception(
+                error_msg,
+                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
+            )
+            current_span.set_attribute("error", error_msg)
+            await observations_unprocessed_deadletter.send(value=message)
+            current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+            current_span.add_event(
+                name="routing_service.observation_sent_to_dead_letter_queue"
+            )
 
 
+@tracing.faust_instrumentation.load_context
 @app.agent(
     observations_unprocessed_topic,
     concurrency=routing_settings.ROUTING_CONCURRENCY_UNPROCESSED,
@@ -455,12 +511,21 @@ async def process_observations(streaming_data):
         try:
             await process_observation(key, message)
         except Exception as e:
+            error_msg = f"Unexpected error prior to processing observation"
             logger.exception(
-                f"Unexpected error prior to processing observation",
+                error_msg,
                 extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
             )
             # When all else fails post to dead letter
-            await observations_unprocessed_deadletter.send(value=message)
+            with tracing.tracer.start_as_current_span(
+                "routing_service.process_observations", kind=SpanKind.PRODUCER
+            ) as current_span:
+                current_span.set_attribute("error", error_msg)
+                await observations_unprocessed_deadletter.send(value=message)
+                current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+                current_span.add_event(
+                    name="routing_service.observation_sent_to_dead_letter_queue"
+                )
 
 
 @app.agent(
@@ -481,6 +546,7 @@ async def process_retry_long_observations(streaming_data):
         await process_retry_observation(key, message)
 
 
+@tracing.faust_instrumentation.load_context
 @app.agent(
     observations_transformed_topic,
     concurrency=routing_settings.ROUTING_CONCURRENCY_TRANSFORMED,
@@ -490,12 +556,24 @@ async def process_transformed_observations(streaming_transformed_data):
         try:
             await process_transformed_observation(key, transformed_message)
         except Exception as e:
+            error_msg = "Unexpected error prior to processing transformed observation"
             logger.exception(
-                f"Unexpected error prior to processing transformed observation",
+                error_msg,
                 extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
             )
             # When all else fails post to dead letter
-            await observations_transformed_deadletter.send(value=transformed_message)
+            with tracing.tracer.start_as_current_span(
+                "routing_service.error_prior_to_processing_transformed_observation",
+                kind=SpanKind.PRODUCER,
+            ) as current_span:
+                current_span.set_attribute("error", error_msg)
+                await observations_transformed_deadletter.send(
+                    value=transformed_message
+                )
+                current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+                current_span.add_event(
+                    name="routing_service.observation_sent_to_dead_letter_queue"
+                )
 
 
 @app.agent(
