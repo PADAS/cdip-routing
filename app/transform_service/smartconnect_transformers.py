@@ -165,10 +165,9 @@ class SMARTTransformer:
         transformation_rules_dict = self._config.additional.get(
             "transformation_rules", {}
         )
-        if transformation_rules_dict:
-            self._transformation_rules = TransformationRules.parse_obj(
-                transformation_rules_dict
-            )
+        self._transformation_rules = TransformationRules.parse_obj(
+            transformation_rules_dict
+        )
         self.cloud_storage = get_cloud_storage()
 
     def guess_location_timezone(
@@ -218,11 +217,6 @@ class SMARTTransformer:
 
         return_key = return_value = None
         # Find in transformation rules.
-        if not hasattr(self, "_transformation_rules") \
-                or not self._transformation_rules \
-                or not self._transformation_rules.attribute_map:
-            logger.warning(f"No transform rules or attribute map found for config: {self._config.id}")
-            return None, None
         for amap in self._transformation_rules.attribute_map:
             if amap.from_key == key:
                 return_key = amap.to_key
@@ -249,14 +243,8 @@ class SMARTTransformer:
         for k, v in event.event_details.items():
 
             # some event details are lists like updates
-            if isinstance(v, list):
-                if len(v) > 0:
-                    v = v[0]
-                else:
-                    logger.warning(f"event detail value is list with no entries",
-                                   extra=dict(event_serial_num=event.serial_number,
-                                              event_detail_name=k,
-                                              event_detail_value=v))
+            v = v[0] if isinstance(v, list) and len(v) > 0 else v
+
             k, v = self._resolve_attribute(k, v)
 
             if k:
@@ -549,10 +537,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
         """SMART Connect API throws out duplicate track points so always can post new points
         Updates are not supported by their api"""
         track_point_requests = []
-        # only process most recent 100 track-points until we solve for processing large amounts of track points
-        patrol_track_points = sorted(patrol_leg.track_points, key=lambda x: x.recorded_at)[-100:] \
-            if len(patrol_leg.track_points) > 100 else patrol_leg.track_points
-        for track_point in patrol_track_points:
+        for track_point in patrol_leg.track_points:
             track_point_data = {
                 "geometry": {
                     "coordinates": [
