@@ -227,12 +227,9 @@ async def process_observation(key, message):
             )
             # Unexpected internal errors will be redirected straight to deadletter
             current_span.set_attribute("error", error_msg)
-            tracing_headers = (
-                tracing.faust_instrumentation.build_context_headers()
-            )
+            tracing_headers = tracing.faust_instrumentation.build_context_headers()
             await observations_unprocessed_deadletter.send(
-                value=message,
-                headers=tracing_headers
+                value=message, headers=tracing_headers
             )
             current_span.set_attribute("is_sent_to_dead_letter_queue", True)
             current_span.add_event(
@@ -335,12 +332,9 @@ async def process_transformed_observation(key, transformed_message):
             )
             # Unexpected internal errors will be redirected straight to deadletter
             current_span.set_attribute("error", error_msg)
-            tracing_headers = (
-                tracing.faust_instrumentation.build_context_headers()
-            )
+            tracing_headers = tracing.faust_instrumentation.build_context_headers()
             await observations_transformed_deadletter.send(
-                value=transformed_message,
-                headers=tracing_headers
+                value=transformed_message, headers=tracing_headers
             )
             current_span.set_attribute("is_sent_to_dead_letter_queue", True)
             current_span.add_event(
@@ -383,6 +377,9 @@ async def process_failed_transformed_observation(key, transformed_message):
                     "Putting failed transformed observation back on queue",
                     extra=extra_dict,
                 )
+                current_span.add_event(
+                    name="routing_service.send_observation_to_retry_topic"
+                )
             else:
                 logger.exception(
                     "Retry attempts exceeded for transformed observation, sending to dead letter",
@@ -392,13 +389,15 @@ async def process_failed_transformed_observation(key, transformed_message):
                         ExtraKeys.DeadLetter: True,
                     },
                 )
-            current_span.add_event(
-                name="routing_service.send_observation_to_retry_topic"
+                current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+                current_span.add_event(
+                    name="routing_service.observation_sent_to_dead_letter_queue"
+                )
+
+            tracing_headers = tracing.faust_instrumentation.build_context_headers()
+            await retry_topic.send(
+                value=retry_transformed_message, headers=tracing_headers
             )
-            tracing_headers = (
-                tracing.faust_instrumentation.build_context_headers()
-            )
-            await retry_topic.send(value=retry_transformed_message, headers=tracing_headers)
         except Exception as e:
             error_msg = "Unexpected Error occurred while preparing failed transformed observation for reprocessing"
             logger.exception(
@@ -407,10 +406,10 @@ async def process_failed_transformed_observation(key, transformed_message):
             )
             # When all else fails post to dead letter
             current_span.set_attribute("error", error_msg)
-            tracing_headers = (
-                tracing.faust_instrumentation.build_context_headers()
+            tracing_headers = tracing.faust_instrumentation.build_context_headers()
+            await observations_transformed_deadletter.send(
+                value=transformed_message, headers=tracing_headers
             )
-            await observations_transformed_deadletter.send(value=transformed_message, headers=tracing_headers)
             current_span.set_attribute("is_sent_to_dead_letter_queue", True)
             current_span.add_event(
                 name="routing_service.observation_sent_to_dead_letter_queue"
@@ -448,6 +447,9 @@ async def process_failed_unprocessed_observation(key, message):
                     "Putting failed unprocessed observation back on queue",
                     extra=extra_dict,
                 )
+                current_span.add_event(
+                    name="routing_service.send_observation_to_retry_topic"
+                )
             else:
                 logger.exception(
                     "Retry attempts exceeded for unprocessed observation, sending to dead letter",
@@ -457,13 +459,15 @@ async def process_failed_unprocessed_observation(key, message):
                         ExtraKeys.DeadLetter: True,
                     },
                 )
-            current_span.add_event(
-                name="routing_service.send_observation_to_retry_topic"
+                current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+                current_span.add_event(
+                    name="routing_service.observation_sent_to_dead_letter_queue"
+                )
+
+            tracing_headers = tracing.faust_instrumentation.build_context_headers()
+            await retry_topic.send(
+                value=retry_unprocessed_message, headers=tracing_headers
             )
-            tracing_headers = (
-                tracing.faust_instrumentation.build_context_headers()
-            )
-            await retry_topic.send(value=retry_unprocessed_message, headers=tracing_headers)
         except Exception as e:
             # When all else fails post to dead letter
             error_msg = "Unexpected Error occurred while preparing failed unprocessed observation for reprocessing"
@@ -472,10 +476,10 @@ async def process_failed_unprocessed_observation(key, message):
                 extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
             )
             current_span.set_attribute("error", error_msg)
-            tracing_headers = (
-                tracing.faust_instrumentation.build_context_headers()
+            tracing_headers = tracing.faust_instrumentation.build_context_headers()
+            await observations_unprocessed_deadletter.send(
+                value=message, headers=tracing_headers
             )
-            await observations_unprocessed_deadletter.send(value=message, headers=tracing_headers)
             current_span.set_attribute("is_sent_to_dead_letter_queue", True)
             current_span.add_event(
                 name="routing_service.observation_sent_to_dead_letter_queue"
@@ -502,10 +506,10 @@ async def process_transformed_retry_observation(key, transformed_message):
             )
             # When all else fails post to dead letter
             current_span.set_attribute("error", error_msg)
-            tracing_headers = (
-                tracing.faust_instrumentation.build_context_headers()
+            tracing_headers = tracing.faust_instrumentation.build_context_headers()
+            await observations_transformed_deadletter.send(
+                value=transformed_message, headers=tracing_headers
             )
-            await observations_transformed_deadletter.send(value=transformed_message, headers=tracing_headers)
             current_span.set_attribute("is_sent_to_dead_letter_queue", True)
             current_span.add_event(
                 name="routing_service.observation_sent_to_dead_letter_queue"
@@ -529,10 +533,10 @@ async def process_retry_observation(key, message):
                 extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
             )
             current_span.set_attribute("error", error_msg)
-            tracing_headers = (
-                tracing.faust_instrumentation.build_context_headers()
+            tracing_headers = tracing.faust_instrumentation.build_context_headers()
+            await observations_unprocessed_deadletter.send(
+                value=message, headers=tracing_headers
             )
-            await observations_unprocessed_deadletter.send(value=message, headers=tracing_headers)
             current_span.set_attribute("is_sent_to_dead_letter_queue", True)
             current_span.add_event(
                 name="routing_service.observation_sent_to_dead_letter_queue"
@@ -559,10 +563,10 @@ async def process_observations(streaming_data):
                 "routing_service.process_observations", kind=SpanKind.PRODUCER
             ) as current_span:
                 current_span.set_attribute("error", error_msg)
-                tracing_headers = (
-                    tracing.faust_instrumentation.build_context_headers()
+                tracing_headers = tracing.faust_instrumentation.build_context_headers()
+                await observations_unprocessed_deadletter.send(
+                    value=message, headers=tracing_headers
                 )
-                await observations_unprocessed_deadletter.send(value=message, headers=tracing_headers)
                 current_span.set_attribute("is_sent_to_dead_letter_queue", True)
                 current_span.add_event(
                     name="routing_service.observation_sent_to_dead_letter_queue"
@@ -608,12 +612,9 @@ async def process_transformed_observations(streaming_transformed_data):
                 kind=SpanKind.PRODUCER,
             ) as current_span:
                 current_span.set_attribute("error", error_msg)
-                tracing_headers = (
-                    tracing.faust_instrumentation.build_context_headers()
-                )
+                tracing_headers = tracing.faust_instrumentation.build_context_headers()
                 await observations_transformed_deadletter.send(
-                    value=transformed_message,
-                    headers=tracing_headers
+                    value=transformed_message, headers=tracing_headers
                 )
                 current_span.set_attribute("is_sent_to_dead_letter_queue", True)
                 current_span.add_event(
