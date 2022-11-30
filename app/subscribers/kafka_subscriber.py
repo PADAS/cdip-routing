@@ -378,9 +378,6 @@ async def process_failed_transformed_observation(key, transformed_message):
                 ExtraKeys.Observation: transformed_observation,
             }
             current_span.set_attribute("retries", retry_attempt)
-            # For testing only <<<<<<<<<<<<<<<<<<<<
-            #raise Exception("Error raised for testing")
-            # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
             if retry_topic_str != TopicEnum.observations_transformed_deadletter.value:
                 logger.info(
                     "Putting failed transformed observation back on queue",
