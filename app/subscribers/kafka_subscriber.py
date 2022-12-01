@@ -258,7 +258,6 @@ async def process_transformed_observation(key, transformed_message):
             integration_id = attributes.get("integration_id")
             outbound_config_id = attributes.get("outbound_config_id")
             retry_attempt: int = attributes.get("retry_attempt") or 0
-            current_span.set_attribute("retries", retry_attempt)
             logger.debug(f"transformed_observation: {transformed_observation}")
             logger.info(
                 "received transformed observation",
@@ -372,6 +371,7 @@ async def process_failed_transformed_observation(key, transformed_message):
                 ExtraKeys.Observation: transformed_observation,
             }
             current_span.set_attribute("retries", retry_attempt)
+            current_span.set_attribute("retry_topic", retry_topic_str)
             if retry_topic_str != TopicEnum.observations_transformed_deadletter.value:
                 logger.info(
                     "Putting failed transformed observation back on queue",
@@ -442,6 +442,7 @@ async def process_failed_unprocessed_observation(key, message):
                 ExtraKeys.Observation: raw_observation,
             }
             current_span.set_attribute("retries", retry_attempt)
+            current_span.set_attribute("retry_topic", retry_topic_str)
             if retry_topic_str != TopicEnum.observations_transformed_deadletter.value:
                 logger.info(
                     "Putting failed unprocessed observation back on queue",
