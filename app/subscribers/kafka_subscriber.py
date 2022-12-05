@@ -443,7 +443,7 @@ async def process_failed_unprocessed_observation(key, message):
             }
             current_span.set_attribute("retries", retry_attempt)
             current_span.set_attribute("retry_topic", retry_topic_str)
-            if retry_topic_str != TopicEnum.observations_transformed_deadletter.value:
+            if retry_topic_str != TopicEnum.observations_unprocessed_deadletter.value:
                 logger.info(
                     "Putting failed unprocessed observation back on queue",
                     extra=extra_dict,
