@@ -165,10 +165,9 @@ class SMARTTransformer:
         transformation_rules_dict = self._config.additional.get(
             "transformation_rules", {}
         )
-        if transformation_rules_dict:
-            self._transformation_rules = TransformationRules.parse_obj(
-                transformation_rules_dict
-            )
+        self._transformation_rules = TransformationRules.parse_obj(
+            transformation_rules_dict
+        )
         self.cloud_storage = get_cloud_storage()
 
     def guess_location_timezone(
@@ -243,8 +242,8 @@ class SMARTTransformer:
         attributes = {}
         for k, v in event.event_details.items():
 
-            # er event detail values that are drop downs are received as lists
-            v = v[0] if isinstance(v, list) else v
+            # some event details are lists like updates
+            v = v[0] if isinstance(v, list) and len(v) > 0 else v
 
             k, v = self._resolve_attribute(k, v)
 
