@@ -303,6 +303,7 @@ async def process_transformed_observation(key, transformed_message):
                     transformed_observation,
                 )
                 current_span.set_attribute("is_dispatched_successfully", True)
+                current_span.set_attribute("destination_id", str(outbound_config_id))
                 current_span.add_event(
                     name="routing_service.observation_dispatched_successfully"
                 )
@@ -399,6 +400,7 @@ async def process_failed_transformed_observation(key, transformed_message):
                     name="routing_service.observation_sent_to_dead_letter_queue"
                 )
 
+            current_span.set_attribute("destination_id", str(outbound_config_id))
             tracing_headers = tracing.faust_instrumentation.build_context_headers()
             await retry_topic.send(
                 value=retry_transformed_message, headers=tracing_headers
@@ -470,6 +472,8 @@ async def process_failed_unprocessed_observation(key, message):
                     name="routing_service.observation_sent_to_dead_letter_queue"
                 )
 
+            outbound_config_id = attributes.get("outbound_config_id")
+            current_span.set_attribute("destination_id", str(outbound_config_id))
             tracing_headers = tracing.faust_instrumentation.build_context_headers()
             await retry_topic.send(
                 value=retry_unprocessed_message, headers=tracing_headers
