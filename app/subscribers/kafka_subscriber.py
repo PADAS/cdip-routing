@@ -152,7 +152,9 @@ async def process_observation(key, message):
                 )
 
                 current_span.set_attribute("destinations_qty", len(destinations))
-                current_span.set_attribute("destinations", str([str(d.id) for d in destinations]))
+                current_span.set_attribute(
+                    "destinations", str([str(d.id) for d in destinations])
+                )
                 if len(destinations) < 1:
                     current_span.add_event(
                         name="routing_service.observation_has_no_destinations"
@@ -180,7 +182,9 @@ async def process_observation(key, message):
                             "routing_service.observations_transformed_topic.send",
                             kind=SpanKind.PRODUCER,
                         ):
-                            current_span.set_attribute("destination_id", str(destination.id))
+                            current_span.set_attribute(
+                                "destination_id", str(destination.id)
+                            )
                             tracing_headers = (
                                 tracing.faust_instrumentation.build_context_headers()
                             )
