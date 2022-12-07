@@ -175,7 +175,7 @@ async def ensure_device_integration(integration_id, device_id: str):
     # Rely on default (read:5m). This ought to be fine here, since a busy Portal means we
     # need to wait anyway.
     async with aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(ssl=cdip_settings.CDIP_ADMIN_SSL_VERIFY),
+        connector=aiohttp.TCPConnector(ssl=cdip_settings.CDIP_ADMIN_SSL_VERIFY),
     ) as sess:
         try:
             device_data = await _portal.ensure_device(

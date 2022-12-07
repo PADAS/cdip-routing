@@ -10,5 +10,13 @@ uvicorn==0.13.4
 walrus==0.8.2
 packaging==20.9
 https://github.com/PADAS/das-clients/releases/download/v1.0.39/dasclient-1.0.39-py3-none-any.whl
-https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.2.5/cdip_connector-1.2.5-py3-none-any.whl
+https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.2.7/cdip_connector-1.2.7-py3-none-any.whl
 https://github.com/PADAS/smartconnect-client/releases/download/v1.2.3/smartconnect_client-1.2.3-py3-none-any.whl
+opentelemetry-api==1.14.0
+opentelemetry-sdk==1.14.0
+opentelemetry-exporter-gcp-trace==1.3.0
+opentelemetry-propagator-gcp==1.3.0
+opentelemetry-instrumentation-requests==0.35b0
+opentelemetry-instrumentation-aiohttp-client==0.35b0
+opentelemetry-instrumentation-confluent-kafka==0.35b0
+opentelemetry-exporter-otlp-proto-http==1.14.0
