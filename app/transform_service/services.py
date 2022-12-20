@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import List
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import aiohttp
 import requests
@@ -154,6 +154,14 @@ async def update_observation_with_device_configuration(observation):
     return observation
 
 
+def create_blank_device(*, integration_id:str=None, external_id:str=None):
+    # Create a placeholder Device
+    return schemas.Device(
+        id=UUID('{00000000-0000-0000-0000-000000000000}'),
+        inbound_configuration=str(integration_id),
+        external_id=external_id
+    )
+
 async def ensure_device_integration(integration_id, device_id: str):
 
     extra_dict = {
@@ -167,10 +175,18 @@ async def ensure_device_integration(integration_id, device_id: str):
 
     if cached:
         device = schemas.Device.parse_raw(cached)
-        logger.debug("Using cached Device %s", device.external_id)
+        logger.info("Using cached Device %s", device.external_id,
+                    extra={
+                        'integration_id': integration_id,
+                        'device_id': device_id
+                    })
         return device
 
-    logger.debug("Cache miss for Device %s", device_id)
+    logger.info("Cache miss for Integration: %s, Device: %s", integration_id, device_id,
+                extra={
+                    'integration_id': integration_id,
+                    'device_id': device_id
+                })
 
     # Rely on default (read:5m). This ought to be fine here, since a busy Portal means we
     # need to wait anyway.
@@ -188,15 +204,22 @@ async def ensure_device_integration(integration_id, device_id: str):
                     "inbound_configuration", {}
                 ).get("id", None)
                 device = schemas.Device.parse_obj(device_data)
-                if device:  # don't cache empty response
-                    _cache_db.setex(cache_key, _cache_ttl, device.json())
-                return device
+            else:
+                device = create_blank_device(integration_id=str(integration_id), external_id=device_id)
+
+            if device:  # don't cache empty response
+                _cache_db.setex(cache_key, _cache_ttl, device.json())
+            return device
+
         except Exception as e:
             logger.exception(
                 "Error when posting device to Portal.",
                 extra={**extra_dict, "device_id": device_id},
             )
-            raise ReferenceDataError("Error when posting device to Portal.")
+            # raise ReferenceDataError("Error when posting device to Portal.")
+
+        # TODO: This is a hack to aleviate load on the portal.
+        return create_blank_device(integration_id=str(integration_id), external_id=device_id)
 
 
 class TransformerNotFound(Exception):
