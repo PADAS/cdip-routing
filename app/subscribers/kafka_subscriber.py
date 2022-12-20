@@ -583,22 +583,24 @@ async def process_observations(streaming_data):
                 )
 
 
-@app.agent(
-    observations_unprocessed_retry_short_topic,
-    concurrency=routing_settings.ROUTING_CONCURRENCY_UNPROCESSED_RETRY_SHORT,
-)
-async def process_retry_short_observations(streaming_data):
-    async for key, message in streaming_data.items():
-        await process_retry_observation(key, message)
+if routing_settings.ENABLE_UNPROCESSED_RETRY_SHORT:
+    @app.agent(
+        observations_unprocessed_retry_short_topic,
+        concurrency=routing_settings.ROUTING_CONCURRENCY_UNPROCESSED_RETRY_SHORT,
+    )
+    async def process_retry_short_observations(streaming_data):
+        async for key, message in streaming_data.items():
+            await process_retry_observation(key, message)
 
 
-@app.agent(
-    observations_unprocessed_retry_long_topic,
-    concurrency=routing_settings.ROUTING_CONCURRENCY_UNPROCESSED_RETRY_LONG,
-)
-async def process_retry_long_observations(streaming_data):
-    async for key, message in streaming_data.items():
-        await process_retry_observation(key, message)
+if routing_settings.ENABLE_UNPROCESSED_RETRY_LONG:
+    @app.agent(
+        observations_unprocessed_retry_long_topic,
+        concurrency=routing_settings.ROUTING_CONCURRENCY_UNPROCESSED_RETRY_LONG,
+    )
+    async def process_retry_long_observations(streaming_data):
+        async for key, message in streaming_data.items():
+            await process_retry_observation(key, message)
 
 
 @tracing.faust_instrumentation.load_context
@@ -631,23 +633,23 @@ async def process_transformed_observations(streaming_transformed_data):
                     name="routing_service.observation_sent_to_dead_letter_queue"
                 )
 
+if routing_settings.ENABLE_TRANSFORMED_RETRY_SHORT:
+    @app.agent(
+        observations_transformed_retry_short_topic,
+        concurrency=routing_settings.ROUTING_CONCURRENCY_TRANSFORMED_RETRY_SHORT,
+    )
+    async def process_transformed_retry_short_observations(streaming_transformed_data):
+        async for key, transformed_message in streaming_transformed_data.items():
+            await process_transformed_retry_observation(key, transformed_message)
 
-@app.agent(
-    observations_transformed_retry_short_topic,
-    concurrency=routing_settings.ROUTING_CONCURRENCY_TRANSFORMED_RETRY_SHORT,
-)
-async def process_transformed_retry_short_observations(streaming_transformed_data):
-    async for key, transformed_message in streaming_transformed_data.items():
-        await process_transformed_retry_observation(key, transformed_message)
-
-
-@app.agent(
-    observations_transformed_retry_long_topic,
-    concurrency=routing_settings.ROUTING_CONCURRENCY_TRANSFORMED_RETRY_LONG,
-)
-async def process_transformed_retry_long_observations(streaming_transformed_data):
-    async for key, transformed_message in streaming_transformed_data.items():
-        await process_transformed_retry_observation(key, transformed_message)
+if routing_settings.ENABLE_TRANSFORMED_RETRY_LONG:
+    @app.agent(
+        observations_transformed_retry_long_topic,
+        concurrency=routing_settings.ROUTING_CONCURRENCY_TRANSFORMED_RETRY_LONG,
+    )
+    async def process_transformed_retry_long_observations(streaming_transformed_data):
+        async for key, transformed_message in streaming_transformed_data.items():
+            await process_transformed_retry_observation(key, transformed_message)
 
 
 @app.timer(interval=120.0)
