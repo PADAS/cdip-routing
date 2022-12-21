@@ -553,7 +553,7 @@ async def process_retry_observation(key, message):
             )
 
 
-if routing_settings.ENABLED_UNPROCESSED_TOPIC:
+if routing_settings.ENABLE_UNPROCESSED_TOPIC:
     @tracing.faust_instrumentation.load_context
     @app.agent(
         observations_unprocessed_topic,
