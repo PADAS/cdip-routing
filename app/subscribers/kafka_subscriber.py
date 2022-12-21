@@ -553,34 +553,35 @@ async def process_retry_observation(key, message):
             )
 
 
-@tracing.faust_instrumentation.load_context
-@app.agent(
-    observations_unprocessed_topic,
-    concurrency=routing_settings.ROUTING_CONCURRENCY_UNPROCESSED,
-)
-async def process_observations(streaming_data):
-    async for key, message in streaming_data.items():
-        try:
-            await process_observation(key, message)
-        except Exception as e:
-            error_msg = f"Unexpected error prior to processing observation"
-            logger.exception(
-                error_msg,
-                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
-            )
-            # When all else fails post to dead letter
-            with tracing.tracer.start_as_current_span(
-                "routing_service.process_observations", kind=SpanKind.PRODUCER
-            ) as current_span:
-                current_span.set_attribute("error", error_msg)
-                tracing_headers = tracing.faust_instrumentation.build_context_headers()
-                await observations_unprocessed_deadletter.send(
-                    value=message, headers=tracing_headers
+if routing_settings.ENABLED_UNPROCESSED_TOPIC:
+    @tracing.faust_instrumentation.load_context
+    @app.agent(
+        observations_unprocessed_topic,
+        concurrency=routing_settings.ROUTING_CONCURRENCY_UNPROCESSED,
+    )
+    async def process_observations(streaming_data):
+        async for key, message in streaming_data.items():
+            try:
+                await process_observation(key, message)
+            except Exception as e:
+                error_msg = f"Unexpected error prior to processing observation"
+                logger.exception(
+                    error_msg,
+                    extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
                 )
-                current_span.set_attribute("is_sent_to_dead_letter_queue", True)
-                current_span.add_event(
-                    name="routing_service.observation_sent_to_dead_letter_queue"
-                )
+                # When all else fails post to dead letter
+                with tracing.tracer.start_as_current_span(
+                    "routing_service.process_observations", kind=SpanKind.PRODUCER
+                ) as current_span:
+                    current_span.set_attribute("error", error_msg)
+                    tracing_headers = tracing.faust_instrumentation.build_context_headers()
+                    await observations_unprocessed_deadletter.send(
+                        value=message, headers=tracing_headers
+                    )
+                    current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+                    current_span.add_event(
+                        name="routing_service.observation_sent_to_dead_letter_queue"
+                    )
 
 
 if routing_settings.ENABLE_UNPROCESSED_RETRY_SHORT:
@@ -603,35 +604,36 @@ if routing_settings.ENABLE_UNPROCESSED_RETRY_LONG:
             await process_retry_observation(key, message)
 
 
-@tracing.faust_instrumentation.load_context
-@app.agent(
-    observations_transformed_topic,
-    concurrency=routing_settings.ROUTING_CONCURRENCY_TRANSFORMED,
-)
-async def process_transformed_observations(streaming_transformed_data):
-    async for key, transformed_message in streaming_transformed_data.items():
-        try:
-            await process_transformed_observation(key, transformed_message)
-        except Exception as e:
-            error_msg = "Unexpected error prior to processing transformed observation"
-            logger.exception(
-                error_msg,
-                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
-            )
-            # When all else fails post to dead letter
-            with tracing.tracer.start_as_current_span(
-                "routing_service.error_prior_to_processing_transformed_observation",
-                kind=SpanKind.PRODUCER,
-            ) as current_span:
-                current_span.set_attribute("error", error_msg)
-                tracing_headers = tracing.faust_instrumentation.build_context_headers()
-                await observations_transformed_deadletter.send(
-                    value=transformed_message, headers=tracing_headers
+if routing_settings.ENABLE_TRANSFORMED_TOPIC:
+    @tracing.faust_instrumentation.load_context
+    @app.agent(
+        observations_transformed_topic,
+        concurrency=routing_settings.ROUTING_CONCURRENCY_TRANSFORMED,
+    )
+    async def process_transformed_observations(streaming_transformed_data):
+        async for key, transformed_message in streaming_transformed_data.items():
+            try:
+                await process_transformed_observation(key, transformed_message)
+            except Exception as e:
+                error_msg = "Unexpected error prior to processing transformed observation"
+                logger.exception(
+                    error_msg,
+                    extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
                 )
-                current_span.set_attribute("is_sent_to_dead_letter_queue", True)
-                current_span.add_event(
-                    name="routing_service.observation_sent_to_dead_letter_queue"
-                )
+                # When all else fails post to dead letter
+                with tracing.tracer.start_as_current_span(
+                    "routing_service.error_prior_to_processing_transformed_observation",
+                    kind=SpanKind.PRODUCER,
+                ) as current_span:
+                    current_span.set_attribute("error", error_msg)
+                    tracing_headers = tracing.faust_instrumentation.build_context_headers()
+                    await observations_transformed_deadletter.send(
+                        value=transformed_message, headers=tracing_headers
+                    )
+                    current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+                    current_span.add_event(
+                        name="routing_service.observation_sent_to_dead_letter_queue"
+                    )
 
 if routing_settings.ENABLE_TRANSFORMED_RETRY_SHORT:
     @app.agent(
