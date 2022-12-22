@@ -308,7 +308,10 @@ def update_attributes_for_transformed_retry(attributes):
     retry_attempt = attributes.get("retry_attempt")
     retry_at = None
 
-    if not retry_topic:
+    if (settings.RETRY_SHORT_ATTEMPTS == 0 and settings.RETRY_LONG_ATTEMPTS == 0):
+        # check if retry logic disabled
+        retry_topic = routing.TopicEnum.observations_transformed_deadletter.value
+    elif not retry_topic:
         # first failure, initialize
         retry_topic = routing.TopicEnum.observations_transformed_retry_short.value
         retry_attempt = 1

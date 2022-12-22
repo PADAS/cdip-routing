@@ -323,16 +323,12 @@ class SMARTTransformer:
 
         smart_data_type = (
             "integrateincident"
-            if is_er_event and version.parse(self._version) >= version.parse("7.5.3")
+            if is_er_event and version.parse(self._version) >= version.parse("7.5.7")
             else "incident"
         )
 
         # storing custom uuid on reports so that the incident_uuid and observation_uuid are distinct but associated
-        observation_uuid = (
-            str(event.event_details.get("smart_observation_uuid"))
-            if event.event_details.get("smart_observation_uuid")
-            else None
-        )
+        observation_uuid = str(event.id) if version.parse(self._version) >= version.parse("7.5.3") else event.event_details.get("smart_observation_uuid")
         if is_er_event and not observation_uuid:
             raise ObservationUUIDValueException
 
@@ -661,21 +657,21 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
 
             incident_requests = []
             for event in patrol_leg.event_details:
-                # check that the event wasn't already created as independent incident and then linked to patrol
-                smart_response = self.smartconnect_client.get_incident(
-                    incident_uuid=event.id
-                )
                 # SMART guids are stripped of dashes
                 if str(event.er_uuid).replace("-", "") not in existing_waypoint_uuids:
                     if (
                         version.parse(self._version) < version.parse("7.5.3")
-                        and smart_response
                     ):
-                        logger.info(
-                            "skipping event because it already exists in destination outside of patrol"
+                        # check that the event wasn't already created as independent incident and then linked to patrol
+                        smart_response = self.smartconnect_client.get_incident(
+                            incident_uuid=event.id
                         )
-                        # version ^7.5.3 will allow us to create waypoint on patrol with same uuid as existing ind inc
-                        continue
+                        if smart_response:
+                            logger.info(
+                                "skipping event because it already exists in destination outside of patrol"
+                            )
+                            # version ^7.5.3 will allow us to create waypoint on patrol with same uuid as existing ind inc
+                            continue
                     incident_request = self.event_to_patrol_waypoint(
                         patrol_id=patrol.id,
                         patrol_leg_id=patrol_leg.id,
