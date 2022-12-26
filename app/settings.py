@@ -51,3 +51,5 @@ ENABLE_UNPROCESSED_RETRY_LONG = env.bool('ENABLE_UNPROCESSED_RETRY_LONG', False)
 
 # Used in OTel traces/spans to set the 'environment' attribute, used on metrics calculation
 TRACE_ENVIRONMENT = env.str("TRACE_ENVIRONMENT", "dev")
+
+FAUST_APP_ID = env.str('FAUST_APP_ID', 'cdip-routing')

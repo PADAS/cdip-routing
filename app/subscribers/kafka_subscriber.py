@@ -30,8 +30,6 @@ from app.core import tracing
 
 logger = logging.getLogger(__name__)
 
-APP_ID = "cdip-routing"
-
 cloud_enabled = cdip_settings.CONFLUENT_CLOUD_ENABLED
 if cloud_enabled:
     logger.debug(f"Entering Confluent Cloud Enabled Flow")
@@ -49,7 +47,7 @@ if cloud_enabled:
     )
 
     app = faust.App(
-        APP_ID,
+        routing_settings.FAUST_APP_ID,
         broker=f"{cdip_settings.KAFKA_BROKER}",
         broker_credentials=faust.SASLCredentials(
             username=cdip_settings.CONFLUENT_CLOUD_USERNAME,
@@ -63,7 +61,7 @@ if cloud_enabled:
     )
 else:
     app = faust.App(
-        APP_ID,
+        routing_settings.FAUST_APP_ID,
         broker=f"{cdip_settings.KAFKA_BROKER}",
         value_serializer="raw",
         logging_config=DEFAULT_LOGGING,
