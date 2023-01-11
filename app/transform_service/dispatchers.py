@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import requests
 from cdip_connector.core import schemas
 from cdip_connector.core.cloudstorage import get_cloud_storage
-from dasclient.dasclient import DasClient
+from erclient import AsyncERClient
 from smartconnect import SmartClient
 from smartconnect.models import SMARTRequest, SMARTCompositeRequest
 
@@ -26,25 +26,25 @@ class Dispatcher(ABC):
         self.configuration = config
 
     @abstractmethod
-    def send(self, messages: list):
+    async def send(self, messages: list):
         ...
 
 
 class ERDispatcher(Dispatcher, ABC):
     def __init__(self, config: schemas.OutboundConfiguration, provider: str):
         super().__init__(config)
-        self.das_client = self.make_das_client(config, provider)
+        self.er_client = self.make_er_client(config, provider)
         # self.load_batch_size = 1000
 
     @staticmethod
-    def make_das_client(
+    def make_er_client(
         config: schemas.OutboundConfiguration, provider: str
-    ) -> DasClient:
+    ) -> AsyncERClient:
 
         provider_key = provider
         url_parse = urlparse(config.endpoint)
 
-        return DasClient(
+        return AsyncERClient(
             service_root=config.endpoint,
             username=config.login,
             password=config.password,
@@ -65,13 +65,15 @@ class ERPositionDispatcher(ERDispatcher):
     def __init__(self, config, provider):
         super(ERPositionDispatcher, self).__init__(config, provider)
 
-    def send(self, position: dict):
+    async def send(self, position: dict):
         result = None
         try:
-            result = self.das_client.post_sensor_observation(position)
+            result = await self.er_client.post_sensor_observation(position)
         except Exception as ex:
             logger.exception(f"exception raised sending to dest {ex}")
             raise ex
+        finally:
+            await self.er_client.close()
         return result
 
 
@@ -79,16 +81,18 @@ class ERGeoEventDispatcher(ERDispatcher):
     def __init__(self, config, provider):
         super(ERGeoEventDispatcher, self).__init__(config, provider)
 
-    def send(self, messages: Union[list, dict]):
+    async def send(self, messages: Union[list, dict]):
         results = []
         if isinstance(messages, dict):
             messages = [messages]
-        for m in messages:
-            try:
-                results.append(self.das_client.post_report(m))
-            except Exception as ex:
-                logger.exception(f"exception raised sending to dest {ex}")
-                raise ex
+
+        async with self.er_client as client:
+            for m in messages:
+                try:
+                    results.append(await client.post_report(m))
+                except Exception as ex:
+                    logger.exception(f"exception raised sending to dest {ex}")
+                    raise ex
         return results
 
 
@@ -97,17 +101,20 @@ class ERCameraTrapDispatcher(ERDispatcher):
         super(ERCameraTrapDispatcher, self).__init__(config, provider)
         self.cloud_storage = get_cloud_storage()
 
-    def send(self, camera_trap_payload: dict):
+    async def send(self, camera_trap_payload: dict):
         result = None
         try:
             file_name = camera_trap_payload.get("file")
             file = self.cloud_storage.download(file_name)
-            result = self.das_client.post_camera_trap_report(camera_trap_payload, file)
+            result = await self.er_client.post_camera_trap_report(
+                camera_trap_payload, file
+            )
         except Exception as ex:
             logger.exception(f"exception raised sending to dest {ex}")
             raise ex
         finally:
             self.cloud_storage.remove(file)
+            await self.er_client.close()
         return result
 
 

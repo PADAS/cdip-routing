@@ -294,7 +294,7 @@ async def process_transformed_observation(key, transformed_message):
             with tracing.tracer.start_as_current_span(
                 "routing_service.dispatch_transformed_observation", kind=SpanKind.CLIENT
             ) as current_span:
-                dispatch_transformed_observation(
+                await dispatch_transformed_observation(
                     observation_type,
                     outbound_config_id,
                     integration_id,
