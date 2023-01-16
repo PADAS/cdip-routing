@@ -31,6 +31,8 @@ class Dispatcher(ABC):
 
 
 class ERDispatcher(Dispatcher, ABC):
+    DEFAULT_CONNECT_TIMEOUT_SECONDS = 10.0
+
     def __init__(self, config: schemas.OutboundConfiguration, provider: str):
         super().__init__(config)
         self.er_client = self.make_er_client(config, provider)
@@ -52,6 +54,7 @@ class ERDispatcher(Dispatcher, ABC):
             token_url=f"{url_parse.scheme}://{url_parse.hostname}/oauth2/token",
             client_id="das_web_client",
             provider_key=provider_key,
+            connect_timeout=ERDispatcher.DEFAULT_CONNECT_TIMEOUT_SECONDS,
         )
 
     @staticmethod
