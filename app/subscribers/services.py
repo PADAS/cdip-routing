@@ -186,7 +186,7 @@ def get_inbound_integration_detail(
         raise ReferenceDataError(f"Request for InboundIntegration({integration_id})")
 
 
-def dispatch_transformed_observation(
+async def dispatch_transformed_observation(
     stream_type: str, outbound_config_id: str, inbound_int_id: str, observation
 ) -> dict:
 
@@ -234,7 +234,7 @@ def dispatch_transformed_observation(
 
         if dispatcher:
             try:
-                dispatcher.send(observation)
+                await dispatcher.send(observation)
             except Exception as e:
                 logger.error(
                     f"Exception occurred dispatching observation",
@@ -308,7 +308,7 @@ def update_attributes_for_transformed_retry(attributes):
     retry_attempt = attributes.get("retry_attempt")
     retry_at = None
 
-    if (settings.RETRY_SHORT_ATTEMPTS == 0 and settings.RETRY_LONG_ATTEMPTS == 0):
+    if settings.RETRY_SHORT_ATTEMPTS == 0 and settings.RETRY_LONG_ATTEMPTS == 0:
         # check if retry logic disabled
         retry_topic = routing.TopicEnum.observations_transformed_deadletter.value
     elif not retry_topic:
