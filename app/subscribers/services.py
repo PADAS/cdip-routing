@@ -1,10 +1,9 @@
 import asyncio
 import json
+import aiohttp
 import logging
 from datetime import datetime, timedelta
 from uuid import UUID
-
-import requests
 from cdip_connector.core import schemas, routing, cdip_settings
 from urllib3.exceptions import ReadTimeoutError
 
@@ -25,6 +24,7 @@ from app.transform_service.dispatchers import (
     SmartConnectDispatcher,
 )
 from app.transform_service.services import transform_observation
+from gundi_client.client import PortalApi
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,12 @@ _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
 
 
-def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfiguration:
+portal = PortalApi()
 
+
+async def get_outbound_config_detail(
+    outbound_id: UUID,
+) -> schemas.OutboundConfiguration:
     if not outbound_id:
         raise ValueError("integration_id must not be None")
 
@@ -61,61 +65,60 @@ def get_outbound_config_detail(outbound_id: UUID) -> schemas.OutboundConfigurati
 
     logger.debug(f"Cache miss for outbound integration detail", extra={**extra_dict})
 
-    outbound_integrations_endpoint = (
-        f"{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}"
+    connect_timeout, read_timeout = DEFAULT_TIMEOUT
+    timeout_settings = aiohttp.ClientTimeout(
+        sock_connect=connect_timeout, sock_read=read_timeout
     )
-
-    headers = get_auth_header()
-    try:
-        response = requests.get(
-            url=outbound_integrations_endpoint,
-            verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
-            headers=headers,
-            timeout=DEFAULT_TIMEOUT,
-        )
-    except ReadTimeoutError:
-        logger.error(
-            "Read Timeout",
-            extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint},
-        )
-        raise ReferenceDataError(f"Read Timeout for {outbound_integrations_endpoint}")
-    if response.status_code == 200:
+    async with aiohttp.ClientSession(timeout=timeout_settings) as s:
         try:
-            resp_json = response.json()
-        except Exception:
+            response = await portal.get_outbound_integration(
+                session=s, integration_id=str(outbound_id)
+            )
+        except aiohttp.ServerTimeoutError as e:
+            target_url = str(e.request_info.url)
             logger.error(
-                f"Failed decoding response for Outbound Integration Detail",
-                extra={**extra_dict, "resp_text": response.text},
+                "Read Timeout",
+                extra={**extra_dict, ExtraKeys.Url: target_url},
+            )
+            raise ReferenceDataError(f"Read Timeout for {target_url}")
+        except aiohttp.ClientResponseError as e:
+            # ToDo: Try to get the url from the exception or from somewhere else
+            target_url = (
+                f"{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}"
+            )
+            logger.exception(
+                "Portal returned bad response during request for outbound config detail",
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.OutboundIntId: outbound_id,
+                    ExtraKeys.Url: target_url,
+                    ExtraKeys.StatusCode: response.status_code,
+                },
             )
             raise ReferenceDataError(
-                "Failed decoding response for Outbound Integration Detail"
+                f"Request for OutboundIntegration({outbound_id}) returned bad response"
             )
         else:
-            config = schemas.OutboundConfiguration.parse_obj(resp_json)
-            if config:  # don't cache empty response
-                _cache_db.setex(cache_key, _cache_ttl, config.json())
-            return config
-
-    else:
-        logger.exception(
-            "Portal returned bad response during request for outbound config detail",
-            extra={
-                ExtraKeys.AttentionNeeded: True,
-                ExtraKeys.OutboundIntId: outbound_id,
-                ExtraKeys.Url: outbound_integrations_endpoint,
-                ExtraKeys.StatusCode: response.status_code,
-            },
-        )
-
-        raise ReferenceDataError(
-            f"Request for OutboundIntegration({outbound_id}) returned bad response"
-        )
+            try:
+                resp_json = response.json()
+            except Exception:
+                logger.error(
+                    f"Failed decoding response for Outbound Integration Detail",
+                    extra={**extra_dict, "resp_text": response.text},
+                )
+                raise ReferenceDataError(
+                    "Failed decoding response for Outbound Integration Detail"
+                )
+            else:
+                config = schemas.OutboundConfiguration.parse_obj(resp_json)
+                if config:  # don't cache empty response
+                    _cache_db.setex(cache_key, _cache_ttl, config.json())
+                return config
 
 
 def get_inbound_integration_detail(
     integration_id: UUID,
 ) -> schemas.IntegrationInformation:
-
     if not integration_id:
         raise ValueError("integration_id must not be None")
 
@@ -137,59 +140,60 @@ def get_inbound_integration_detail(
 
     logger.debug(f"Cache miss for inbound integration detai", extra={**extra_dict})
 
-    inbound_integrations_endpoint = (
-        f"{settings.PORTAL_INBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}"
+    connect_timeout, read_timeout = DEFAULT_TIMEOUT
+    timeout_settings = aiohttp.ClientTimeout(
+        sock_connect=connect_timeout, sock_read=read_timeout
     )
-
-    headers = get_auth_header()
-    try:
-        response = requests.get(
-            url=inbound_integrations_endpoint,
-            verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
-            headers=headers,
-            timeout=DEFAULT_TIMEOUT,
-        )
-    except ReadTimeoutError:
-        logger.error(
-            "Read Timeout",
-            extra={**extra_dict, ExtraKeys.Url: inbound_integrations_endpoint},
-        )
-        raise ReferenceDataError(f"Read Timeout for {inbound_integrations_endpoint}")
-
-    if response.status_code == 200:
+    async with aiohttp.ClientSession(timeout=timeout_settings) as s:
         try:
-            resp_json = response.json()
-        except Exception:
+            response = await portal.get_inbound_integration(
+                session=s, integration_id=str(integration_id)
+            )
+        except aiohttp.ServerTimeoutError as e:
+            # ToDo: Try to get the url from the exception or from somewhere else
+            target_url = (
+                f"{settings.PORTAL_INBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}"
+            )
             logger.error(
-                f"Failed decoding response for InboundIntegration Detail",
-                extra={**extra_dict, "resp_text": response.text},
+                "Read Timeout",
+                extra={**extra_dict, ExtraKeys.Url: target_url},
+            )
+            raise ReferenceDataError(f"Read Timeout for {target_url}")
+        except aiohttp.ClientResponseError as e:
+            target_url = str(e.request_info.url)
+            logger.exception(
+                "Portal returned bad response during request for inbound config detail",
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.InboundIntId: integration_id,
+                    ExtraKeys.Url: target_url,
+                    ExtraKeys.StatusCode: response.status_code,
+                },
             )
             raise ReferenceDataError(
-                "Failed decoding response for InboundIntegration Detail"
+                f"Request for InboundIntegration({integration_id})"
             )
         else:
-            config = schemas.IntegrationInformation.parse_obj(resp_json)
-            if config:  # don't cache empty response
-                _cache_db.setex(cache_key, _cache_ttl, config.json())
-            return config
-    else:
-        logger.exception(
-            "Portal returned bad response during request for inbound config detail",
-            extra={
-                ExtraKeys.AttentionNeeded: True,
-                ExtraKeys.InboundIntId: integration_id,
-                ExtraKeys.Url: response.request,
-                ExtraKeys.StatusCode: response.status_code,
-            },
-        )
-
-        raise ReferenceDataError(f"Request for InboundIntegration({integration_id})")
+            try:
+                resp_json = response.json()
+            except Exception:
+                logger.error(
+                    f"Failed decoding response for InboundIntegration Detail",
+                    extra={**extra_dict, "resp_text": response.text},
+                )
+                raise ReferenceDataError(
+                    "Failed decoding response for InboundIntegration Detail"
+                )
+            else:
+                config = schemas.IntegrationInformation.parse_obj(resp_json)
+                if config:  # don't cache empty response
+                    _cache_db.setex(cache_key, _cache_ttl, config.json())
+                return config
 
 
 async def dispatch_transformed_observation(
     stream_type: str, outbound_config_id: str, inbound_int_id: str, observation
-) -> dict:
-
+):
     extra_dict = {
         ExtraKeys.OutboundIntId: outbound_config_id,
         ExtraKeys.InboundIntId: inbound_int_id,
@@ -203,8 +207,8 @@ async def dispatch_transformed_observation(
             extra=extra_dict,
         )
 
-    config = get_outbound_config_detail(outbound_config_id)
-    inbound_integration = get_inbound_integration_detail(inbound_int_id)
+    config = await get_outbound_config_detail(outbound_config_id)
+    inbound_integration = await get_inbound_integration_detail(inbound_int_id)
     provider = inbound_integration.provider
 
     if config:
@@ -303,7 +307,6 @@ def create_retry_message(observation, attributes):
 
 
 def update_attributes_for_transformed_retry(attributes):
-
     retry_topic = attributes.get("retry_topic")
     retry_attempt = attributes.get("retry_attempt")
     retry_at = None
@@ -348,7 +351,6 @@ def update_attributes_for_transformed_retry(attributes):
 
 
 def update_attributes_for_unprocessed_retry(attributes):
-
     retry_topic = attributes.get("retry_topic")
     retry_attempt = attributes.get("retry_attempt")
     retry_at = None
@@ -430,6 +432,5 @@ def get_key_for_transformed_observation(current_key: bytes, destination_id: UUID
 
 
 if __name__ == "__main__":
-
     c = get_outbound_config_detail("34891e4d-0170-4937-917d-46e79fdee082")
     print(c)
