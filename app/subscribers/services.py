@@ -98,8 +98,6 @@ async def get_outbound_config_detail(
                 f"Request for OutboundIntegration({outbound_id}) returned bad response"
             )
         else:
-
-
             try:
                 config = schemas.OutboundConfiguration.parse_obj(response)
             except Exception:
