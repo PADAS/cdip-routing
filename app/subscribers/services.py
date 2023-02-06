@@ -4,15 +4,11 @@ import aiohttp
 import logging
 from datetime import datetime, timedelta
 from uuid import UUID
-from cdip_connector.core import schemas, routing, cdip_settings
-from urllib3.exceptions import ReadTimeoutError
-
+from cdip_connector.core import schemas, routing
 from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import (
-    get_auth_header,
     get_redis_db,
-    create_cache_key,
     ReferenceDataError,
     DispatcherException,
 )
@@ -25,10 +21,11 @@ from app.transform_service.dispatchers import (
 )
 from app.transform_service.services import transform_observation
 from gundi_client.client import PortalApi
+from app.settings import DEFAULT_REQUESTS_TIMEOUT
+
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT = (3.1, 20)
 
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
@@ -65,17 +62,21 @@ async def get_outbound_config_detail(
 
     logger.debug(f"Cache miss for outbound integration detail", extra={**extra_dict})
 
-    connect_timeout, read_timeout = DEFAULT_TIMEOUT
+    connect_timeout, read_timeout = DEFAULT_REQUESTS_TIMEOUT
     timeout_settings = aiohttp.ClientTimeout(
         sock_connect=connect_timeout, sock_read=read_timeout
     )
-    async with aiohttp.ClientSession(timeout=timeout_settings) as s:
+    async with aiohttp.ClientSession(
+        timeout=timeout_settings, raise_for_status=True
+    ) as s:
         try:
             response = await portal.get_outbound_integration(
                 session=s, integration_id=str(outbound_id)
             )
         except aiohttp.ServerTimeoutError as e:
-            target_url = str(e.request_info.url)
+            target_url = (
+                f"{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}"
+            )
             logger.error(
                 "Read Timeout",
                 extra={**extra_dict, ExtraKeys.Url: target_url},
@@ -83,9 +84,7 @@ async def get_outbound_config_detail(
             raise ReferenceDataError(f"Read Timeout for {target_url}")
         except aiohttp.ClientResponseError as e:
             # ToDo: Try to get the url from the exception or from somewhere else
-            target_url = (
-                f"{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}"
-            )
+            target_url = str(e.request_info.url)
             logger.exception(
                 "Portal returned bad response during request for outbound config detail",
                 extra={
@@ -99,24 +98,25 @@ async def get_outbound_config_detail(
                 f"Request for OutboundIntegration({outbound_id}) returned bad response"
             )
         else:
+
+
             try:
-                resp_json = response.json()
+                config = schemas.OutboundConfiguration.parse_obj(response)
             except Exception:
                 logger.error(
                     f"Failed decoding response for Outbound Integration Detail",
-                    extra={**extra_dict, "resp_text": response.text},
+                    extra={**extra_dict, "resp_text": response},
                 )
                 raise ReferenceDataError(
                     "Failed decoding response for Outbound Integration Detail"
                 )
             else:
-                config = schemas.OutboundConfiguration.parse_obj(resp_json)
                 if config:  # don't cache empty response
                     _cache_db.setex(cache_key, _cache_ttl, config.json())
                 return config
 
 
-def get_inbound_integration_detail(
+async def get_inbound_integration_detail(
     integration_id: UUID,
 ) -> schemas.IntegrationInformation:
     if not integration_id:
@@ -140,11 +140,13 @@ def get_inbound_integration_detail(
 
     logger.debug(f"Cache miss for inbound integration detai", extra={**extra_dict})
 
-    connect_timeout, read_timeout = DEFAULT_TIMEOUT
+    connect_timeout, read_timeout = DEFAULT_REQUESTS_TIMEOUT
     timeout_settings = aiohttp.ClientTimeout(
         sock_connect=connect_timeout, sock_read=read_timeout
     )
-    async with aiohttp.ClientSession(timeout=timeout_settings) as s:
+    async with aiohttp.ClientSession(
+        timeout=timeout_settings, raise_for_status=True
+    ) as s:
         try:
             response = await portal.get_inbound_integration(
                 session=s, integration_id=str(integration_id)
@@ -175,17 +177,16 @@ def get_inbound_integration_detail(
             )
         else:
             try:
-                resp_json = response.json()
+                config = schemas.IntegrationInformation.parse_obj(response)
             except Exception:
                 logger.error(
                     f"Failed decoding response for InboundIntegration Detail",
-                    extra={**extra_dict, "resp_text": response.text},
+                    extra={**extra_dict, "resp_text": response},
                 )
                 raise ReferenceDataError(
                     "Failed decoding response for InboundIntegration Detail"
                 )
             else:
-                config = schemas.IntegrationInformation.parse_obj(resp_json)
                 if config:  # don't cache empty response
                     _cache_db.setex(cache_key, _cache_ttl, config.json())
                 return config

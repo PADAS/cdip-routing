@@ -34,6 +34,7 @@ from packaging import version
 
 logger = logging.getLogger(__name__)
 
+
 # Smart Connect Outbound configuration models.
 class CategoryPair(BaseModel):
     event_type: str
@@ -208,7 +209,6 @@ class SMARTTransformer:
                     return t.category_path
 
     def _resolve_attribute(self, key, value) -> Tuple[str]:
-
         attr = self._ca_datamodel.get_attribute(key=key)
 
         # Favor a match in the CA DataModel attributes dictionary.
@@ -238,10 +238,8 @@ class SMARTTransformer:
     def _resolve_attributes_for_event(
         self, *, event: [schemas.GeoEvent, schemas.EREvent] = None
     ) -> dict:
-
         attributes = {}
         for k, v in event.event_details.items():
-
             # some event details are lists like updates
             v = v[0] if isinstance(v, list) and len(v) > 0 else v
 
@@ -444,7 +442,6 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
     def geoevent_to_incident(
         self, *, geoevent: schemas.GeoEvent = None
     ) -> SMARTRequest:
-
         # Sanitize coordinates
         coordinates = (
             [geoevent.location.x, geoevent.location.y] if geoevent.location else [0, 0]
@@ -708,7 +705,6 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             return smart_request
 
         else:  # Create Patrol
-
             patrol_leg: ERPatrolSegment
             # create patrol with first leg, currently ER only supports single leg patrols
             patrol_leg = patrol.patrol_segments[0]

@@ -119,6 +119,5 @@ def coalesce(*values):
 
 
 if __name__ == "__main__":
-
     while not input().startswith("q"):
         print(get_auth_header())
