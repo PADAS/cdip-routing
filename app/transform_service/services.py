@@ -75,7 +75,7 @@ async def get_all_outbound_configs_for_id(
     ) as s:
         try:
             resp = await portal.get_outbound_integration_list(
-                session=s, inbound_id=inbound_id, device_id=device_id
+                session=s, inbound_id=str(inbound_id), device_id=str(device_id)
             )
         except aiohttp.ServerTimeoutError as e:
             # ToDo: Try to get the url from the exception or from somewhere else
@@ -101,18 +101,17 @@ async def get_all_outbound_configs_for_id(
             )
         else:
             try:
-                resp_json = resp.json()
-            except Exception as e:
-                logger.error(
-                    f"Failed decoding response for OutboundConfig",
-                    extra={**extra_dict, "resp_text": resp.text},
-                )
-                raise ReferenceDataError("Failed decoding response for OutboundConfig")
-            else:
-                resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
+                resp_json = [resp] if isinstance(resp, dict) else resp
                 configurations = parse_obj_as(
                     List[schemas.OutboundConfiguration], resp_json
                 )
+            except Exception as e:
+                logger.error(
+                    f"Failed decoding response for OutboundConfig",
+                    extra={**extra_dict, "resp_text": resp},
+                )
+                raise ReferenceDataError("Failed decoding response for OutboundConfig")
+            else:
                 configs = OutboundConfigurations(configurations=configurations)
                 if configurations:  # don't cache empty response
                     _cache_db.setex(cache_key, _cache_ttl, configs.json())
