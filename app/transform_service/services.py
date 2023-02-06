@@ -1,12 +1,10 @@
 import logging
 import aiohttp
-import requests
 from typing import List
 from uuid import UUID
 from cdip_connector.core import schemas, portal_api, cdip_settings
 from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel, parse_obj_as
-from urllib3.exceptions import ReadTimeoutError
 from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import (
