@@ -6,7 +6,7 @@ env.read_env()
 
 LOGGING_LEVEL = env.str("LOGGING_LEVEL", "INFO")
 
-DEFAULT_REQUESTS_TIMEOUT = (3.1, 20)  # Connect, Read
+DEFAULT_REQUESTS_TIMEOUT = (10, 20)  # Connect, Read
 
 PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT = (
     f"{cdip_settings.PORTAL_API_ENDPOINT}/integrations/outbound/configurations"
