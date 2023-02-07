@@ -125,7 +125,7 @@ grpcio-status==1.51.1
     # via
     #   google-api-core
     #   google-cloud-pubsub
-gundi-client==0.2.1
+gundi-client==0.2.2
     # via -r requirements.in
 h11==0.14.0
     # via

@@ -20,7 +20,7 @@ from app.transform_service.dispatchers import (
     SmartConnectDispatcher,
 )
 from app.transform_service.services import transform_observation
-from gundi_client.client import PortalApi
+from gundi_client import PortalApi
 from app.settings import DEFAULT_REQUESTS_TIMEOUT
 
 

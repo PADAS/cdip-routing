@@ -25,7 +25,7 @@ from app.transform_service.transformers import (
     ERCameraTrapTransformer,
     WPSWatchCameraTrapTransformer,
 )
-from gundi_client.client import PortalApi
+from gundi_client import PortalApi
 
 
 logger = logging.getLogger(__name__)
