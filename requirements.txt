@@ -21,7 +21,9 @@ anyio==3.6.2
 async-timeout==4.0.2
     # via aiohttp
 attrs==22.2.0
-    # via aiohttp
+    # via
+    #   aiohttp
+    #   pytest
 backoff==2.2.1
     # via opentelemetry-exporter-otlp-proto-http
 backports-zoneinfo==0.2.1
@@ -69,6 +71,8 @@ environs==9.5.0
     #   cdip-connector
     #   gundi-client
     #   smartconnect-client
+exceptiongroup==1.1.0
+    # via pytest
 fastapi==0.89.1
     # via -r requirements.in
 faust==1.10.4
@@ -141,6 +145,8 @@ idna==3.4
     #   requests
     #   rfc3986
     #   yarl
+iniconfig==2.0.0
+    # via pytest
 kafka-python==1.4.7
     # via robinhood-aiokafka
 marshmallow==3.19.0
@@ -225,10 +231,13 @@ packaging==23.0
     # via
     #   -r requirements.in
     #   marshmallow
+    #   pytest
 pillow==9.4.0
     # via
     #   -r requirements.in
     #   cdip-connector
+pluggy==1.0.0
+    # via pytest
 proto-plus==1.22.2
     # via
     #   google-cloud-pubsub
@@ -258,6 +267,15 @@ pydantic==1.10.4
     #   fastapi
     #   gundi-client
     #   smartconnect-client
+pytest==7.2.1
+    # via
+    #   -r requirements.in
+    #   pytest-asyncio
+    #   pytest-mock
+pytest-asyncio==0.20.3
+    # via -r requirements.in
+pytest-mock==3.10.0
+    # via -r requirements.in
 python-dateutil==2.8.2
     # via
     #   cdip-connector
@@ -317,6 +335,8 @@ terminaltables==3.1.10
     # via faust
 timezonefinder==5.2.0
     # via smartconnect-client
+tomli==2.0.1
+    # via pytest
 typing-extensions==4.4.0
     # via
     #   opentelemetry-sdk
