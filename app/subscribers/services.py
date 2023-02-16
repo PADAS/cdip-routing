@@ -91,7 +91,7 @@ async def get_outbound_config_detail(
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.OutboundIntId: outbound_id,
                     ExtraKeys.Url: target_url,
-                    ExtraKeys.StatusCode: response.status_code,
+                    ExtraKeys.StatusCode: e.status,
                 },
             )
             raise ReferenceDataError(
@@ -167,7 +167,7 @@ async def get_inbound_integration_detail(
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.InboundIntId: integration_id,
                     ExtraKeys.Url: target_url,
-                    ExtraKeys.StatusCode: response.status_code,
+                    ExtraKeys.StatusCode: e.status,
                 },
             )
             raise ReferenceDataError(
