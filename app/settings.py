@@ -55,3 +55,6 @@ ENABLE_UNPROCESSED_RETRY_LONG = env.bool("ENABLE_UNPROCESSED_RETRY_LONG", False)
 TRACE_ENVIRONMENT = env.str("TRACE_ENVIRONMENT", "dev")
 
 FAUST_APP_ID = env.str("FAUST_APP_ID", "cdip-routing")
+
+# Required to publish to PubSub topics
+GOOGLE_PUB_SUB_PROJECT_ID = env.str("GOOGLE_PUB_SUB_PROJECT_ID", "cdip-78ca")

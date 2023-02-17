@@ -1,11 +1,14 @@
 import logging
 from datetime import datetime
+import aiohttp
 import certifi
 import faust
 from aiokafka.helpers import create_ssl_context
 from cdip_connector.core.routing import TopicEnum
 from cdip_connector.core import cdip_settings
+from gcloud.aio import pubsub
 from opentelemetry.trace import SpanKind
+from app import settings
 from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
 from app.core.utils import ReferenceDataError, DispatcherException
 from app.subscribers.services import (
@@ -166,14 +169,14 @@ async def process_observation(key, message):
                     )
 
                 for destination in destinations:
-                    jsonified_data = create_transformed_message(
+                    binary_data, attributes = create_transformed_message(
                         observation=observation,
                         destination=destination,
                         prefix=observation.observation_type,
                     )
 
-                    if jsonified_data:
-                        key = get_key_for_transformed_observation(key, destination.id)
+                    if binary_data:
+                        # key = get_key_for_transformed_observation(key, destination.id)
                         with tracing.tracer.start_as_current_span(  # Trace observations with Open Telemetry
                             "routing_service.observations_transformed_topic.send",
                             kind=SpanKind.PRODUCER,
@@ -181,14 +184,39 @@ async def process_observation(key, message):
                             current_span.set_attribute(
                                 "destination_id", str(destination.id)
                             )
-                            tracing_headers = (
-                                tracing.faust_instrumentation.build_context_headers()
-                            )
-                            await observations_transformed_topic.send(
-                                key=key,
-                                value=jsonified_data,
-                                headers=tracing_headers,  # Tracing context
-                            )
+                            # tracing_headers = (
+                            #     tracing.faust_instrumentation.build_context_headers()
+                            # )
+                            # await observations_transformed_topic.send(
+                            #     key=key,
+                            #     value=jsonified_data,
+                            #     headers=tracing_headers,  # Tracing context
+                            # )
+                            # ToDo: Ensure OTel context is propagated
+                            async with aiohttp.ClientSession() as session:
+                                client = pubsub.PublisherClient(session=session)
+                                topic_name = (
+                                    f"destination-{attributes['outbound_config_id']}"
+                                )
+                                topic = client.topic_path(
+                                    settings.GOOGLE_PUB_SUB_PROJECT_ID, topic_name
+                                )
+                                # ToDo: We could send in batches as needed
+                                messages = [
+                                    pubsub.PubsubMessage(binary_data, **attributes)
+                                ]
+                                logger.info(
+                                    f"Sending {len(messages)} observations to PubSub topic {topic_name}.."
+                                )
+                                try:
+                                    response = await client.publish(topic, messages)
+                                except Exception as e:
+                                    logger.exception(
+                                        f"Error sending observation tu PubSub topic {topic_name}: {e}"
+                                    )
+                                    raise e
+                                else:
+                                    logger.debug(f"PubSub response: {response}")
                             current_span.add_event(
                                 name="routing_service.transformed_observation_sent_to_dispatcher"
                             )

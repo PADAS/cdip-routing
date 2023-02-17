@@ -9,6 +9,7 @@ aiohttp==3.8.3
     #   aiohttp-cors
     #   cdip-connector
     #   faust
+    #   gcloud-aio-auth
     #   gundi-client
 aiohttp-cors==0.7.0
     # via faust
@@ -25,7 +26,9 @@ attrs==22.2.0
     #   aiohttp
     #   pytest
 backoff==2.2.1
-    # via opentelemetry-exporter-otlp-proto-http
+    # via
+    #   gcloud-aio-auth
+    #   opentelemetry-exporter-otlp-proto-http
 backports-zoneinfo==0.2.1
     # via
     #   pytz-deprecation-shim
@@ -39,6 +42,10 @@ certifi==2022.12.7
     #   httpcore
     #   httpx
     #   requests
+cffi==1.15.1
+    # via cryptography
+chardet==4.0.0
+    # via gcloud-aio-auth
 charset-normalizer==2.1.1
     # via
     #   aiohttp
@@ -55,6 +62,8 @@ confluent-kafka==1.9.2
     # via cdip-connector
 croniter==1.3.8
     # via faust
+cryptography==38.0.4
+    # via gcloud-aio-auth
 dateparser==1.1.5
     # via
     #   earthranger-client
@@ -81,6 +90,12 @@ frozenlist==1.3.3
     # via
     #   aiohttp
     #   aiosignal
+future==0.18.3
+    # via gcloud-aio-auth
+gcloud-aio-auth==4.1.5
+    # via gcloud-aio-pubsub
+gcloud-aio-pubsub==5.2.0
+    # via -r requirements.in
 google-api-core[grpc]==2.11.0
     # via
     #   google-cloud-core
@@ -238,6 +253,8 @@ pillow==9.4.0
     #   cdip-connector
 pluggy==1.0.0
     # via pytest
+prometheus-client==0.16.0
+    # via gcloud-aio-pubsub
 proto-plus==1.22.2
     # via
     #   google-cloud-pubsub
@@ -259,6 +276,8 @@ pyasn1==0.4.8
     #   rsa
 pyasn1-modules==0.2.8
     # via google-auth
+pycparser==2.21
+    # via cffi
 pydantic==1.10.4
     # via
     #   -r requirements.in
@@ -267,6 +286,8 @@ pydantic==1.10.4
     #   fastapi
     #   gundi-client
     #   smartconnect-client
+pyjwt==2.6.0
+    # via gcloud-aio-auth
 pytest==7.2.1
     # via
     #   -r requirements.in
@@ -317,6 +338,7 @@ rsa==4.9
     # via google-auth
 six==1.16.0
     # via
+    #   gcloud-aio-auth
     #   google-auth
     #   google-cloud-storage
     #   python-dateutil

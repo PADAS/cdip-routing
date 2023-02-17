@@ -287,16 +287,14 @@ def create_transformed_message(*, observation, destination, prefix: str):
 
     # observation_type may no longer be needed as topics are now specific to observation type
     attributes = {
-        "observation_type": prefix,
-        "device_id": observation.device_id,
+        "observation_type": str(prefix),
+        "device_id": str(observation.device_id),
         "outbound_config_id": str(destination.id),
-        "integration_id": observation.integration_id,
+        "integration_id": str(observation.integration_id),
     }
 
-    transformed_message = create_message(attributes, transformed_observation)
-
-    jsonified_data = json.dumps(transformed_message, default=str)
-    return jsonified_data
+    binary_data = json.dumps(transformed_observation, default=str).encode("utf-8")
+    return binary_data, attributes
 
 
 def create_retry_message(observation, attributes):
