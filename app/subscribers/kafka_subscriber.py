@@ -184,9 +184,11 @@ async def process_observation(key, message):
                             current_span.set_attribute(
                                 "destination_id", str(destination.id)
                             )
-                            # tracing_headers = (
-                            #     tracing.faust_instrumentation.build_context_headers()
-                            # )
+                            # Propagate OTel context in message attributes
+                            tracing_headers = (
+                                tracing.pubsub_instrumentation.build_context_headers()
+                            )
+                            attributes["tracing_context"] = tracing_headers
                             # await observations_transformed_topic.send(
                             #     key=key,
                             #     value=jsonified_data,
