@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime
 import aiohttp
@@ -185,10 +186,11 @@ async def process_observation(key, message):
                                 "destination_id", str(destination.id)
                             )
                             # Propagate OTel context in message attributes
-                            tracing_headers = (
-                                tracing.pubsub_instrumentation.build_context_headers()
+                            tracing_context = json.dumps(
+                                tracing.pubsub_instrumentation.build_context_headers(),
+                                default=str,
                             )
-                            attributes["tracing_context"] = tracing_headers
+                            attributes["tracing_context"] = tracing_context
                             # await observations_transformed_topic.send(
                             #     key=key,
                             #     value=jsonified_data,
