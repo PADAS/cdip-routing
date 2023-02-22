@@ -365,7 +365,11 @@ class SMARTTransformer:
         )
 
         # storing custom uuid on reports so that the incident_uuid and observation_uuid are distinct but associated
-        observation_uuid = str(event.id) if version.parse(self._version) >= version.parse("7.5.3") else event.event_details.get("smart_observation_uuid")
+        observation_uuid = (
+            str(event.id)
+            if version.parse(self._version) >= version.parse("7.5.3")
+            else event.event_details.get("smart_observation_uuid")
+        )
         if is_er_event and not observation_uuid:
             raise ObservationUUIDValueException
 
@@ -696,9 +700,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             for event in patrol_leg.event_details:
                 # SMART guids are stripped of dashes
                 if str(event.er_uuid).replace("-", "") not in existing_waypoint_uuids:
-                    if (
-                        version.parse(self._version) < version.parse("7.5.3")
-                    ):
+                    if version.parse(self._version) < version.parse("7.5.3"):
                         # check that the event wasn't already created as independent incident and then linked to patrol
                         smart_response = self.smartconnect_client.get_incident(
                             incident_uuid=event.id
