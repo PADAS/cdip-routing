@@ -138,6 +138,22 @@ class SMARTTransformer:
             )
 
         try:
+            self.cm_uuid = self.smartconnect_client.get_configurable_datamodel_for_ca(
+                ca_uuid=self.ca_uuid
+            )
+            if self.cm_uuid:
+                self._ca_config_datamodel = self.smartconnect_client.get_configurable_data_model(cm_uuid=self.cm_uuid)
+
+        except Exception as e:
+            logger.exception(
+                f"Error getting config data model for SMART CA: {self.ca_uuid}",
+                extra={ExtraKeys.Error: e},
+            )
+            raise ReferenceDataError(
+                f"Error getting data model for SMART CA: {self.ca_uuid}"
+            )
+
+        try:
             self.ca = self.smartconnect_client.get_conservation_area(
                 ca_uuid=self.ca_uuid
             )
@@ -189,16 +205,31 @@ class SMARTTransformer:
         self, *, event: [schemas.GeoEvent, schemas.EREvent] = None
     ) -> str:
         """
-        Favor finding a match in the CA Datamodel.
+        Favor finding a match in the Config CA Datamodel, then CA Datamodel.
         """
 
-        matched_category = self._ca_datamodel.get_category(path=event.event_type)
+        matched_category = None
+
+        if self._ca_config_datamodel:
+            # favor config datamodel match if present
+            # convert ER event type to CA path syntax
+            matched_category = self._ca_config_datamodel.get_category(
+                path=str.replace(event.event_type, "_", ".")
+            )
+            if matched_category:
+                return matched_category["hkeyPath"]
+
+        if not matched_category:
+            # direct data model match
+            matched_category = self._ca_datamodel.get_category(path=event.event_type)
 
         if not matched_category:
             # convert ER event type to CA path syntax
             matched_category = self._ca_datamodel.get_category(
                 path=str.replace(event.event_type, "_", ".")
             )
+
+
 
         if matched_category:
             return matched_category["path"]
@@ -208,8 +239,14 @@ class SMARTTransformer:
                     return t.category_path
 
     def _resolve_attribute(self, key, value) -> Tuple[str]:
+        attr = None
 
-        attr = self._ca_datamodel.get_attribute(key=key)
+        if self._ca_config_datamodel:
+            # Favor config DM match over regular DM
+            attr = self._ca_config_datamodel.get_attribute(key=key);
+
+        if not attr:
+            attr = self._ca_datamodel.get_attribute(key=key)
 
         # Favor a match in the CA DataModel attributes dictionary.
         if attr:
