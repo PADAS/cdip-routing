@@ -90,3 +90,32 @@ def outbound_integration_config_list():
             "additional": {},
         }
     ]
+
+
+@pytest.fixture
+def mock_position():
+    return {
+        "attributes": {"observation_type": "ps"},
+        "data": {
+            "id": null,
+            "owner": "na",
+            "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
+            "device_id": "018910980",
+            "name": "Logistics Truck test",
+            "type": "tracking-device",
+            "subject_type": null,
+            "recorded_at": "2023-03-02 16:01:00+02:00",
+            "location": {
+                "x": 35.43915,
+                "y": -1.59083,
+                "z": 0.0,
+                "hdop": null,
+                "vdop": null,
+            },
+            "additional": {"voltage": "7.4", "fuel_level": 71, "speed": "41 kph"},
+            "voltage": null,
+            "temperature": null,
+            "radio_status": null,
+            "observation_type": "ps",
+        },
+    }

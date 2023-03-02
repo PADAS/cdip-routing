@@ -1,5 +1,7 @@
 import asyncio
 import json
+from enum import Enum
+
 import aiohttp
 import logging
 from datetime import datetime, timedelta
@@ -277,32 +279,19 @@ def create_message(attributes, observation):
     return message
 
 
-def create_transformed_message(*, observation, destination, prefix: str):
-    transformed_observation = transform_observation(
-        stream_type=prefix, config=destination, observation=observation
-    )
-    if not transformed_observation:
-        return None
-    logger.debug(f"Transformed observation: {transformed_observation}")
-
-    # observation_type may no longer be needed as topics are now specific to observation type
-    attributes = {
-        "observation_type": prefix,
-        "device_id": observation.device_id,
-        "outbound_config_id": str(destination.id),
-        "integration_id": observation.integration_id,
-    }
-
-    transformed_message = create_message(attributes, transformed_observation)
-
-    jsonified_data = json.dumps(transformed_message, default=str)
+def build_kafka_message(*, payload, attributes):
+    message = create_message(attributes, payload)
+    jsonified_data = json.dumps(message, default=str)
     return jsonified_data
+
+
+def build_gcp_pubsub_message(*, payload):
+    binary_data = json.dumps(payload, default=str).encode("utf-8")
+    return binary_data
 
 
 def create_retry_message(observation, attributes):
-    retry_transformed_message = create_message(attributes, observation)
-    jsonified_data = json.dumps(retry_transformed_message, default=str)
-    return jsonified_data
+    return build_kafka_message(payload=observation, attributes=attributes)
 
 
 def update_attributes_for_transformed_retry(attributes):

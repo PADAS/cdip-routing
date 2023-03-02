@@ -55,3 +55,7 @@ ENABLE_UNPROCESSED_RETRY_LONG = env.bool("ENABLE_UNPROCESSED_RETRY_LONG", False)
 TRACE_ENVIRONMENT = env.str("TRACE_ENVIRONMENT", "dev")
 
 FAUST_APP_ID = env.str("FAUST_APP_ID", "cdip-routing")
+
+# GCP project ID is required to route messages to PubSub
+GCP_PROJECT_ID = env.str("GCP_PROJECT_ID", "cdip-78ca")
+GCP_ENVIRONMENT = env.str("GCP_ENVIRONMENT", "dev")
