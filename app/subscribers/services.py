@@ -31,9 +31,7 @@ logger = logging.getLogger(__name__)
 
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
-
-
-portal = PortalApi()
+_portal = PortalApi()
 
 
 async def get_outbound_config_detail(
@@ -72,7 +70,7 @@ async def get_outbound_config_detail(
         timeout=timeout_settings, raise_for_status=True
     ) as s:
         try:
-            response = await portal.get_outbound_integration(
+            response = await _portal.get_outbound_integration(
                 session=s, integration_id=str(outbound_id)
             )
         except aiohttp.ServerTimeoutError as e:
@@ -148,7 +146,7 @@ async def get_inbound_integration_detail(
         timeout=timeout_settings, raise_for_status=True
     ) as s:
         try:
-            response = await portal.get_inbound_integration(
+            response = await _portal.get_inbound_integration(
                 session=s, integration_id=str(integration_id)
             )
         except aiohttp.ServerTimeoutError as e:
