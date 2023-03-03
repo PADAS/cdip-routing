@@ -148,7 +148,7 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
             topic_name = destination.additional.get(
                 "topic",
                 f"destination-{destination_id_str}-{routing_settings.GCP_ENVIRONMENT}",
-            )
+            ).strip()
             current_span.set_attribute("topic", topic_name)
             topic = client.topic_path(routing_settings.GCP_PROJECT_ID, topic_name)
             messages = [pubsub.PubsubMessage(message, **attributes)]
