@@ -154,7 +154,7 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
             messages = [pubsub.PubsubMessage(message, **attributes)]
             logger.info(f"Sending observation to PubSub topic {topic_name}..")
             try:
-                await client.publish(topic, messages)
+                response = await client.publish(topic, messages)
             except Exception as e:
                 logger.exception(
                     f"Error sending observation to PubSub topic {topic_name}: {e}. Please check if the topic exists or review the outbound configuration."
@@ -162,6 +162,7 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
                 raise e
             else:
                 logger.info(f"Observation sent successfully.")
+                logger.debug(f"GCP PubSub response: {response}")
         current_span.add_event(
             name="routing_service.transformed_observation_sent_to_dispatcher"
         )
