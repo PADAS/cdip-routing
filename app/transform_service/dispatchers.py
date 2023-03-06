@@ -42,7 +42,6 @@ class ERDispatcher(Dispatcher, ABC):
     def make_er_client(
         config: schemas.OutboundConfiguration, provider: str
     ) -> AsyncERClient:
-
         provider_key = provider
         url_parse = urlparse(config.endpoint)
 
@@ -126,7 +125,6 @@ class SmartConnectDispatcher:
         self.config = config
 
     def send(self, item: dict):
-
         item = SMARTCompositeRequest.parse_obj(item)
 
         # orchestration order of operations

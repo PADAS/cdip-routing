@@ -1,20 +1,13 @@
-import json
 import logging
-from typing import List
-from uuid import UUID, uuid4
-
 import aiohttp
-import requests
-import walrus
+from typing import List
+from uuid import UUID
 from cdip_connector.core import schemas, portal_api, cdip_settings
 from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel, parse_obj_as
-from urllib3.exceptions import ReadTimeoutError
-
 from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import (
-    get_auth_header,
     get_redis_db,
     is_uuid,
     ReferenceDataError,
@@ -32,6 +25,8 @@ from app.transform_service.transformers import (
     ERCameraTrapTransformer,
     WPSWatchCameraTrapTransformer,
 )
+from gundi_client import PortalApi
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +37,16 @@ _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
 
 
+portal = PortalApi()
+
+
 class OutboundConfigurations(BaseModel):
     configurations: List[schemas.OutboundConfiguration]
 
 
-def get_all_outbound_configs_for_id(
+async def get_all_outbound_configs_for_id(
     inbound_id: UUID, device_id
 ) -> List[schemas.OutboundConfiguration]:
-
     extra_dict = {
         ExtraKeys.InboundIntId: str(inbound_id),
         ExtraKeys.DeviceId: device_id,
@@ -67,55 +64,56 @@ def get_all_outbound_configs_for_id(
 
     logger.debug(f"Cache miss for device_destinations", extra={**extra_dict})
 
-    outbound_integrations_endpoint = settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT
-
-    headers = get_auth_header()
-    try:
-        resp = requests.get(
-            url=f"{outbound_integrations_endpoint}",
-            params=dict(inbound_id=inbound_id, device_id=device_id),
-            headers=headers,
-            verify=cdip_settings.CDIP_ADMIN_SSL_VERIFY,
-            timeout=(3.1, 20),
-        )
-    except ReadTimeoutError:
-        logger.error(
-            "Read Timeout",
-            extra={**extra_dict, ExtraKeys.Url: outbound_integrations_endpoint},
-        )
-        raise ReferenceDataError(f"Read Timeout for {outbound_integrations_endpoint}")
-
-    if resp.status_code == 200:
+    connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
+    timeout_settings = aiohttp.ClientTimeout(
+        sock_connect=connect_timeout, sock_read=read_timeout
+    )
+    async with aiohttp.ClientSession(
+        timeout=timeout_settings, raise_for_status=True
+    ) as s:
         try:
-            resp_json = resp.json()
-        except Exception as e:
+            resp = await portal.get_outbound_integration_list(
+                session=s, inbound_id=str(inbound_id), device_id=str(device_id)
+            )
+        except aiohttp.ServerTimeoutError as e:
+            # ToDo: Try to get the url from the exception or from somewhere else
+            target_url = settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT
             logger.error(
-                f"Failed decoding response for OutboundConfig",
-                extra={**extra_dict, "resp_text": resp.text},
+                "Read Timeout",
+                extra={**extra_dict, ExtraKeys.Url: target_url},
             )
-            raise ReferenceDataError("Failed decoding response for OutboundConfig")
+            raise ReferenceDataError(f"Read Timeout for {target_url}")
+        except aiohttp.ClientResponseError as e:
+            target_url = str(e.request_info.url)
+            logger.exception(
+                "Failed to get outbound integrations for inbound_id",
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.InboundIntId: inbound_id,
+                    ExtraKeys.Url: target_url,
+                    ExtraKeys.StatusCode: resp.status_code,
+                },
+            )
+            raise ReferenceDataError(
+                f"Failed to get outbound integrations for inbound_id {inbound_id}"
+            )
         else:
-            resp_json = [resp_json] if isinstance(resp_json, dict) else resp_json
-            configurations = parse_obj_as(
-                List[schemas.OutboundConfiguration], resp_json
-            )
-            configs = OutboundConfigurations(configurations=configurations)
-            if configurations:  # don't cache empty response
-                _cache_db.setex(cache_key, _cache_ttl, configs.json())
-            return configs.configurations
-    else:
-        logger.exception(
-            "Failed to get outbound integrations for inbound_id",
-            extra={
-                ExtraKeys.AttentionNeeded: True,
-                ExtraKeys.InboundIntId: inbound_id,
-                ExtraKeys.Url: resp.request,
-                ExtraKeys.StatusCode: resp.status_code,
-            },
-        )
-        raise ReferenceDataError(
-            f"Failed to get outbound integrations for inbound_id {inbound_id}"
-        )
+            try:
+                resp_json = [resp] if isinstance(resp, dict) else resp
+                configurations = parse_obj_as(
+                    List[schemas.OutboundConfiguration], resp_json
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed decoding response for OutboundConfig",
+                    extra={**extra_dict, "resp_text": resp},
+                )
+                raise ReferenceDataError("Failed decoding response for OutboundConfig")
+            else:
+                configs = OutboundConfigurations(configurations=configurations)
+                if configurations:  # don't cache empty response
+                    _cache_db.setex(cache_key, _cache_ttl, configs.json())
+                return configs.configurations
 
 
 async def update_observation_with_device_configuration(observation):
@@ -164,7 +162,6 @@ def create_blank_device(*, integration_id: str = None, external_id: str = None):
 
 
 async def ensure_device_integration(integration_id, device_id: str):
-
     extra_dict = {
         ExtraKeys.AttentionNeeded: True,
         ExtraKeys.InboundIntId: str(integration_id),
@@ -235,7 +232,6 @@ class TransformerNotFound(Exception):
 def transform_observation(
     *, stream_type: str, config: schemas.OutboundConfiguration, observation
 ) -> dict:
-
     transformer = None
     extra_dict = {
         ExtraKeys.InboundIntId: observation.integration_id,
