@@ -1,4 +1,6 @@
+import json
 import logging
+import aiohttp
 from datetime import datetime
 import certifi
 import faust
@@ -7,24 +9,32 @@ from cdip_connector.core.routing import TopicEnum
 from cdip_connector.core import cdip_settings
 from opentelemetry.trace import SpanKind
 from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
-from app.core.utils import ReferenceDataError, DispatcherException
+from app.core.utils import (
+    ReferenceDataError,
+    DispatcherException,
+    Broker,
+    supported_brokers,
+)
 from app.subscribers.services import (
     extract_fields_from_message,
     convert_observation_to_cdip_schema,
-    create_transformed_message,
     get_key_for_transformed_observation,
     dispatch_transformed_observation,
     wait_until_retry_at,
     update_attributes_for_transformed_retry,
     create_retry_message,
     update_attributes_for_unprocessed_retry,
+    build_kafka_message,
+    build_gcp_pubsub_message,
 )
 from app.transform_service.services import (
     get_all_outbound_configs_for_id,
     update_observation_with_device_configuration,
+    transform_observation,
 )
 import app.settings as routing_settings
 from app.core import tracing
+from gcloud.aio import pubsub
 
 
 logger = logging.getLogger(__name__)
@@ -99,6 +109,65 @@ topics_dict = {
 }
 
 
+async def send_message_to_kafka_dispatcher(key, message, destination):
+    key = get_key_for_transformed_observation(key, destination.id)
+    with tracing.tracer.start_as_current_span(  # Trace observations with Open Telemetry
+        "routing_service.send_message_to_kafka_dispatcher",
+        kind=SpanKind.PRODUCER,
+    ) as current_span:
+        current_span.set_attribute("destination_id", str(destination.id))
+        tracing_headers = tracing.faust_instrumentation.build_context_headers()
+        await observations_transformed_topic.send(
+            key=key,
+            value=message,
+            headers=tracing_headers,  # Tracing context
+        )
+        current_span.add_event(
+            name="routing_service.transformed_observation_sent_to_dispatcher"
+        )
+
+
+async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination):
+    with tracing.tracer.start_as_current_span(  # Trace observations with Open Telemetry
+        "routing_service.send_message_to_gcp_pubsub_dispatcher",
+        kind=SpanKind.PRODUCER,
+    ) as current_span:
+        destination_id_str = str(destination.id)
+        current_span.set_attribute("destination_id", destination_id_str)
+        # Propagate OTel context in message attributes
+        tracing_context = json.dumps(
+            tracing.pubsub_instrumentation.build_context_headers(),
+            default=str,
+        )
+        attributes["tracing_context"] = tracing_context
+        async with aiohttp.ClientSession(
+            raise_for_status=True, timeout=20.0
+        ) as session:
+            client = pubsub.PublisherClient(session=session)
+            # Get the topic name from the outbound config or use a default following a naming convention
+            topic_name = destination.additional.get(
+                "topic",
+                f"destination-{destination_id_str}-{routing_settings.GCP_ENVIRONMENT}",
+            ).strip()
+            current_span.set_attribute("topic", topic_name)
+            topic = client.topic_path(routing_settings.GCP_PROJECT_ID, topic_name)
+            messages = [pubsub.PubsubMessage(message, **attributes)]
+            logger.info(f"Sending observation to PubSub topic {topic_name}..")
+            try:
+                response = await client.publish(topic, messages)
+            except Exception as e:
+                logger.exception(
+                    f"Error sending observation to PubSub topic {topic_name}: {e}. Please check if the topic exists or review the outbound configuration."
+                )
+                raise e
+            else:
+                logger.info(f"Observation sent successfully.")
+                logger.debug(f"GCP PubSub response: {response}")
+        current_span.add_event(
+            name="routing_service.transformed_observation_sent_to_dispatcher"
+        )
+
+
 @tracing.faust_instrumentation.load_context
 async def process_observation(key, message):
     """
@@ -166,32 +235,51 @@ async def process_observation(key, message):
                     )
 
                 for destination in destinations:
-                    jsonified_data = create_transformed_message(
+                    # Transform the observation for the destination
+                    transformed_observation = transform_observation(
                         observation=observation,
-                        destination=destination,
-                        prefix=observation.observation_type,
+                        stream_type=observation.observation_type,
+                        config=destination,
+                    )
+                    if not transformed_observation:
+                        continue
+                    attributes = {
+                        "observation_type": str(observation.observation_type),
+                        "device_id": str(observation.device_id),
+                        "outbound_config_id": str(destination.id),
+                        "integration_id": str(observation.integration_id),
+                    }
+                    logger.debug(
+                        f"Transformed observation: {transformed_observation}, attributes: {attributes}"
                     )
 
-                    if jsonified_data:
-                        key = get_key_for_transformed_observation(key, destination.id)
-                        with tracing.tracer.start_as_current_span(  # Trace observations with Open Telemetry
-                            "routing_service.observations_transformed_topic.send",
-                            kind=SpanKind.PRODUCER,
-                        ):
-                            current_span.set_attribute(
-                                "destination_id", str(destination.id)
-                            )
-                            tracing_headers = (
-                                tracing.faust_instrumentation.build_context_headers()
-                            )
-                            await observations_transformed_topic.send(
-                                key=key,
-                                value=jsonified_data,
-                                headers=tracing_headers,  # Tracing context
-                            )
-                            current_span.add_event(
-                                name="routing_service.transformed_observation_sent_to_dispatcher"
-                            )
+                    # Check which broker to use to route the message
+                    broker_type = (
+                        destination.additional.get("broker", Broker.KAFKA.value)
+                        .strip()
+                        .lower()
+                    )
+                    current_span.set_attribute("broker", broker_type)
+                    if broker_type not in supported_brokers:
+                        raise ReferenceDataError(
+                            f"Invalid broker type `{broker_type}` at outbound config. Supported brokers are: {supported_brokers}"
+                        )
+                    if broker_type == Broker.KAFKA.value:  # Route to a kafka topic
+                        kafka_message = build_kafka_message(
+                            payload=transformed_observation, attributes=attributes
+                        )
+                        await send_message_to_kafka_dispatcher(
+                            key=key, message=kafka_message, destination=destination
+                        )
+                    elif broker_type == Broker.GCP_PUBSUB.value:
+                        pubsub_message = build_gcp_pubsub_message(
+                            payload=transformed_observation
+                        )
+                        await send_message_to_gcp_pubsub_dispatcher(
+                            message=pubsub_message,
+                            attributes=attributes,
+                            destination=destination,
+                        )
             else:
                 logger.error(
                     "Logic error, expecting 'observation' to be not None.",
@@ -214,8 +302,10 @@ async def process_observation(key, message):
             )
             await process_failed_unprocessed_observation(key, message)
 
-        except Exception:
-            error_msg = "Unexpected internal exception occurred processing observation"
+        except Exception as e:
+            error_msg = (
+                f"Unexpected internal exception occurred processing observation: {e}"
+            )
             logger.exception(
                 error_msg,
                 extra={

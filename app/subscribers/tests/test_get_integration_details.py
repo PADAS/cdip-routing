@@ -12,7 +12,7 @@ async def test_get_inbound_integration_detail(
 ):
     # Mock external dependencies
     mocker.patch("app.subscribers.services._cache_db", mock_cache)
-    mocker.patch("app.subscribers.services.portal", mock_gundi_client)
+    mocker.patch("app.subscribers.services._portal", mock_gundi_client)
     integration_info = await get_inbound_integration_detail(
         integration_id="12345b4f-88cd-49c4-a723-0ddff1f580c4"
     )
@@ -27,7 +27,7 @@ async def test_get_outbound_config_detail(
 ):
     # Mock external dependencies
     mocker.patch("app.subscribers.services._cache_db", mock_cache)
-    mocker.patch("app.subscribers.services.portal", mock_gundi_client)
+    mocker.patch("app.subscribers.services._portal", mock_gundi_client)
     integration_info = await get_outbound_config_detail(
         outbound_id="56785b4f-88cd-49c4-a723-0ddff1f580c4"
     )

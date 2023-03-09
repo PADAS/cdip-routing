@@ -7,6 +7,7 @@ from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrument
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from . import config
 from . import faust_instrumentation
+from . import pubsub_instrumentation
 
 # Capture requests (sync and async)
 RequestsInstrumentor().instrument()
