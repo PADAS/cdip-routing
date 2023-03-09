@@ -16,11 +16,13 @@ def load_context(func):
 
     @wraps(func)
     async def wrapper(*args):
-        faust_event_headers = faust.streams.current_event().headers
-        ctx = propagate.extract(
-            carrier=faust_event_headers.items(), getter=_kafka_getter
-        )
-        context.attach(ctx)
+        faust_event = faust.streams.current_event()
+        if faust_event:
+            faust_event_headers = faust_event.headers
+            ctx = propagate.extract(
+                carrier=faust_event_headers.items(), getter=_kafka_getter
+            )
+            context.attach(ctx)
         await func(*args)
 
     return wrapper

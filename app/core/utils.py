@@ -1,4 +1,6 @@
 import logging
+from enum import Enum
+
 import walrus
 from hashlib import md5
 from uuid import UUID
@@ -6,6 +8,17 @@ from app import settings
 
 
 logger = logging.getLogger(__name__)
+
+
+class Broker(str, Enum):
+    def __str__(self):
+        return str(self.value)
+
+    KAFKA = "kafka"
+    GCP_PUBSUB = "gcp_pubsub"
+
+
+supported_brokers = set(b.value for b in Broker)
 
 
 class ReferenceDataError(Exception):

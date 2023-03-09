@@ -32,12 +32,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
 
-_portal = portal_api.PortalApi()
+_portal = PortalApi()
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
-
-
-portal = PortalApi()
 
 
 class OutboundConfigurations(BaseModel):
@@ -72,7 +69,7 @@ async def get_all_outbound_configs_for_id(
         timeout=timeout_settings, raise_for_status=True
     ) as s:
         try:
-            resp = await portal.get_outbound_integration_list(
+            resp = await _portal.get_outbound_integration_list(
                 session=s, inbound_id=str(inbound_id), device_id=str(device_id)
             )
         except aiohttp.ServerTimeoutError as e:
