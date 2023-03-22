@@ -34,6 +34,7 @@ from packaging import version
 
 logger = logging.getLogger(__name__)
 
+
 # Smart Connect Outbound configuration models.
 class CategoryPair(BaseModel):
     event_type: str
@@ -138,6 +139,22 @@ class SMARTTransformer:
             )
 
         try:
+            self.cm_uuid = self.smartconnect_client.get_configurable_datamodel_for_ca(
+                ca_uuid=self.ca_uuid
+            )
+            if self.cm_uuid:
+                self._ca_config_datamodel = self.smartconnect_client.get_configurable_data_model(cm_uuid=self.cm_uuid)
+
+        except Exception as e:
+            logger.exception(
+                f"Error getting config data model for SMART CA: {self.ca_uuid}",
+                extra={ExtraKeys.Error: e},
+            )
+            raise ReferenceDataError(
+                f"Error getting data model for SMART CA: {self.ca_uuid}"
+            )
+
+        try:
             self.ca = self.smartconnect_client.get_conservation_area(
                 ca_uuid=self.ca_uuid
             )
@@ -165,10 +182,9 @@ class SMARTTransformer:
         transformation_rules_dict = self._config.additional.get(
             "transformation_rules", {}
         )
-        if transformation_rules_dict:
-            self._transformation_rules = TransformationRules.parse_obj(
-                transformation_rules_dict
-            )
+        self._transformation_rules = TransformationRules.parse_obj(
+            transformation_rules_dict
+        )
         self.cloud_storage = get_cloud_storage()
 
     def guess_location_timezone(
@@ -190,16 +206,31 @@ class SMARTTransformer:
         self, *, event: [schemas.GeoEvent, schemas.EREvent] = None
     ) -> str:
         """
-        Favor finding a match in the CA Datamodel.
+        Favor finding a match in the Config CA Datamodel, then CA Datamodel.
         """
 
-        matched_category = self._ca_datamodel.get_category(path=event.event_type)
+        matched_category = None
+
+        if self._ca_config_datamodel:
+            # favor config datamodel match if present
+            # convert ER event type to CA path syntax
+            matched_category = self._ca_config_datamodel.get_category(
+                path=str.replace(event.event_type, "_", ".")
+            )
+            if matched_category:
+                return matched_category["hkeyPath"]
+
+        if not matched_category:
+            # direct data model match
+            matched_category = self._ca_datamodel.get_category(path=event.event_type)
 
         if not matched_category:
             # convert ER event type to CA path syntax
             matched_category = self._ca_datamodel.get_category(
                 path=str.replace(event.event_type, "_", ".")
             )
+
+
 
         if matched_category:
             return matched_category["path"]
@@ -209,8 +240,14 @@ class SMARTTransformer:
                     return t.category_path
 
     def _resolve_attribute(self, key, value) -> Tuple[str]:
+        attr = None
 
-        attr = self._ca_datamodel.get_attribute(key=key)
+        if self._ca_config_datamodel:
+            # Favor config DM match over regular DM
+            attr = self._ca_config_datamodel.get_attribute(key=key);
+
+        if not attr:
+            attr = self._ca_datamodel.get_attribute(key=key)
 
         # Favor a match in the CA DataModel attributes dictionary.
         if attr:
@@ -239,12 +276,10 @@ class SMARTTransformer:
     def _resolve_attributes_for_event(
         self, *, event: [schemas.GeoEvent, schemas.EREvent] = None
     ) -> dict:
-
         attributes = {}
         for k, v in event.event_details.items():
-
-            # er event detail values that are drop downs are received as lists
-            v = v[0] if isinstance(v, list) else v
+            # some event details are lists like updates
+            v = v[0] if isinstance(v, list) and len(v) > 0 else v
 
             k, v = self._resolve_attribute(k, v)
 
@@ -309,31 +344,32 @@ class SMARTTransformer:
 
         # process attachments
         attachments = []
-        for event_file in event.files:
-            file_extension = pathlib.Path(event_file.get("filename")).suffix
-            download_file_name = event_file.get("id") + file_extension
-            downloaded_file = self.cloud_storage.download(download_file_name)
-            downloaded_file_base64 = base64.b64encode(
-                downloaded_file.getvalue()
-            ).decode()
-            file = File(
-                filename=event_file.get("filename"), data=downloaded_file_base64
-            )
-            attachments.append(file)
+        if is_er_event:
+            for event_file in event.files:
+                file_extension = pathlib.Path(event_file.get("filename")).suffix
+                download_file_name = event_file.get("id") + file_extension
+                downloaded_file = self.cloud_storage.download(download_file_name)
+                downloaded_file_base64 = base64.b64encode(
+                    downloaded_file.getvalue()
+                ).decode()
+                file = File(
+                    filename=event_file.get("filename"), data=downloaded_file_base64
+                )
+                attachments.append(file)
 
         smart_data_type = (
             "integrateincident"
-            if is_er_event and version.parse(self._version) >= version.parse("7.5.3")
+            if is_er_event and version.parse(self._version) >= version.parse("7.5.7")
             else "incident"
         )
 
         # storing custom uuid on reports so that the incident_uuid and observation_uuid are distinct but associated
         observation_uuid = (
-            str(event.event_details.get("smart_observation_uuid"))
-            if event.event_details.get("smart_observation_uuid")
-            else None
+            str(event.id)
+            if version.parse(self._version) >= version.parse("7.5.3")
+            else event.event_details.get("smart_observation_uuid")
         )
-        if not observation_uuid:
+        if is_er_event and not observation_uuid:
             raise ObservationUUIDValueException
 
         smart_observation = SmartObservation(
@@ -444,7 +480,6 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
     def geoevent_to_incident(
         self, *, geoevent: schemas.GeoEvent = None
     ) -> SMARTRequest:
-
         # Sanitize coordinates
         coordinates = (
             [geoevent.location.x, geoevent.location.y] if geoevent.location else [0, 0]
@@ -661,21 +696,19 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
 
             incident_requests = []
             for event in patrol_leg.event_details:
-                # check that the event wasn't already created as independent incident and then linked to patrol
-                smart_response = self.smartconnect_client.get_incident(
-                    incident_uuid=event.id
-                )
                 # SMART guids are stripped of dashes
                 if str(event.er_uuid).replace("-", "") not in existing_waypoint_uuids:
-                    if (
-                        version.parse(self._version) < version.parse("7.5.3")
-                        and smart_response
-                    ):
-                        logger.info(
-                            "skipping event because it already exists in destination outside of patrol"
+                    if version.parse(self._version) < version.parse("7.5.3"):
+                        # check that the event wasn't already created as independent incident and then linked to patrol
+                        smart_response = self.smartconnect_client.get_incident(
+                            incident_uuid=event.id
                         )
-                        # version ^7.5.3 will allow us to create waypoint on patrol with same uuid as existing ind inc
-                        continue
+                        if smart_response:
+                            logger.info(
+                                "skipping event because it already exists in destination outside of patrol"
+                            )
+                            # version ^7.5.3 will allow us to create waypoint on patrol with same uuid as existing ind inc
+                            continue
                     incident_request = self.event_to_patrol_waypoint(
                         patrol_id=patrol.id,
                         patrol_leg_id=patrol_leg.id,
@@ -710,7 +743,6 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             return smart_request
 
         else:  # Create Patrol
-
             patrol_leg: ERPatrolSegment
             # create patrol with first leg, currently ER only supports single leg patrols
             patrol_leg = patrol.patrol_segments[0]

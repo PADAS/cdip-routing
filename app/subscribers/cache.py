@@ -10,7 +10,6 @@ cache = redis.Redis(
 
 
 def ensure_patrol(patrol_label):
-
     patrol_ids = cache.get(patrol_label)
 
     if patrol_ids:
