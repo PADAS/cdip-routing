@@ -146,13 +146,14 @@ class SMARTTransformer:
                 self._ca_config_datamodel = self.smartconnect_client.get_configurable_data_model(cm_uuid=self.cm_uuid)
 
         except Exception as e:
+            self._ca_config_datamodel = None
             logger.exception(
                 f"Error getting config data model for SMART CA: {self.ca_uuid}",
                 extra={ExtraKeys.Error: e},
             )
-            raise ReferenceDataError(
-                f"Error getting data model for SMART CA: {self.ca_uuid}"
-            )
+            # raise ReferenceDataError(
+            #     f"Error getting data model for SMART CA: {self.ca_uuid}"
+            # )
 
         try:
             self.ca = self.smartconnect_client.get_conservation_area(
