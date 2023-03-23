@@ -239,7 +239,7 @@ async def dispatch_transformed_observation(
             try:
                 await dispatcher.send(observation)
             except Exception as e:
-                logger.error(
+                logger.exception(
                     f"Exception occurred dispatching observation",
                     extra={
                         **extra_dict,
@@ -247,7 +247,7 @@ async def dispatch_transformed_observation(
                         ExtraKeys.AttentionNeeded: True,
                     },
                 )
-                raise DispatcherException("Exception occurred dispatching observation")
+                raise DispatcherException(f"Exception occurred dispatching observation {e}")
         else:
             extra_dict[ExtraKeys.Provider] = config.type_slug
             logger.error(
