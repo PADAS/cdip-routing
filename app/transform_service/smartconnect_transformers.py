@@ -374,7 +374,7 @@ class SMARTTransformer:
             raise ObservationUUIDValueException
 
         smart_observation = SmartObservation(
-            observationUuid=observation_uuid,
+            observationUuid=observation_uuid or uuid.uuid4(),  # Provide a UUID
             category=category_path,
             attributes=attributes,
         )
