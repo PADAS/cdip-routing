@@ -141,7 +141,7 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
         )
         attributes["tracing_context"] = tracing_context
         async with aiohttp.ClientSession(
-            raise_for_status=True, timeout=20.0
+            raise_for_status=True, timeout=aiohttp.ClientTimeout(total=60.0)
         ) as session:
             client = pubsub.PublisherClient(session=session)
             # Get the topic name from the outbound config or use a default following a naming convention
