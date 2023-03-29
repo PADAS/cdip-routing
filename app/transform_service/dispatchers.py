@@ -124,12 +124,11 @@ class SmartConnectDispatcher:
     def __init__(self, config: schemas.OutboundConfiguration):
         self.config = config
 
-    def clean_smart_composite_request(self, val:SMARTCompositeRequest):
+    def clean_smart_request(self, item:SMARTRequest):
 
-        for item in val.waypoint_requests:
-            if hasattr(item.properties.smartAttributes, 'observationUuid'):
-                if item.properties.smartAttributes.observationUuid == 'None':
-                    item.properties.smartAttributes.observationUuid = None
+        if hasattr(item.properties.smartAttributes, 'observationUuid'):
+            if item.properties.smartAttributes.observationUuid == 'None':
+                item.properties.smartAttributes.observationUuid = None
 
 
     def send(self, item: dict):
@@ -145,14 +144,17 @@ class SmartConnectDispatcher:
             version=self.config.additional.get("version"),
         )
         for patrol_request in item.patrol_requests:
+            self.clean_smart_request(patrol_request)
             smartclient.post_smart_request(
                 json=patrol_request.json(exclude_none=True), ca_uuid=item.ca_uuid
             )
         for waypoint_request in item.waypoint_requests:
+            self.clean_smart_request(waypoint_request)
             smartclient.post_smart_request(
                 json=waypoint_request.json(exclude_none=True), ca_uuid=item.ca_uuid
             )
         for track_point_request in item.track_point_requests:
+            self.clean_smart_request(track_point_request)
             smartclient.post_smart_request(
                 json=track_point_request.json(exclude_none=True), ca_uuid=item.ca_uuid
             )
