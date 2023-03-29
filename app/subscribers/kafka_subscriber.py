@@ -1,7 +1,10 @@
+import asyncio
 import json
 import logging
 import aiohttp
 from datetime import datetime
+
+import backoff
 import certifi
 import faust
 from aiokafka.helpers import create_ssl_context
@@ -127,6 +130,7 @@ async def send_message_to_kafka_dispatcher(key, message, destination):
         )
 
 
+@backoff.on_exception(backoff.expo, asyncio.TimeoutError, max_tries=10)
 async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination):
     with tracing.tracer.start_as_current_span(  # Trace observations with Open Telemetry
         "routing_service.send_message_to_gcp_pubsub_dispatcher",
