@@ -12,6 +12,7 @@ from cdip_connector.core.cloudstorage import get_cloud_storage
 from erclient import AsyncERClient
 from smartconnect import SmartClient
 from smartconnect.models import SMARTRequest, SMARTCompositeRequest
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +128,8 @@ class SmartConnectDispatcher:
     def clean_smart_request(self, item:SMARTRequest):
 
         if hasattr(item.properties.smartAttributes, 'observationUuid'):
-            if item.properties.smartAttributes.observationUuid == 'None':
-                item.properties.smartAttributes.observationUuid = None
+            if item.properties.smartAttributes.observationUuid in ('None', None):
+                item.properties.smartAttributes.observationUuid = str(uuid.uuid4())
 
 
     def send(self, item: dict):
