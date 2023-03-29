@@ -132,7 +132,7 @@ class SmartConnectDispatcher:
                 item.properties.smartAttributes.observationUuid = str(uuid.uuid4())
 
 
-    def send(self, item: dict):
+    async def send(self, item: dict):
         item = SMARTCompositeRequest.parse_obj(item)
 
         # orchestration order of operations
