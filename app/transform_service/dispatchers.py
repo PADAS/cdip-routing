@@ -149,8 +149,19 @@ class SmartConnectDispatcher:
             )
         for waypoint_request in item.waypoint_requests:
             self.clean_smart_request(waypoint_request)
+            payload = waypoint_request.json(exclude_none=True)
+
+            logger.info('Waypoint payload.', extra={'payload': payload})
+            try:
+                for ogroup in payload['properties']['smartAttributes']['observationGroups']:
+                    for observation in ogroup['observations']:
+                        if observation.get('observationUuid', None) in (None, 'None'):
+                            observation.pop('observationUuid', None)
+            except:
+                pass
+
             smartclient.post_smart_request(
-                json=waypoint_request.json(exclude_none=True), ca_uuid=item.ca_uuid
+                json=payload, ca_uuid=item.ca_uuid
             )
         for track_point_request in item.track_point_requests:
             self.clean_smart_request(track_point_request)
