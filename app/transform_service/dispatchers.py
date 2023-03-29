@@ -134,8 +134,6 @@ class SmartConnectDispatcher:
     def send(self, item: dict):
         item = SMARTCompositeRequest.parse_obj(item)
 
-        self.clean_smart_composite_request(item)
-
         # orchestration order of operations
         smartclient = SmartClient(
             api=self.config.endpoint,
