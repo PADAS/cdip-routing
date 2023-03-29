@@ -156,9 +156,9 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
             try:
                 response = await client.publish(topic, messages)
             except Exception as e:
-                logger.exception(
-                    f"Error sending observation to PubSub topic {topic_name}: {e}. Please check if the topic exists or review the outbound configuration."
-                )
+                error_msg = f"Error sending observation to PubSub topic {topic_name}: {e}."
+                logger.exception(error_msg)
+                current_span.set_attribute("error", error_msg)
                 raise e
             else:
                 logger.info(f"Observation sent successfully.")
