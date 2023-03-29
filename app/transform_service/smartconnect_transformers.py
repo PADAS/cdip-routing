@@ -373,8 +373,13 @@ class SMARTTransformer:
         if is_er_event and not observation_uuid:
             raise ObservationUUIDValueException
 
+        # Clean up observation UUID in case it was set to a str(None).
+        # TODO: If this resolves the issue, then we should follow-up with a cleaner in SmartObservation.
+        if observation_uuid == 'None':
+            observation_uuid = str(uuid.uuid4())  # Provide a UUID as str
+
         smart_observation = SmartObservation(
-            observationUuid=observation_uuid or uuid.uuid4(),  # Provide a UUID
+            observationUuid=observation_uuid,
             category=category_path,
             attributes=attributes,
         )
