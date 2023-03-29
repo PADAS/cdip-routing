@@ -130,7 +130,7 @@ async def send_message_to_kafka_dispatcher(key, message, destination):
         )
 
 
-@backoff.on_exception(backoff.expo, asyncio.TimeoutError, max_tries=10)
+@backoff.on_exception(backoff.expo, aiohttp.ClientError, max_tries=20)
 async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination):
     with tracing.tracer.start_as_current_span(  # Trace observations with Open Telemetry
         "routing_service.send_message_to_gcp_pubsub_dispatcher",
@@ -144,8 +144,9 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
             default=str,
         )
         attributes["tracing_context"] = tracing_context
+        timeout_settings = aiohttp.ClientTimeout(total=60.0)
         async with aiohttp.ClientSession(
-            raise_for_status=True, timeout=aiohttp.ClientTimeout(total=60.0)
+            raise_for_status=True, timeout=timeout_settings
         ) as session:
             client = pubsub.PublisherClient(session=session)
             # Get the topic name from the outbound config or use a default following a naming convention
@@ -158,7 +159,7 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
             messages = [pubsub.PubsubMessage(message, **attributes)]
             logger.info(f"Sending observation to PubSub topic {topic_name}..")
             try:
-                response = await client.publish(topic, messages)
+                response = await client.publish(topic, messages, timeout=int(timeout_settings.total))
             except Exception as e:
                 error_msg = f"Error sending observation to PubSub topic {topic_name}: {e}."
                 logger.exception(error_msg)
