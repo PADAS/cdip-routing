@@ -124,8 +124,18 @@ class SmartConnectDispatcher:
     def __init__(self, config: schemas.OutboundConfiguration):
         self.config = config
 
+    def clean_smart_composite_request(self, val:SMARTCompositeRequest):
+
+        for item in val.waypoint_requests:
+            if hasattr(item.properties.smartAttributes, 'observationUuid'):
+                if item.properties.smartAttributes.observationUuid == 'None':
+                    item.properties.smartAttributes.observationUuid = None
+
+
     def send(self, item: dict):
         item = SMARTCompositeRequest.parse_obj(item)
+
+        self.clean_smart_composite_request(item)
 
         # orchestration order of operations
         smartclient = SmartClient(
