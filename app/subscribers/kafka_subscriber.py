@@ -130,7 +130,7 @@ async def send_message_to_kafka_dispatcher(key, message, destination):
         )
 
 
-@backoff.on_exception(backoff.expo, aiohttp.ClientError, max_tries=20)
+@backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_tries=20)
 async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination):
     with tracing.tracer.start_as_current_span(  # Trace observations with Open Telemetry
         "routing_service.send_message_to_gcp_pubsub_dispatcher",
