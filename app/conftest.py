@@ -1,4 +1,6 @@
 import datetime
+
+import aiohttp
 import pytest
 import asyncio
 from gundi_client.schemas import OutboundConfiguration, Device
@@ -44,6 +46,26 @@ def mock_pubsub_client(mocker, gcp_pubsub_publish_response):
     mock_client = mocker.MagicMock()
     mock_publisher = mocker.MagicMock()
     mock_publisher.publish.return_value = async_return(gcp_pubsub_publish_response)
+    mock_client.PublisherClient.return_value = mock_publisher
+    return mock_client
+
+
+@pytest.fixture
+def mock_pubsub_client_with_timeout_once(mocker, gcp_pubsub_publish_response):
+    mock_client = mocker.MagicMock()
+    mock_publisher = mocker.MagicMock()
+    # Side effects to raise an exception only the first time it's called
+    mock_publisher.publish.side_effect = [asyncio.TimeoutError(), async_return(gcp_pubsub_publish_response)]
+    mock_client.PublisherClient.return_value = mock_publisher
+    return mock_client
+
+
+@pytest.fixture
+def mock_pubsub_client_with_client_error_once(mocker, gcp_pubsub_publish_response):
+    mock_client = mocker.MagicMock()
+    mock_publisher = mocker.MagicMock()
+    # Side effects to raise an exception only the first time it's called
+    mock_publisher.publish.side_effect = [aiohttp.ClientError(), async_return(gcp_pubsub_publish_response)]
     mock_client.PublisherClient.return_value = mock_publisher
     return mock_client
 
