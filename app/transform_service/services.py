@@ -87,8 +87,8 @@ async def get_all_outbound_configs_for_id(
                 extra={
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.InboundIntId: inbound_id,
+                    ExtraKeys.DeviceId: device_id,
                     ExtraKeys.Url: target_url,
-                    ExtraKeys.StatusCode: resp.status_code,
                 },
             )
             raise ReferenceDataError(
