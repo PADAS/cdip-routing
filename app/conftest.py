@@ -42,8 +42,34 @@ def mock_gundi_client(
     return mock_client
 
 
+def _set_side_effect_error_on_gundi_client_once(mock_client, error):
+    # Side effects to raise an exception only the first time each method is called
+    mock_client.get_inbound_integration.side_effect = [
+        error,
+        async_return(inbound_integration_config)
+    ]
+    mock_client.get_outbound_integration.side_effect = [
+        error,
+        async_return(outbound_integration_config)
+    ]
+    mock_client.get_outbound_integration_list.side_effect = [
+        error,
+        async_return(outbound_integration_config_list)
+    ]
+    mock_client.ensure_device.side_effect = [
+        error,
+        async_return(device)
+    ]
+
+
 @pytest.fixture
-def mock_gundi_client_with_client_connector_error_once(mocker, gcp_pubsub_publish_response):
+def mock_gundi_client_with_client_connector_error_once(
+    mocker,
+    inbound_integration_config,
+    outbound_integration_config,
+    outbound_integration_config_list,
+    device,
+):
     mock_client = mocker.MagicMock()
     # Simulate a connection error
     client_connector_error = aiohttp.ClientConnectorError(
@@ -58,23 +84,37 @@ def mock_gundi_client_with_client_connector_error_once(mocker, gcp_pubsub_publis
         ),
         os_error=ConnectionError()
     )
-    # Side effects to raise an exception only the first time each method is called
-    mock_client.get_inbound_integration.side_effect = [
-        client_connector_error,
-        async_return(inbound_integration_config)
-    ]
-    mock_client.get_outbound_integration.side_effect = [
-        client_connector_error,
-        async_return(outbound_integration_config)
-    ]
-    mock_client.get_outbound_integration_list.side_effect = [
-        client_connector_error,
-        async_return(outbound_integration_config_list)
-    ]
-    mock_client.ensure_device.side_effect = [
-        client_connector_error,
-        async_return(device)
-    ]
+    _set_side_effect_error_on_gundi_client_once(mock_client=mock_client, error=client_connector_error)
+    return mock_client
+
+
+@pytest.fixture
+def mock_gundi_client_with_server_disconnected_error_once(
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
+):
+    mock_client = mocker.MagicMock()
+    # Simulate a server disconnected error
+    server_disconnected_error = aiohttp.ServerDisconnectedError()
+    _set_side_effect_error_on_gundi_client_once(mock_client=mock_client, error=server_disconnected_error)
+    return mock_client
+
+
+@pytest.fixture
+def mock_gundi_client_with_server_timeout_error_once(
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
+):
+    mock_client = mocker.MagicMock()
+    # Simulate a server disconnected error
+    server_timeout_error = aiohttp.ServerTimeoutError()
+    _set_side_effect_error_on_gundi_client_once(mock_client=mock_client, error=server_timeout_error)
     return mock_client
 
 
@@ -111,9 +151,11 @@ def mock_pubsub_client_with_client_error_once(mocker, gcp_pubsub_publish_respons
 def mock_kafka_topic(new_kafka_topic):
     return new_kafka_topic()
 
+
 @pytest.fixture
 def mock_dead_letter_kafka_topic(new_kafka_topic):
     return new_kafka_topic()
+
 
 @pytest.fixture
 def new_kafka_topic(mocker, kafka_topic_send_response):
