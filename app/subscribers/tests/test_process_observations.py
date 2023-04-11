@@ -1,5 +1,5 @@
 import pytest
-
+from cdip_connector.core.routing import TopicEnum
 from app.conftest import async_return
 from app.subscribers.kafka_subscriber import process_observation
 
@@ -149,3 +149,29 @@ async def test_retry_observations_sent_to_gcp_pubsub_on_client_error(
     # The Publish method should be called twice due to the retry
     assert mock_pubsub_client_with_client_error_once.PublisherClient.return_value.publish.called
     assert mock_pubsub_client_with_client_error_once.PublisherClient.return_value.publish.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_retry_unprocessed_observations_on_portal_client_connector_error(
+    mocker,
+    mock_cache,
+    mock_gundi_client_with_client_connector_error_once,
+    mock_kafka_topics_dic,
+    unprocessed_observation_position,
+    outbound_configuration_default,
+):
+    # Mock external dependencies
+    mocker.patch("app.transform_service.services._cache_db", mock_cache)
+    # The mocked Gundi client raises an aiohttp.ClientConnectorError in the first call, and returns success in a second call
+    mocker.patch("app.transform_service.services._portal", mock_gundi_client_with_client_connector_error_once)
+    mocker.patch(
+        "app.subscribers.kafka_subscriber.topics_dict",
+        mock_kafka_topics_dic,
+    )
+    await process_observation(None, unprocessed_observation_position)
+    # Check that the message is sent to the retry topic
+    assert mock_kafka_topics_dic[TopicEnum.observations_unprocessed_retry_short].send.called
+    # And is not sent to the dead letter topic
+    assert not mock_kafka_topics_dic[TopicEnum.observations_unprocessed_deadletter].send.called
+    # And is not sent to the transformed topic
+    assert not mock_kafka_topics_dic[TopicEnum.observations_transformed].send.called
