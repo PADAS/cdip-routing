@@ -73,7 +73,6 @@ async def get_all_outbound_configs_for_id(
                 session=s, inbound_id=str(inbound_id), device_id=str(device_id)
             )
         except aiohttp.ClientConnectionError as e:
-            # ToDo: Try to get the url from the exception or from somewhere else
             target_url = str(e._conn_key.host if e._conn_key else settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT)
             logger.error(
                 "Connection Error",
