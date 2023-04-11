@@ -111,6 +111,9 @@ def mock_pubsub_client_with_client_error_once(mocker, gcp_pubsub_publish_respons
 def mock_kafka_topic(new_kafka_topic):
     return new_kafka_topic()
 
+@pytest.fixture
+def mock_dead_letter_kafka_topic(new_kafka_topic):
+    return new_kafka_topic()
 
 @pytest.fixture
 def new_kafka_topic(mocker, kafka_topic_send_response):
@@ -131,7 +134,7 @@ def mock_kafka_topics_dic(new_kafka_topic):
         TopicEnum.observations_transformed: new_kafka_topic(),
         TopicEnum.observations_transformed_retry_short: new_kafka_topic(),
         TopicEnum.observations_transformed_retry_long: new_kafka_topic(),
-        TopicEnum.observations_transformed_deadletter: new_kafka_topic(),
+        TopicEnum.observations_transformed_deadletter: new_kafka_topic()
     }
     return topics_dict
 
@@ -271,7 +274,7 @@ def transformed_observation_gcp_message():
 @pytest.fixture
 def transformed_observation_kafka_message():
     # ToDo: complete the implementation
-    return {}
+    return b'{"attributes": {"observation_type": "ps", "device_id": "018910980", "outbound_config_id": "5f658487-67f7-43f1-8896-d78778e49c30", "integration_id": "cf28f902-23b8-4c91-8843-554ca1ecac1a"}, "data": {"manufacturer_id": "018910980", "source_type": "tracking-device", "subject_name": "Logistics Truck A", "recorded_at": "2023-04-11 12:40:00-03:00", "location": {"lon": 35.43902, "lat": -1.59083}, "additional": {"voltage": "7.4", "fuel_level": 71, "speed": "41 kph"}}}'
 
 
 @pytest.fixture
