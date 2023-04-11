@@ -1,9 +1,10 @@
 import datetime
-
 import aiohttp
 import pytest
 import asyncio
-from gundi_client.schemas import OutboundConfiguration, Device
+from aiohttp.client_reqrep import ConnectionKey
+from gundi_client.schemas import OutboundConfiguration
+from cdip_connector.core.routing import TopicEnum
 
 
 def async_return(result):
@@ -42,6 +43,42 @@ def mock_gundi_client(
 
 
 @pytest.fixture
+def mock_gundi_client_with_client_connector_error_once(mocker, gcp_pubsub_publish_response):
+    mock_client = mocker.MagicMock()
+    # Simulate a connection error
+    client_connector_error = aiohttp.ClientConnectorError(
+        connection_key=ConnectionKey(
+            host="cdip-portal.pamdas.org",
+            port=443,
+            is_ssl=True,
+            ssl=True,
+            proxy=None,
+            proxy_auth=None,
+            proxy_headers_hash=None
+        ),
+        os_error=ConnectionError()
+    )
+    # Side effects to raise an exception only the first time each method is called
+    mock_client.get_inbound_integration.side_effect = [
+        client_connector_error,
+        async_return(inbound_integration_config)
+    ]
+    mock_client.get_outbound_integration.side_effect = [
+        client_connector_error,
+        async_return(outbound_integration_config)
+    ]
+    mock_client.get_outbound_integration_list.side_effect = [
+        client_connector_error,
+        async_return(outbound_integration_config_list)
+    ]
+    mock_client.ensure_device.side_effect = [
+        client_connector_error,
+        async_return(device)
+    ]
+    return mock_client
+
+
+@pytest.fixture
 def mock_pubsub_client(mocker, gcp_pubsub_publish_response):
     mock_client = mocker.MagicMock()
     mock_publisher = mocker.MagicMock()
@@ -71,10 +108,32 @@ def mock_pubsub_client_with_client_error_once(mocker, gcp_pubsub_publish_respons
 
 
 @pytest.fixture
-def mock_kafka_topic(mocker, kafka_topic_send_response):
-    mock_topic = mocker.MagicMock()
-    mock_topic.send.return_value = async_return(kafka_topic_send_response)
-    return mock_topic
+def mock_kafka_topic(new_kafka_topic):
+    return new_kafka_topic()
+
+
+@pytest.fixture
+def new_kafka_topic(mocker, kafka_topic_send_response):
+    def _make_topic():
+        mock_topic = mocker.MagicMock()
+        mock_topic.send.return_value = async_return(kafka_topic_send_response)
+        return mock_topic
+    return _make_topic
+
+
+@pytest.fixture
+def mock_kafka_topics_dic(new_kafka_topic):
+    topics_dict = {
+        TopicEnum.observations_unprocessed.value: new_kafka_topic(),
+        TopicEnum.observations_unprocessed_retry_short: new_kafka_topic(),
+        TopicEnum.observations_unprocessed_retry_long: new_kafka_topic(),
+        TopicEnum.observations_unprocessed_deadletter: new_kafka_topic(),
+        TopicEnum.observations_transformed: new_kafka_topic(),
+        TopicEnum.observations_transformed_retry_short: new_kafka_topic(),
+        TopicEnum.observations_transformed_retry_long: new_kafka_topic(),
+        TopicEnum.observations_transformed_deadletter: new_kafka_topic(),
+    }
+    return topics_dict
 
 
 @pytest.fixture
