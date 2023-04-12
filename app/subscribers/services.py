@@ -82,8 +82,14 @@ async def get_outbound_config_detail(
                 extra={**extra_dict, ExtraKeys.Url: target_url},
             )
             raise ReferenceDataError(f"Read Timeout for {target_url}")
+        except aiohttp.ClientConnectionError as e:
+            target_url = str(settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT)
+            logger.error(
+                "Connection Error",
+                extra={**extra_dict, ExtraKeys.Url: target_url},
+            )
+            raise ReferenceDataError(f"Failed to connect to the portal at {target_url}, {e}")
         except aiohttp.ClientResponseError as e:
-            # ToDo: Try to get the url from the exception or from somewhere else
             target_url = str(e.request_info.url)
             logger.exception(
                 "Portal returned bad response during request for outbound config detail",
