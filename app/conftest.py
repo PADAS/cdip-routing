@@ -1,7 +1,10 @@
 import datetime
+import aiohttp
 import pytest
 import asyncio
-from gundi_client.schemas import OutboundConfiguration, Device
+from aiohttp.client_reqrep import ConnectionKey
+from gundi_client.schemas import OutboundConfiguration
+from cdip_connector.core.routing import TopicEnum
 
 
 def async_return(result):
@@ -39,6 +42,82 @@ def mock_gundi_client(
     return mock_client
 
 
+def _set_side_effect_error_on_gundi_client_once(mock_client, error):
+    # Side effects to raise an exception only the first time each method is called
+    mock_client.get_inbound_integration.side_effect = [
+        error,
+        async_return(inbound_integration_config)
+    ]
+    mock_client.get_outbound_integration.side_effect = [
+        error,
+        async_return(outbound_integration_config)
+    ]
+    mock_client.get_outbound_integration_list.side_effect = [
+        error,
+        async_return(outbound_integration_config_list)
+    ]
+    mock_client.ensure_device.side_effect = [
+        error,
+        async_return(device)
+    ]
+
+
+@pytest.fixture
+def mock_gundi_client_with_client_connector_error_once(
+    mocker,
+    inbound_integration_config,
+    outbound_integration_config,
+    outbound_integration_config_list,
+    device,
+):
+    mock_client = mocker.MagicMock()
+    # Simulate a connection error
+    client_connector_error = aiohttp.ClientConnectorError(
+        connection_key=ConnectionKey(
+            host="cdip-portal.pamdas.org",
+            port=443,
+            is_ssl=True,
+            ssl=True,
+            proxy=None,
+            proxy_auth=None,
+            proxy_headers_hash=None
+        ),
+        os_error=ConnectionError()
+    )
+    _set_side_effect_error_on_gundi_client_once(mock_client=mock_client, error=client_connector_error)
+    return mock_client
+
+
+@pytest.fixture
+def mock_gundi_client_with_server_disconnected_error_once(
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
+):
+    mock_client = mocker.MagicMock()
+    # Simulate a server disconnected error
+    server_disconnected_error = aiohttp.ServerDisconnectedError()
+    _set_side_effect_error_on_gundi_client_once(mock_client=mock_client, error=server_disconnected_error)
+    return mock_client
+
+
+@pytest.fixture
+def mock_gundi_client_with_server_timeout_error_once(
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
+):
+    mock_client = mocker.MagicMock()
+    # Simulate a server disconnected error
+    server_timeout_error = aiohttp.ServerTimeoutError()
+    _set_side_effect_error_on_gundi_client_once(mock_client=mock_client, error=server_timeout_error)
+    return mock_client
+
+
 @pytest.fixture
 def mock_pubsub_client(mocker, gcp_pubsub_publish_response):
     mock_client = mocker.MagicMock()
@@ -49,10 +128,57 @@ def mock_pubsub_client(mocker, gcp_pubsub_publish_response):
 
 
 @pytest.fixture
-def mock_kafka_topic(mocker, kafka_topic_send_response):
-    mock_topic = mocker.MagicMock()
-    mock_topic.send.return_value = async_return(kafka_topic_send_response)
-    return mock_topic
+def mock_pubsub_client_with_timeout_once(mocker, gcp_pubsub_publish_response):
+    mock_client = mocker.MagicMock()
+    mock_publisher = mocker.MagicMock()
+    # Side effects to raise an exception only the first time it's called
+    mock_publisher.publish.side_effect = [asyncio.TimeoutError(), async_return(gcp_pubsub_publish_response)]
+    mock_client.PublisherClient.return_value = mock_publisher
+    return mock_client
+
+
+@pytest.fixture
+def mock_pubsub_client_with_client_error_once(mocker, gcp_pubsub_publish_response):
+    mock_client = mocker.MagicMock()
+    mock_publisher = mocker.MagicMock()
+    # Side effects to raise an exception only the first time it's called
+    mock_publisher.publish.side_effect = [aiohttp.ClientError(), async_return(gcp_pubsub_publish_response)]
+    mock_client.PublisherClient.return_value = mock_publisher
+    return mock_client
+
+
+@pytest.fixture
+def mock_kafka_topic(new_kafka_topic):
+    return new_kafka_topic()
+
+
+@pytest.fixture
+def mock_dead_letter_kafka_topic(new_kafka_topic):
+    return new_kafka_topic()
+
+
+@pytest.fixture
+def new_kafka_topic(mocker, kafka_topic_send_response):
+    def _make_topic():
+        mock_topic = mocker.MagicMock()
+        mock_topic.send.return_value = async_return(kafka_topic_send_response)
+        return mock_topic
+    return _make_topic
+
+
+@pytest.fixture
+def mock_kafka_topics_dic(new_kafka_topic):
+    topics_dict = {
+        TopicEnum.observations_unprocessed.value: new_kafka_topic(),
+        TopicEnum.observations_unprocessed_retry_short: new_kafka_topic(),
+        TopicEnum.observations_unprocessed_retry_long: new_kafka_topic(),
+        TopicEnum.observations_unprocessed_deadletter: new_kafka_topic(),
+        TopicEnum.observations_transformed: new_kafka_topic(),
+        TopicEnum.observations_transformed_retry_short: new_kafka_topic(),
+        TopicEnum.observations_transformed_retry_long: new_kafka_topic(),
+        TopicEnum.observations_transformed_deadletter: new_kafka_topic()
+    }
+    return topics_dict
 
 
 @pytest.fixture
@@ -190,7 +316,7 @@ def transformed_observation_gcp_message():
 @pytest.fixture
 def transformed_observation_kafka_message():
     # ToDo: complete the implementation
-    return {}
+    return b'{"attributes": {"observation_type": "ps", "device_id": "018910980", "outbound_config_id": "5f658487-67f7-43f1-8896-d78778e49c30", "integration_id": "cf28f902-23b8-4c91-8843-554ca1ecac1a"}, "data": {"manufacturer_id": "018910980", "source_type": "tracking-device", "subject_name": "Logistics Truck A", "recorded_at": "2023-04-11 12:40:00-03:00", "location": {"lon": 35.43902, "lat": -1.59083}, "additional": {"voltage": "7.4", "fuel_level": 71, "speed": "41 kph"}}}'
 
 
 @pytest.fixture

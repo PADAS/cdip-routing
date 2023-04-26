@@ -73,13 +73,19 @@ async def get_all_outbound_configs_for_id(
                 session=s, inbound_id=str(inbound_id), device_id=str(device_id)
             )
         except aiohttp.ServerTimeoutError as e:
-            # ToDo: Try to get the url from the exception or from somewhere else
-            target_url = settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT
+            target_url = str(settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT)
             logger.error(
                 "Read Timeout",
                 extra={**extra_dict, ExtraKeys.Url: target_url},
             )
             raise ReferenceDataError(f"Read Timeout for {target_url}")
+        except aiohttp.ClientConnectionError as e:
+            target_url = str(settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT)
+            logger.error(
+                "Connection Error",
+                extra={**extra_dict, ExtraKeys.Url: target_url},
+            )
+            raise ReferenceDataError(f"Failed to connect to the portal at {target_url}, {e}")
         except aiohttp.ClientResponseError as e:
             target_url = str(e.request_info.url)
             logger.exception(
