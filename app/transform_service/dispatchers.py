@@ -176,7 +176,7 @@ class WPSWatchCameraTrapDispatcher:
         self.config = config
         self.cloud_storage = get_cloud_storage()
 
-    def send(self, camera_trap_payload: dict):
+    async def send(self, camera_trap_payload: dict):
         try:
             file_name = camera_trap_payload.get("Attachment1")
             file = self.cloud_storage.download(file_name)
