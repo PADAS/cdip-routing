@@ -1,6 +1,6 @@
 import logging
 import aiohttp
-from typing import List
+from typing import List, Union
 from uuid import UUID
 from cdip_connector.core import schemas, portal_api, cdip_settings
 from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
@@ -311,13 +311,27 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
     ca_uuid = ca_uuids[0]
     return patrol, ca_uuid
 
+import re
+def get_ca_uuid_for_event(*args, event: Union[schemas.EREvent, schemas.GeoEvent]):
 
-def get_ca_uuid_for_event(*, event):
+    assert not args, "get_ca_uuid_for_event takes only keyword args"
+
+    uuid_pattern = re.compile('[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.I)
+
     """get ca_uuid from prefix of event_type and strip it from event_type"""
-    prefix = event.event_type.split("_")[0]
+    elements = event.event_type.split("_")
+
+    id_list = []
+    nonid_list = []
+
+    for element in elements:
+        if m := uuid_pattern.match(element):
+            id_list.append(m.string)
+        else:
+            nonid_list.append(element)
+
     # validation that uuid prefix exists
-    ca_uuid = prefix if is_uuid(id_str=prefix) else None
-    if ca_uuid:
-        # remove ca_uuid prefix if it exists
-        event.event_type = "_".join(event.event_type.split("_")[1:])
+    ca_uuid = id_list[0] if id_list else None
+    # remove ca_uuid prefix if it exists
+    event.event_type = "_".join(nonid_list)
     return event, ca_uuid
