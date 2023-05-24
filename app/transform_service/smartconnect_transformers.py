@@ -141,7 +141,7 @@ class SMARTTransformer:
             self._configurable_models = list([
                 self.smartconnect_client.get_configurable_data_model(cm_uuid=cm_uuid)
                 for cm_uuid in self.cm_uuids
-            ]) or []
+            ])
 
         except Exception as e:
             self._ca_config_datamodel = []
@@ -205,7 +205,6 @@ class SMARTTransformer:
         Favor finding a match in the Config CA Datamodel, then CA Datamodel.
         """
 
-        matched_category = None
         search_for = event.event_type.replace("_", ".")
         for cm in self._configurable_models:
             # favor config datamodel match if present
@@ -235,7 +234,7 @@ class SMARTTransformer:
         # Favor a match in configurable model.
         for cm in self._configurable_models:
             attr = cm.get_attribute(key=key)
-            break
+            if attr: break
         else:
             attr = self._ca_datamodel.get_attribute(key=key)
 
