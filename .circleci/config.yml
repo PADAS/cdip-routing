@@ -17,8 +17,7 @@ commands:
       - run: 'gcloud auth activate-service-account --key-file=<(echo "$ENCODED_GCR_KEY" | base64 --decode)'
   docker_login:
     steps:
-      - run: 'echo "$ENCODED_GCR_KEY" | base64 --decode | docker login --username _json_key --password-stdin https://gcr.io'
-
+      - run: 'echo "$ENCODED_GCR_KEY" | base64 --decode | docker login --username _json_key --password-stdin https://us-central1-docker.pkg.dev'
   trigger_downstream_builds:
     parameters:
       target_project_slug:
@@ -137,15 +136,15 @@ workflows:
       - build_cdip_routing_image:
           requires:
           - check_code
-      - build:
-          requires:
-          - check_code
-      - push:
-          requires:
-          - build
-          filters:
-            branches:
-              only: main
+      # - build:
+      #     requires:
+      #     - check_code
+      # - push:
+      #     requires:
+      #     - build
+      #     filters:
+      #       branches:
+      #         only: main
   release_workflow:
     jobs:
       - build:
