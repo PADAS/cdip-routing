@@ -151,7 +151,7 @@ class SmartConnectDispatcher:
             self.clean_smart_request(waypoint_request)
             payload = waypoint_request.json(exclude_none=True)
 
-            logger.info('Waypoint payload.', extra={'payload': payload})
+            logger.debug('Waypoint payload.', extra={'payload': payload})
             try:
                 for ogroup in payload['properties']['smartAttributes']['observationGroups']:
                     for observation in ogroup['observations']:
