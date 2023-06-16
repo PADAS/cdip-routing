@@ -2,8 +2,9 @@ import logging
 import aiohttp
 from typing import List, Union
 from uuid import UUID
-from cdip_connector.core import schemas, portal_api, cdip_settings
-from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
+from gundi_core import schemas
+from cdip_connector.core import cdip_settings
+from gundi_core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel, parse_obj_as
 from app import settings
 from app.core.local_logging import ExtraKeys
@@ -26,7 +27,7 @@ from app.transform_service.transformers import (
     WPSWatchCameraTrapTransformer,
 )
 from gundi_client import PortalApi
-
+from gundi_client_v2 import GundiClient
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
 _portal = PortalApi()
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
+portal_v2 = GundiClient()
 
 
 class OutboundConfigurations(BaseModel):
@@ -335,3 +337,37 @@ def get_ca_uuid_for_event(*args, event: Union[schemas.EREvent, schemas.GeoEvent]
     # remove ca_uuid prefix if it exists
     event.event_type = "_".join(nonid_list)
     return event, ca_uuid
+
+
+########################################################################################################################
+# GUNDI V2
+########################################################################################################################
+
+def get_source_id(observation, gundi_version="v1"):
+    return observation.source_id if gundi_version == "v2" else observation.device_id
+
+
+def get_data_provider_id(observation, gundi_version="v1"):
+    return observation.data_provider_id if gundi_version == "v2" else observation.integration_id
+
+
+async def apply_source_configurations(*, observation, gundi_version="v1"):
+    if gundi_version == "v2":
+        # ToDo: Implement once we process observations
+        pass
+    else:  # Default to v1
+        return await update_observation_with_device_configuration(observation)
+
+
+def transform_observation_to_destination_schema(
+    *, observation, destination, gundi_version="v1", route_configurations=None
+) -> dict:
+    if gundi_version == "v2":
+        # ToDo: Apply extra configurations
+        pass
+    else:  # Default to v1
+        return transform_observation(
+            observation=observation,
+            stream_type=observation.observation_type,
+            config=destination,
+        )

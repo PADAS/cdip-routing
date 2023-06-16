@@ -80,3 +80,5 @@ class ExtraKeys(str, Enum):
     RetryAttempt = "retry_attempt"
     StatusCode = "status_code"
     DeadLetter = "dead_letter"
+    GundiVersion = "gundi_version"
+    GundiId = "gundi_id"
