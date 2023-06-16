@@ -31,9 +31,13 @@ from app.subscribers.services import (
     build_gcp_pubsub_message,
 )
 from app.transform_service.services import (
+    get_source_id,
+    get_data_provider_id,
+    apply_source_configurations,
+    transform_observation_to_destination_schema,
+    apply_destination_configurations,
     get_all_outbound_configs_for_id,
-    update_observation_with_device_configuration,
-    transform_observation,
+    portal_v2,
 )
 import app.settings as routing_settings
 from app.core import tracing
@@ -173,6 +177,7 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
         )
 
 
+
 @tracing.faust_instrumentation.load_context
 async def process_observation(key, message):
     """
@@ -194,14 +199,17 @@ async def process_observation(key, message):
             raw_observation, attributes = extract_fields_from_message(message)
             logger.debug(f"observation: {raw_observation}")
             logger.debug(f"attributes: {attributes}")
-
-            observation = convert_observation_to_cdip_schema(raw_observation)
+            # Get the schema version to process it accordingly
+            gundi_version = attributes.get("gundi_version", "v1")
+            observation = convert_observation_to_cdip_schema(raw_observation, gundi_version=gundi_version)
             logger.info(
                 "received unprocessed observation",
                 extra={
-                    ExtraKeys.DeviceId: observation.device_id,
-                    ExtraKeys.InboundIntId: observation.integration_id,
+                    ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
+                    ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
                     ExtraKeys.StreamType: observation.observation_type,
+                    ExtraKeys.GundiVersion: gundi_version,
+                    ExtraKeys.GundiId: observation.gundi_id if gundi_version == "v2" else observation.id
                 },
             )
         except Exception as e:
@@ -213,14 +221,19 @@ async def process_observation(key, message):
 
         try:
             if observation:
-                observation = await update_observation_with_device_configuration(
-                    observation
-                )
-                int_id = observation.integration_id
-                destinations = await get_all_outbound_configs_for_id(
-                    int_id, observation.device_id
-                )
-
+                # Process the observation differently according to the Gundi Version
+                await apply_source_configurations(observation=observation, gundi_version=gundi_version)
+                if gundi_version == "v2":
+                    connection = await portal_v2.get_connection_details(integration_id=observation.data_provider_id)
+                    # ToDo cache destinations and configurations
+                    destinations = connection.destinations
+                    # ToDo Consider other routes than the default one
+                    default_route = await portal_v2.get_route_details(route_id=connection.default_route.id)
+                    route_configurations = [default_route.configuration]
+                else:  # Default to v1
+                    destinations = await get_all_outbound_configs_for_id(
+                        observation.integration_id, observation.device_id
+                    )
                 current_span.set_attribute("destinations_qty", len(destinations))
                 current_span.set_attribute(
                     "destinations", str([str(d.id) for d in destinations])
@@ -232,27 +245,30 @@ async def process_observation(key, message):
                     logger.warning(
                         "Updating observation with Device info, but it has no Destinations. This is a configuration error.",
                         extra={
-                            ExtraKeys.DeviceId: observation.device_id,
-                            ExtraKeys.InboundIntId: observation.integration_id,
+                            ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
+                            ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
                             ExtraKeys.StreamType: observation.observation_type,
+                            ExtraKeys.GundiVersion: gundi_version,
+                            ExtraKeys.GundiId: observation.gundi_id if gundi_version == "v2" else observation.id,
                             ExtraKeys.AttentionNeeded: True,
                         },
                     )
 
                 for destination in destinations:
                     # Transform the observation for the destination
-                    transformed_observation = transform_observation(
+                    transformed_observation = transform_observation_to_destination_schema(
                         observation=observation,
-                        stream_type=observation.observation_type,
-                        config=destination,
+                        destination=destination,
+                        route_configurations=route_configurations,
+                        gundi_version=gundi_version
                     )
                     if not transformed_observation:
                         continue
                     attributes = {
                         "observation_type": str(observation.observation_type),
-                        "device_id": str(observation.device_id),
+                        "device_id": str(get_source_id(observation, gundi_version)),
                         "outbound_config_id": str(destination.id),
-                        "integration_id": str(observation.integration_id),
+                        "integration_id": str(get_data_provider_id(observation, gundi_version)),
                     }
                     logger.debug(
                         f"Transformed observation: {transformed_observation}, attributes: {attributes}"
@@ -289,8 +305,8 @@ async def process_observation(key, message):
                 logger.error(
                     "Logic error, expecting 'observation' to be not None.",
                     extra={
-                        ExtraKeys.DeviceId: observation.device_id,
-                        ExtraKeys.InboundIntId: observation.integration_id,
+                        ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
+                        ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
                         ExtraKeys.StreamType: observation.observation_type,
                         ExtraKeys.AttentionNeeded: True,
                     },
@@ -300,8 +316,8 @@ async def process_observation(key, message):
                 f"External error occurred obtaining reference data for observation",
                 extra={
                     ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.DeviceId: observation.device_id,
-                    ExtraKeys.InboundIntId: observation.integration_id,
+                    ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
+                    ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
                     ExtraKeys.StreamType: observation.observation_type,
                 },
             )
@@ -316,8 +332,8 @@ async def process_observation(key, message):
                 extra={
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.DeadLetter: True,
-                    ExtraKeys.DeviceId: observation.device_id,
-                    ExtraKeys.InboundIntId: observation.integration_id,
+                    ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
+                    ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
                     ExtraKeys.StreamType: observation.observation_type,
                 },
             )

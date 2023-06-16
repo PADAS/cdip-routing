@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 from urllib.parse import urlparse
 from typing import Any
 
-from cdip_connector.core import schemas, cdip_settings
+from gundi_core import schemas
+from cdip_connector.core import cdip_settings
 
 logger = logging.getLogger(__name__)
 
