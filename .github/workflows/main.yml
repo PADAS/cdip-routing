@@ -1,0 +1,36 @@
+name: Build and deploy router-app
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  vars:
+    runs-on: ubuntu-latest
+    outputs:
+      sha_short: ${{ steps.vars.outputs.sha_short }}
+      repository: ${{ steps.vars.outputs.repository }}
+    steps:
+      - uses: actions/checkout@v3
+      - id: vars
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "repository=us-central1-docker.pkg.dev/cdip-78ca/gundi/router-app" >> $GITHUB_OUTPUT
+
+  build:
+    uses: PADAS/gundi-workflows/.github/workflows/build_docker.yml@v1-stable
+    needs: vars
+    with:
+      environment: stage
+      repository: ${{ needs.vars.outputs.repository }}
+      tag: ${{ needs.vars.outputs.sha_short }}
+
+  deploy_stage:
+    uses: PADAS/gundi-workflows/.github/workflows/deploy_k8s.yml@v1-stable
+    needs: [vars, build]
+    with:
+      environment: stage
+      chart_name: router-app
+      chart_version: '0.1.1'
+      repository: ${{ needs.vars.outputs.repository }}
+      tag: ${{ needs.vars.outputs.sha_short }}
