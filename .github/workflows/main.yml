@@ -2,7 +2,7 @@ name: Build and deploy router-app
 on:
   push:
     branches:
-      - SIK-2053
+      - main
 
 jobs:
   vars:
@@ -31,6 +31,6 @@ jobs:
     with:
       environment: stage
       chart_name: router-app
-      chart_version: '0.1.0'
+      chart_version: '0.1.1'
       repository: ${{ needs.vars.outputs.repository }}
       tag: ${{ needs.vars.outputs.sha_short }}
