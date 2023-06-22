@@ -35,7 +35,6 @@ from app.transform_service.services import (
     get_data_provider_id,
     apply_source_configurations,
     transform_observation_to_destination_schema,
-    apply_destination_configurations,
     get_all_outbound_configs_for_id,
     portal_v2,
 )
@@ -177,7 +176,6 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
         )
 
 
-
 @tracing.faust_instrumentation.load_context
 async def process_observation(key, message):
     """
@@ -224,12 +222,12 @@ async def process_observation(key, message):
                 # Process the observation differently according to the Gundi Version
                 await apply_source_configurations(observation=observation, gundi_version=gundi_version)
                 if gundi_version == "v2":
-                    connection = await portal_v2.get_connection_details(integration_id=observation.data_provider_id)
                     # ToDo cache destinations and configurations
+                    connection = await portal_v2.get_connection_details(integration_id=observation.data_provider_id)
+                    # ToDo Resolve destinations considering all the routes anf filters
                     destinations = connection.destinations
-                    # ToDo Consider other routes than the default one
                     default_route = await portal_v2.get_route_details(route_id=connection.default_route.id)
-                    route_configurations = [default_route.configuration]
+                    route_configuration = default_route.configuration
                 else:  # Default to v1
                     destinations = await get_all_outbound_configs_for_id(
                         observation.integration_id, observation.device_id
@@ -259,7 +257,7 @@ async def process_observation(key, message):
                     transformed_observation = transform_observation_to_destination_schema(
                         observation=observation,
                         destination=destination,
-                        route_configurations=route_configurations,
+                        route_configuration=route_configuration,
                         gundi_version=gundi_version
                     )
                     if not transformed_observation:
@@ -269,17 +267,20 @@ async def process_observation(key, message):
                         "device_id": str(get_source_id(observation, gundi_version)),
                         "outbound_config_id": str(destination.id),
                         "integration_id": str(get_data_provider_id(observation, gundi_version)),
+                        "gundi_version": gundi_version
                     }
                     logger.debug(
                         f"Transformed observation: {transformed_observation}, attributes: {attributes}"
                     )
 
                     # Check which broker to use to route the message
-                    broker_type = (
-                        destination.additional.get("broker", Broker.KAFKA.value)
-                        .strip()
-                        .lower()
-                    )
+                    if gundi_version == "v2":
+                        destination_integration = await portal_v2.get_integration_details(integration_id=destination.id)
+                        broker_config = destination_integration.additional
+                    else:
+                        broker_config = destination.additional
+                    broker_type = broker_config.get("broker", Broker.KAFKA.value).strip().lower()
+
                     current_span.set_attribute("broker", broker_type)
                     if broker_type not in supported_brokers:
                         raise ReferenceDataError(

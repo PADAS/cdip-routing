@@ -24,7 +24,7 @@ from app.transform_service.transformers import (
     ERPositionTransformer,
     ERGeoEventTransformer,
     ERCameraTrapTransformer,
-    WPSWatchCameraTrapTransformer,
+    WPSWatchCameraTrapTransformer, EREventTransformer, ERAttachmentTransformer, FieldMappingRule,
 )
 from gundi_client import PortalApi
 from gundi_client_v2 import GundiClient
@@ -358,13 +358,68 @@ async def apply_source_configurations(*, observation, gundi_version="v1"):
     else:  # Default to v1
         return await update_observation_with_device_configuration(observation)
 
+# Map to get the right transformer for the observation type and destination
+transformers_map = {
+    schemas.v2.StreamPrefixEnum.event.value: {
+        schemas.DestinationTypes.EarthRanger.value: EREventTransformer
+    },
+    schemas.v2.StreamPrefixEnum.attachment.value: {
+        schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer
+    },
+}
+
+
+def transform_observation_v2(observation, destination, route_configuration):
+    # Look for a proper transformer for this stream type and destination type
+    stream_type = observation.observation_type
+    destination_type = destination.type
+
+    Transformer = transformers_map.get(stream_type, {}).get(destination_type)
+
+    if not Transformer:
+        logger.error(
+            "No transformer found for stream type & destination type",
+            extra={
+                ExtraKeys.StreamType: stream_type,
+                ExtraKeys.DestinationType: destination_type,
+            }
+        )
+        raise TransformerNotFound(
+            f"No transformer found for {stream_type} dest: {destination_type}"
+        )
+
+    # Check for extra configurations to apply
+    rules = []
+    if field_mappings := route_configuration.data.get("field_mappings"):
+        configuration = field_mappings.get(
+            # First look for configurations for this data provider
+            str(observation.data_provider_id), {}
+        ).get(  # Then look for configurations for this stream type
+            str(stream_type), {}
+        ).get(
+            # Then look for configurations for this destination
+            str(destination.id), {}
+        )
+        field_mapping_rule = FieldMappingRule(
+            map=configuration.get("map", {}),
+            source=configuration.get("provider_field", ""),
+            target=configuration.get("destination_field", "")
+        )
+        rules.append(field_mapping_rule)
+
+    # Apply the transformer
+    return Transformer.transform(message=observation, rules=rules)
+
 
 def transform_observation_to_destination_schema(
-    *, observation, destination, gundi_version="v1", route_configurations=None
+    *, observation, destination, gundi_version="v1", route_configuration=None
 ) -> dict:
     if gundi_version == "v2":
-        # ToDo: Apply extra configurations
-        pass
+        return transform_observation_v2(
+            observation=observation,
+            destination=destination,
+            route_configuration=route_configuration
+        )
     else:  # Default to v1
         return transform_observation(
             observation=observation,
