@@ -169,11 +169,7 @@ class SMARTTransformer:
                 f"Configured timezone is {val}, but it is not a known timezone. Defaulting to UTC unless timezone can be inferred from the Conservation Area's meta-data."
             )
             self._default_timezone = pytz.utc
-        self.ca_timezone = (
-            guess_ca_timezone(self.ca)
-            if self.ca and self.ca.caBoundaryJson
-            else self._default_timezone
-        )
+        self.ca_timezone = guess_ca_timezone(self.ca) or self._default_timezone
 
         transformation_rules_dict = self._config.additional.get(
             "transformation_rules", {}
