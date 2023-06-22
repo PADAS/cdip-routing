@@ -426,3 +426,25 @@ def transform_observation_to_destination_schema(
             stream_type=observation.observation_type,
             config=destination,
         )
+
+
+def build_transformed_message_attributes(observation, destination, gundi_version):
+    if gundi_version == "v2":
+        return {
+            "gundi_version": gundi_version,
+            "gundi_id": str(observation.gundi_id),
+            "related_to": str(observation.related_to),
+            "stream_type": str(observation.observation_type),
+            "source_id": str(observation.source_id),
+            "external_source_id": str(observation.external_source_id),
+            "destination_id": str(destination.id),
+            "data_provider_id": str(get_data_provider_id(observation, gundi_version)),
+            "annotations": observation.annotations
+        }
+    else:  # default to v1
+        return {
+            "observation_type": str(observation.observation_type),
+            "device_id": str(get_source_id(observation, gundi_version)),
+            "outbound_config_id": str(destination.id),
+            "integration_id": str(get_data_provider_id(observation, gundi_version)),
+        }

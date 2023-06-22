@@ -36,7 +36,7 @@ from app.transform_service.services import (
     apply_source_configurations,
     transform_observation_to_destination_schema,
     get_all_outbound_configs_for_id,
-    portal_v2,
+    portal_v2, build_transformed_message_attributes,
 )
 import app.settings as routing_settings
 from app.core import tracing
@@ -184,6 +184,7 @@ async def process_observation(key, message):
     it decorates it with Device-specific information fetched from
     Gundi's portal.
     """
+    # ToDo: Consider splitting this in two functions for gundi v1 and gundi v2
     # Trace observations with Open Telemetry
     with tracing.tracer.start_as_current_span(
         "routing_service.process_observation", kind=SpanKind.CONSUMER
@@ -262,13 +263,11 @@ async def process_observation(key, message):
                     )
                     if not transformed_observation:
                         continue
-                    attributes = {
-                        "observation_type": str(observation.observation_type),
-                        "device_id": str(get_source_id(observation, gundi_version)),
-                        "outbound_config_id": str(destination.id),
-                        "integration_id": str(get_data_provider_id(observation, gundi_version)),
-                        "gundi_version": gundi_version
-                    }
+                    attributes = build_transformed_message_attributes(
+                        observation=observation,
+                        destination=destination,
+                        gundi_version=gundi_version
+                    )
                     logger.debug(
                         f"Transformed observation: {transformed_observation}, attributes: {attributes}"
                     )
@@ -280,7 +279,6 @@ async def process_observation(key, message):
                     else:
                         broker_config = destination.additional
                     broker_type = broker_config.get("broker", Broker.KAFKA.value).strip().lower()
-
                     current_span.set_attribute("broker", broker_type)
                     if broker_type not in supported_brokers:
                         raise ReferenceDataError(
