@@ -145,4 +145,6 @@ class ERAttachmentTransformer(Transformer):
     @staticmethod
     def transform(message: schemas.v2.Attachment, rules: list = None) -> dict:
         # ToDo. Implement transformation logic for attachments
-        return dict()
+        return dict(
+            file_path=message.file_path
+        )
