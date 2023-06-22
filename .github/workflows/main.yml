@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - sik-1872
 
 jobs:
   vars:
