@@ -71,6 +71,7 @@ class ExtraKeys(str, Enum):
     OutboundIntId = "outbound_integration_id"
     AttentionNeeded = "attention_needed"
     StreamType = "stream_type"
+    DestinationType = "destination_type"
     Provider = "provider"
     Error = "error"
     Url = "url"
