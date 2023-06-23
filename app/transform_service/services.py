@@ -1,3 +1,4 @@
+import json
 import logging
 import aiohttp
 from typing import List, Union
@@ -36,7 +37,7 @@ DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
 _portal = PortalApi()
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
-portal_v2 = GundiClient()
+portal_v2 = GundiClient()  # ToDo: When do we close the client?
 
 
 class OutboundConfigurations(BaseModel):
@@ -428,18 +429,19 @@ def transform_observation_to_destination_schema(
         )
 
 
-def build_transformed_message_attributes(observation, destination, gundi_version):
+def build_transformed_message_attributes(observation, destination, gundi_version, provider_key=None):
     if gundi_version == "v2":
         return {
             "gundi_version": gundi_version,
+            "provider_key": provider_key,
             "gundi_id": str(observation.gundi_id),
-            "related_to": str(observation.related_to),
+            "related_to": str(observation.related_to) if observation.related_to else None,
             "stream_type": str(observation.observation_type),
             "source_id": str(observation.source_id),
             "external_source_id": str(observation.external_source_id),
             "destination_id": str(destination.id),
             "data_provider_id": str(get_data_provider_id(observation, gundi_version)),
-            "annotations": observation.annotations
+            "annotations": json.dumps(observation.annotations)
         }
     else:  # default to v1
         return {

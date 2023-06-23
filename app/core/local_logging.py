@@ -83,3 +83,4 @@ class ExtraKeys(str, Enum):
     DeadLetter = "dead_letter"
     GundiVersion = "gundi_version"
     GundiId = "gundi_id"
+    RelatedTo = "related_to"

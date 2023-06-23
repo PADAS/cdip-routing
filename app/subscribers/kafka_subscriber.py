@@ -134,7 +134,7 @@ async def send_message_to_kafka_dispatcher(key, message, destination):
 
 
 @backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_tries=20)
-async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination):
+async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination, broker_config):
     with tracing.tracer.start_as_current_span(  # Trace observations with Open Telemetry
         "routing_service.send_message_to_gcp_pubsub_dispatcher",
         kind=SpanKind.PRODUCER,
@@ -152,8 +152,8 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
             raise_for_status=True, timeout=timeout_settings
         ) as session:
             client = pubsub.PublisherClient(session=session)
-            # Get the topic name from the outbound config or use a default following a naming convention
-            topic_name = destination.additional.get(
+            # Get the topic name from config or use a default naming convention
+            topic_name = broker_config.get(
                 "topic",
                 f"destination-{destination_id_str}-{routing_settings.GCP_ENVIRONMENT}",
             ).strip()
@@ -208,7 +208,8 @@ async def process_observation(key, message):
                     ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
                     ExtraKeys.StreamType: observation.observation_type,
                     ExtraKeys.GundiVersion: gundi_version,
-                    ExtraKeys.GundiId: observation.gundi_id if gundi_version == "v2" else observation.id
+                    ExtraKeys.GundiId: observation.gundi_id if gundi_version == "v2" else observation.id,
+                    ExtraKeys.RelatedTo: observation.related_to if gundi_version == "v2" else ""
                 },
             )
         except Exception as e:
@@ -229,6 +230,8 @@ async def process_observation(key, message):
                     destinations = connection.destinations
                     default_route = await portal_v2.get_route_details(route_id=connection.default_route.id)
                     route_configuration = default_route.configuration
+                    # ToDo: Get provider key from the route configuration
+                    provider_key = "awt"
                 else:  # Default to v1
                     destinations = await get_all_outbound_configs_for_id(
                         observation.integration_id, observation.device_id
@@ -266,7 +269,8 @@ async def process_observation(key, message):
                     attributes = build_transformed_message_attributes(
                         observation=observation,
                         destination=destination,
-                        gundi_version=gundi_version
+                        gundi_version=gundi_version,
+                        provider_key=provider_key
                     )
                     logger.debug(
                         f"Transformed observation: {transformed_observation}, attributes: {attributes}"
@@ -285,6 +289,10 @@ async def process_observation(key, message):
                             f"Invalid broker type `{broker_type}` at outbound config. Supported brokers are: {supported_brokers}"
                         )
                     if broker_type == Broker.KAFKA.value:  # Route to a kafka topic
+                        if gundi_version == "v2":
+                            raise ReferenceDataError(
+                                f"Kafka is not supported in Gundi v2. Please use `{Broker.GCP_PUBSUB}` instead."
+                            )
                         kafka_message = build_kafka_message(
                             payload=transformed_observation, attributes=attributes
                         )
@@ -299,6 +307,7 @@ async def process_observation(key, message):
                             message=pubsub_message,
                             attributes=attributes,
                             destination=destination,
+                            broker_config=broker_config
                         )
             else:
                 logger.error(
