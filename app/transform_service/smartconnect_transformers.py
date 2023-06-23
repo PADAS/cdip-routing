@@ -337,8 +337,9 @@ class SMARTTransformer:
                 downloaded_file_base64 = base64.b64encode(
                     downloaded_file.getvalue()
                 ).decode()
+
                 file = File(
-                    filename=event_file.get("filename"), data=downloaded_file_base64
+                    filename=event_file.get("filename"), data=f'gundi:storage:{download_file_name}' # downloaded_file_base64
                 )
                 attachments.append(file)
 

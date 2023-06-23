@@ -5,6 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import Union
 from urllib.parse import urlparse
+import base64
 
 import requests
 from cdip_connector.core import schemas
@@ -131,6 +132,17 @@ class SmartConnectDispatcher:
             if item.properties.smartAttributes.observationUuid in ('None', None):
                 item.properties.smartAttributes.observationUuid = str(uuid.uuid4())
 
+        if hasattr(item.properties.smartAttributes, 'attachments'):
+
+            # if the file does not already have ".data" then download and assign it.
+            for file in item.properties.smartAttributes.attachments:
+                if file.data.startswith('gundi:storage'):
+                    stored_name = file.data.split(':')[-1]
+                    downloaded_file = get_cloud_storage().download(stored_name)
+                    downloaded_file_base64 = base64.b64encode(
+                        downloaded_file.getvalue()
+                    ).decode()
+                    file.data = downloaded_file_base64
 
     async def send(self, item: dict):
         item = SMARTCompositeRequest.parse_obj(item)
@@ -149,19 +161,20 @@ class SmartConnectDispatcher:
             )
         for waypoint_request in item.waypoint_requests:
             self.clean_smart_request(waypoint_request)
-            payload = waypoint_request.json(exclude_none=True)
 
+            # Todo: Ask James what this is for.
+            if hasattr(waypoint_request.properties.smartAttributes, 'observationGroups'):
+                for ogroup in waypoint_request.properties.smartAttributes.observationGroups:
+                    for observation in ogroup.observations:
+                        if observation.observationUuid in (None, 'None'):
+                            observation.observationUuid = None
+
+            payload = waypoint_request.json(exclude_none=True)
             logger.debug('Waypoint payload.', extra={'payload': payload})
-            try:
-                for ogroup in payload['properties']['smartAttributes']['observationGroups']:
-                    for observation in ogroup['observations']:
-                        if observation.get('observationUuid', None) in (None, 'None'):
-                            observation.pop('observationUuid', None)
-            except:
-                pass
 
             smartclient.post_smart_request(
-                json=payload, ca_uuid=item.ca_uuid
+                json=payload,
+                ca_uuid=item.ca_uuid
             )
         for track_point_request in item.track_point_requests:
             self.clean_smart_request(track_point_request)
