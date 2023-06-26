@@ -7,7 +7,7 @@ router_app:
   env:
     LOGGING_LEVEL: "INFO"
     GOOGLE_PUB_SUB_PROJECT_ID: "cdip-stage-78ca"
-    CDIP_ADMIN_ENDPOINT: "https://chrisd.admin.gundiservice.org"
+    CDIP_ADMIN_ENDPOINT: "https://admin.gundiservice.org"
     PUBSUB_ENABLED: "True"
     REDIS_HOST: "redis-master.redis.svc.cluster.local"
     STREAMING_TOPIC_NAME: "cdip-streaming-topic"
