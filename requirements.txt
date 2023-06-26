@@ -69,7 +69,7 @@ defusedxml==0.7.1
     # via untangle
 deprecated==1.2.14
     # via opentelemetry-api
-earthranger-client @ https://github.com/PADAS/er-client/releases/download/v1.1.0-alpha/earthranger_client-1.1.0-py3-none-any.whl
+earthranger-client @ https://github.com/PADAS/er-client/releases/download/v1.2.0-alpha/earthranger_client-1.2.0-py3-none-any.whl
     # via -r requirements.in
 environs==9.5.0
     # via
