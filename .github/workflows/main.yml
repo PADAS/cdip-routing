@@ -2,7 +2,7 @@ name: Build and deploy router-app
 on:
   push:
     branches:
-      - SIK-2074
+      - main
 
 jobs:
   vars:
