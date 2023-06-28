@@ -3,7 +3,7 @@ import json
 import logging
 import pathlib
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Tuple, Union
 
 import pytz
@@ -82,12 +82,6 @@ class ObservationUUIDValueException(Exception):
     pass
 
 
-def transform_ca_datamodel(
-    *, er_event: schemas.EREvent = None, ca_datamodel: smartconnect.DataModel = None
-):
-    ca_datamodel.get_category(er_event.event_type)
-
-
 class SMARTTransformer:
     """
     Transform a single EarthRanger Event into an Independent Incident.
@@ -97,8 +91,11 @@ class SMARTTransformer:
     """
 
     def __init__(
-        self, *, config: schemas.OutboundConfiguration = None, ca_uuid: str, **kwargs
+        self, *args, config: schemas.OutboundConfiguration = None, ca_uuid: str = None
     ):
+
+        assert not args, "SMARTTransformer does not accept positional arguments"
+
         self._config = config
 
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -139,21 +136,19 @@ class SMARTTransformer:
             )
 
         try:
-            self.cm_uuid = self.smartconnect_client.get_configurable_datamodel_for_ca(
-                ca_uuid=self.ca_uuid
-            )
-            if self.cm_uuid:
-                self._ca_config_datamodel = self.smartconnect_client.get_configurable_data_model(cm_uuid=self.cm_uuid)
+            self.cm_uuids = config.additional.get('configurable_models_enabled', [])
+
+            self._configurable_models = list([
+                self.smartconnect_client.get_configurable_data_model(cm_uuid=cm_uuid)
+                for cm_uuid in self.cm_uuids
+            ])
 
         except Exception as e:
-            self._ca_config_datamodel = None
+            self._ca_config_datamodel = []
             logger.exception(
                 f"Error getting config data model for SMART CA: {self.ca_uuid}",
                 extra={ExtraKeys.Error: e},
             )
-            # raise ReferenceDataError(
-            #     f"Error getting data model for SMART CA: {self.ca_uuid}"
-            # )
 
         try:
             self.ca = self.smartconnect_client.get_conservation_area(
@@ -174,11 +169,7 @@ class SMARTTransformer:
                 f"Configured timezone is {val}, but it is not a known timezone. Defaulting to UTC unless timezone can be inferred from the Conservation Area's meta-data."
             )
             self._default_timezone = pytz.utc
-        self.ca_timezone = (
-            guess_ca_timezone(self.ca)
-            if self.ca and self.ca.caBoundaryJson
-            else self._default_timezone
-        )
+        self.ca_timezone = guess_ca_timezone(self.ca) or self._default_timezone
 
         transformation_rules_dict = self._config.additional.get(
             "transformation_rules", {}
@@ -210,44 +201,37 @@ class SMARTTransformer:
         Favor finding a match in the Config CA Datamodel, then CA Datamodel.
         """
 
-        matched_category = None
-
-        if self._ca_config_datamodel:
+        search_for = event.event_type.replace("_", ".")
+        for cm in self._configurable_models:
             # favor config datamodel match if present
             # convert ER event type to CA path syntax
-            matched_category = self._ca_config_datamodel.get_category(
-                path=str.replace(event.event_type, "_", ".")
-            )
-            if matched_category:
+            if matched_category := cm.get_category(path=search_for):
                 return matched_category["hkeyPath"]
 
-        if not matched_category:
-            # direct data model match
-            matched_category = self._ca_datamodel.get_category(path=event.event_type)
 
-        if not matched_category:
-            # convert ER event type to CA path syntax
-            matched_category = self._ca_datamodel.get_category(
+        # direct data model match
+        if matched_category := self._ca_datamodel.get_category(path=event.event_type):
+            return matched_category['path']
+
+        # convert ER event type to CA path syntax
+        if matched_category := self._ca_datamodel.get_category(
                 path=str.replace(event.event_type, "_", ".")
-            )
+            ):
+            return matched_category['path']
 
-
-
-        if matched_category:
-            return matched_category["path"]
-        else:
-            for t in self._transformation_rules.category_map:
-                if t.event_type == event.event_type:
-                    return t.category_path
+        # Last option is a match in translation rules.
+        for t in self._transformation_rules.category_map:
+            if t.event_type == event.event_type:
+                return t.category_path
 
     def _resolve_attribute(self, key, value) -> Tuple[str]:
         attr = None
 
-        if self._ca_config_datamodel:
-            # Favor config DM match over regular DM
-            attr = self._ca_config_datamodel.get_attribute(key=key);
-
-        if not attr:
+        # Favor a match in configurable model.
+        for cm in self._configurable_models:
+            attr = cm.get_attribute(key=key)
+            if attr: break
+        else:
             attr = self._ca_datamodel.get_attribute(key=key)
 
         # Favor a match in the CA DataModel attributes dictionary.
@@ -353,8 +337,9 @@ class SMARTTransformer:
                 downloaded_file_base64 = base64.b64encode(
                     downloaded_file.getvalue()
                 ).decode()
+
                 file = File(
-                    filename=event_file.get("filename"), data=downloaded_file_base64
+                    filename=event_file.get("filename"), data=f'gundi:storage:{download_file_name}' # downloaded_file_base64
                 )
                 attachments.append(file)
 
@@ -773,3 +758,6 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             )
 
             return smart_request
+
+
+
