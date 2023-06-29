@@ -3,7 +3,7 @@ import aiohttp
 import pytest
 import asyncio
 from aiohttp.client_reqrep import ConnectionKey
-from gundi_client.schemas import OutboundConfiguration
+from cdip_connector.core.schemas import OutboundConfiguration
 from cdip_connector.core.routing import TopicEnum
 
 
