@@ -233,6 +233,8 @@ async def process_observation(key, message):
                     # ToDo: Get provider key from the route configuration
                     provider_key = "awt"
                 else:  # Default to v1
+                    route_configuration = None
+                    provider_key = None
                     destinations = await get_all_outbound_configs_for_id(
                         observation.integration_id, observation.device_id
                     )
