@@ -32,7 +32,7 @@ backports-zoneinfo==0.2.1
     # via tzlocal
 cachetools==5.3.1
     # via google-auth
-cdip-connector @ https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.4.3-alpha/cdip_connector-1.4.3-py3-none-any.whl
+cdip-connector @ https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.4.4-alpha/cdip_connector-1.4.4-py3-none-any.whl
     # via -r requirements.in
 certifi==2023.5.7
     # via
@@ -219,15 +219,15 @@ opentelemetry-instrumentation==0.35b0
     #   opentelemetry-instrumentation-httpx
     #   opentelemetry-instrumentation-requests
 opentelemetry-instrumentation-aiohttp-client==0.35b0
-    # via
-    #   -r requirements.in
-    #   cdip-connector
+    # via -r requirements.in
 opentelemetry-instrumentation-confluent-kafka==0.35b0
     # via
     #   -r requirements.in
     #   cdip-connector
 opentelemetry-instrumentation-httpx==0.35b0
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   cdip-connector
 opentelemetry-instrumentation-requests==0.35b0
     # via
     #   -r requirements.in
