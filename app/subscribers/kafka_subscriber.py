@@ -36,7 +36,7 @@ from app.transform_service.services import (
     apply_source_configurations,
     transform_observation_to_destination_schema,
     get_all_outbound_configs_for_id,
-    portal_v2, build_transformed_message_attributes, get_connection, get_route,
+    portal_v2, build_transformed_message_attributes, get_connection, get_route, get_integration,
 )
 import app.settings as routing_settings
 from app.core import tracing
@@ -280,7 +280,7 @@ async def process_observation(key, message):
 
                     # Check which broker to use to route the message
                     if gundi_version == "v2":
-                        destination_integration = await portal_v2.get_integration_details(integration_id=destination.id)
+                        destination_integration = await get_integration(integration_id=destination.id)
                         broker_config = destination_integration.additional
                     else:
                         broker_config = destination.additional

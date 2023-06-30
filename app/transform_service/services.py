@@ -467,6 +467,51 @@ async def get_route(*, route_id):
         return route
 
 
+async def get_integration(*, integration_id):
+    integration = None
+    extra_dict = {
+        "integration_id": integration_id
+    }
+    try:
+        cache_key = f"integration_v2_detail.{integration_id}"
+        cached_data = _cache_db.get(cache_key)
+        if cached_data:
+            logger.debug(
+                "Integration details retrieved from cache.",
+                extra={
+                    **extra_dict,
+                    "cache_key": cache_key
+                },
+            )
+            integration = schemas.v2.Connection.parse_raw(cached_data)
+        else:  # Not in cache, retrieve it from the portal
+            logger.debug(
+                "Cache Miss. Retrieving integration details from the portal..",
+                extra={
+                    **extra_dict,
+                    "cache_key": cache_key
+                },
+            )
+            integration = await portal_v2.get_integration_details(integration_id=integration_id)
+    except redis_exceptions.ConnectionError as e:
+        logger.error(
+            f"ConnectionError while reading integration details from Cache: {e}", extra={**extra_dict}
+        )
+        integration = None
+    except Exception as e:
+        logger.error(
+            f"Internal Error while getting integration details: {e}", extra={**extra_dict}
+        )
+    else:
+        write_to_cache_safe(
+            key=cache_key,
+            ttl=_cache_ttl,
+            instance=integration,
+            extra_dict=extra_dict
+        )
+    finally:
+        return integration
+
 # Map to get the right transformer for the observation type and destination
 transformers_map = {
     schemas.v2.StreamPrefixEnum.event.value: {
