@@ -419,7 +419,7 @@ async def get_route(*, route_id):
         if cached_data:
             return schemas.v2.Connection.parse_raw(cached_data)
         # Not in cache, retrieve it from the portal
-        route = await portal_v2.get_connection_details(integration_id=route_id)
+        route = await portal_v2.get_route_details(route_id=route_id)
     except redis_exceptions.ConnectionError as e:
         logger.error(
             f"ConnectionError while reading route details from Cache: {e}", extra={**extra_dict}

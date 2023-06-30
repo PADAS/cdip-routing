@@ -201,16 +201,17 @@ async def process_observation(key, message):
             # Get the schema version to process it accordingly
             gundi_version = attributes.get("gundi_version", "v1")
             observation = convert_observation_to_cdip_schema(raw_observation, gundi_version=gundi_version)
+            observation_logging_extra = {
+                ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
+                ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
+                ExtraKeys.StreamType: observation.observation_type,
+                ExtraKeys.GundiVersion: gundi_version,
+                ExtraKeys.GundiId: observation.gundi_id if gundi_version == "v2" else observation.id,
+                ExtraKeys.RelatedTo: observation.related_to if gundi_version == "v2" else ""
+            }
             logger.info(
                 "received unprocessed observation",
-                extra={
-                    ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
-                    ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
-                    ExtraKeys.StreamType: observation.observation_type,
-                    ExtraKeys.GundiVersion: gundi_version,
-                    ExtraKeys.GundiId: observation.gundi_id if gundi_version == "v2" else observation.id,
-                    ExtraKeys.RelatedTo: observation.related_to if gundi_version == "v2" else ""
-                },
+                extra=observation_logging_extra,
             )
         except Exception as e:
             logger.exception(
@@ -300,6 +301,14 @@ async def process_observation(key, message):
                         await send_message_to_kafka_dispatcher(
                             key=key, message=kafka_message, destination=destination
                         )
+                        logger.info(
+                            "Observation transformed and sent to kafka topic successfully.",
+                            extra={
+                                **observation_logging_extra,
+                                **attributes,
+                                "destination_id": str(destination.id)
+                            },
+                        )
                     elif broker_type == Broker.GCP_PUBSUB.value:
                         pubsub_message = build_gcp_pubsub_message(
                             payload=transformed_observation
@@ -309,6 +318,14 @@ async def process_observation(key, message):
                             attributes=attributes,
                             destination=destination,
                             broker_config=broker_config
+                        )
+                        logger.info(
+                            "Observation transformed and sent to pubsub topic successfully.",
+                            extra={
+                                **observation_logging_extra,
+                                **attributes,
+                                "destination_id": str(destination.id)
+                            },
                         )
             else:
                 logger.error(
