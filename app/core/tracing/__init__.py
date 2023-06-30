@@ -1,3 +1,7 @@
+# Imports required for instrumentation
+import requests
+import httpx
+import aiohttp
 from opentelemetry.propagators.cloud_trace_propagator import (
     CloudTraceFormatPropagator,
 )
@@ -9,10 +13,11 @@ from . import config
 from . import faust_instrumentation
 from . import pubsub_instrumentation
 
-# Capture requests (sync and async)
-RequestsInstrumentor().instrument()
-AioHttpClientInstrumentor().instrument()
-HTTPXClientInstrumentor().instrument()
 # Using the X-Cloud-Trace-Context header
 set_global_textmap(CloudTraceFormatPropagator())
 tracer = config.configure_tracer(name="cdip-routing", version="1.0.8")
+
+# Capture requests (sync and async)
+RequestsInstrumentor().instrument()
+HTTPXClientInstrumentor().instrument()
+AioHttpClientInstrumentor().instrument()

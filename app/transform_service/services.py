@@ -31,6 +31,7 @@ from app.transform_service.transformers import (
 from gundi_client import PortalApi
 from gundi_client_v2 import GundiClient
 
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
