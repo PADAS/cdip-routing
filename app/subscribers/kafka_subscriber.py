@@ -36,7 +36,7 @@ from app.transform_service.services import (
     apply_source_configurations,
     transform_observation_to_destination_schema,
     get_all_outbound_configs_for_id,
-    portal_v2, build_transformed_message_attributes,
+    portal_v2, build_transformed_message_attributes, get_connection, get_route,
 )
 import app.settings as routing_settings
 from app.core import tracing
@@ -224,11 +224,10 @@ async def process_observation(key, message):
                 # Process the observation differently according to the Gundi Version
                 await apply_source_configurations(observation=observation, gundi_version=gundi_version)
                 if gundi_version == "v2":
-                    # ToDo cache destinations and configurations
-                    connection = await portal_v2.get_connection_details(integration_id=observation.data_provider_id)
-                    # ToDo Resolve destinations considering all the routes anf filters
+                    # ToDo: Implement a destination resolution algorithm considering all the routes and filters
+                    connection = await get_connection(connection_id=observation.data_provider_id)
                     destinations = connection.destinations
-                    default_route = await portal_v2.get_route_details(route_id=connection.default_route.id)
+                    default_route = await get_route(route_id=connection.default_route.id)
                     route_configuration = default_route.configuration
                     # ToDo: Get provider key from the route configuration
                     provider_key = "awt"

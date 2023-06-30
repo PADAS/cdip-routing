@@ -7,6 +7,7 @@ from gundi_core import schemas
 from cdip_connector.core import cdip_settings
 from gundi_core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel, parse_obj_as
+from redis import exceptions as redis_exceptions
 from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import (
@@ -358,6 +359,85 @@ async def apply_source_configurations(*, observation, gundi_version="v1"):
         pass
     else:  # Default to v1
         return await update_observation_with_device_configuration(observation)
+
+
+def write_to_cache_safe(key, ttl, instance, extra_dict):
+    try:
+        _cache_db.setex(key, ttl, instance.json())
+    except redis_exceptions.ConnectionError as e:
+        logger.warning(
+            f"ConnectionError while writing to Cache: {e}",
+            extra={**extra_dict}
+        )
+    except Exception as e:
+        logger.warning(
+            f"Unknown Error while writing to Cache: {e}",
+            extra={**extra_dict}
+        )
+
+
+async def get_connection(*, connection_id):
+    connection = None
+    extra_dict = {
+        "connection_id": connection_id
+    }
+    try:
+        cache_key = f"connection.{connection_id}"
+        cached_data = _cache_db.get(cache_key)
+        if cached_data:
+            return schemas.v2.Connection.parse_raw(cached_data)
+        # Not in cache, retrieve it from the portal
+        connection = await portal_v2.get_connection_details(integration_id=connection_id)
+    except redis_exceptions.ConnectionError as e:
+        logger.error(
+            f"ConnectionError while reading connection details from Cache: {e}", extra={**extra_dict}
+        )
+        connection = None
+    except Exception as e:
+        logger.error(
+            f"Internal Error while getting connection details: {e}", extra={**extra_dict}
+        )
+    else:
+        write_to_cache_safe(
+            key=cache_key,
+            ttl=_cache_ttl,
+            instance=connection,
+            extra_dict=extra_dict
+        )
+    finally:
+        return connection
+
+
+async def get_route(*, route_id):
+    route = None
+    extra_dict = {
+        "connection_id": route_id
+    }
+    try:
+        cache_key = f"route.{route_id}"
+        cached_data = _cache_db.get(cache_key)
+        if cached_data:
+            return schemas.v2.Connection.parse_raw(cached_data)
+        # Not in cache, retrieve it from the portal
+        route = await portal_v2.get_connection_details(integration_id=route_id)
+    except redis_exceptions.ConnectionError as e:
+        logger.error(
+            f"ConnectionError while reading route details from Cache: {e}", extra={**extra_dict}
+        )
+    except Exception as e:
+        logger.error(
+            f"Internal Error while getting route details: {e}", extra={**extra_dict}
+        )
+    else:
+        write_to_cache_safe(
+            key=cache_key,
+            ttl=_cache_ttl,
+            instance=route,
+            extra_dict=extra_dict
+        )
+    finally:
+        return route
+
 
 # Map to get the right transformer for the observation type and destination
 transformers_map = {
