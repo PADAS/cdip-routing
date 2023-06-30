@@ -36,7 +36,11 @@ from app.transform_service.services import (
     apply_source_configurations,
     transform_observation_to_destination_schema,
     get_all_outbound_configs_for_id,
-    portal_v2, build_transformed_message_attributes, get_connection, get_route, get_integration,
+    portal_v2,
+    build_transformed_message_attributes,
+    get_connection,
+    get_route,
+    get_integration,
 )
 import app.settings as routing_settings
 from app.core import tracing

@@ -362,6 +362,11 @@ async def apply_source_configurations(*, observation, gundi_version="v1"):
 
 
 def write_to_cache_safe(key, ttl, instance, extra_dict):
+    if not instance:
+        logger.warning(
+            f"[write_to_cache_safe]> Ignoring null instance.",
+            extra={**extra_dict}
+        )
     try:
         _cache_db.setex(key, ttl, instance.json())
     except redis_exceptions.ConnectionError as e:
@@ -483,7 +488,7 @@ async def get_integration(*, integration_id):
                     "cache_key": cache_key
                 },
             )
-            integration = schemas.v2.Connection.parse_raw(cached_data)
+            integration = schemas.v2.Integration.parse_raw(cached_data)
         else:  # Not in cache, retrieve it from the portal
             logger.debug(
                 "Cache Miss. Retrieving integration details from the portal..",
@@ -497,7 +502,6 @@ async def get_integration(*, integration_id):
         logger.error(
             f"ConnectionError while reading integration details from Cache: {e}", extra={**extra_dict}
         )
-        integration = None
     except Exception as e:
         logger.error(
             f"Internal Error while getting integration details: {e}", extra={**extra_dict}
