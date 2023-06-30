@@ -3,10 +3,10 @@ import json
 import logging
 import aiohttp
 from datetime import datetime
-
 import backoff
 import certifi
 import faust
+from app.core import tracing
 from aiokafka.helpers import create_ssl_context
 from cdip_connector.core.routing import TopicEnum
 from cdip_connector.core import cdip_settings
@@ -43,7 +43,7 @@ from app.transform_service.services import (
     get_integration,
 )
 import app.settings as routing_settings
-from app.core import tracing
+#from app.core import tracing
 from gcloud.aio import pubsub
 
 
@@ -235,7 +235,7 @@ async def process_observation(key, message):
                     default_route = await get_route(route_id=connection.default_route.id)
                     route_configuration = default_route.configuration
                     # ToDo: Get provider key from the route configuration
-                    provider_key = "awt"
+                    provider_key = str(observation.data_provider_id)
                 else:  # Default to v1
                     route_configuration = None
                     provider_key = None
