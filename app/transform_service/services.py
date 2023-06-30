@@ -382,7 +382,7 @@ async def get_connection(*, connection_id):
         "connection_id": connection_id
     }
     try:
-        cache_key = f"connection.{connection_id}"
+        cache_key = f"connection_detail.{connection_id}"
         cached_data = _cache_db.get(cache_key)
         if cached_data:
             return schemas.v2.Connection.parse_raw(cached_data)
@@ -414,7 +414,7 @@ async def get_route(*, route_id):
         "connection_id": route_id
     }
     try:
-        cache_key = f"route.{route_id}"
+        cache_key = f"route_detail.{route_id}"
         cached_data = _cache_db.get(cache_key)
         if cached_data:
             return schemas.v2.Connection.parse_raw(cached_data)
