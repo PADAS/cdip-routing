@@ -7,8 +7,10 @@
 aiohttp==3.8.4
     # via
     #   aiohttp-cors
+    #   cdip-connector
     #   faust
     #   gcloud-aio-auth
+    #   gundi-client
 aiohttp-cors==0.7.0
     # via faust
 aiosignal==1.3.1
@@ -32,7 +34,7 @@ backports-zoneinfo==0.2.1
     # via tzlocal
 cachetools==5.3.1
     # via google-auth
-cdip-connector @ https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.4.4-alpha/cdip_connector-1.4.4-py3-none-any.whl
+cdip-connector @ https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.3.2/cdip_connector-1.3.2-py3-none-any.whl
     # via -r requirements.in
 certifi==2023.5.7
     # via
@@ -59,7 +61,7 @@ confluent-kafka==1.9.2
     # via cdip-connector
 croniter==1.4.1
     # via faust
-cryptography==40.0.2
+cryptography==41.0.1
     # via gcloud-aio-auth
 dateparser==1.1.8
     # via
@@ -78,7 +80,7 @@ environs==9.5.0
     #   gundi-client
     #   gundi-client-v2
     #   smartconnect-client
-exceptiongroup==1.1.1
+exceptiongroup==1.1.2
     # via
     #   anyio
     #   pytest
@@ -90,7 +92,7 @@ frozenlist==1.3.3
     # via
     #   aiohttp
     #   aiosignal
-gcloud-aio-auth==4.2.1
+gcloud-aio-auth==4.2.3
     # via gcloud-aio-pubsub
 gcloud-aio-pubsub==5.2.0
     # via -r requirements.in
@@ -142,17 +144,12 @@ grpcio-status==1.48.2
     # via
     #   google-api-core
     #   google-cloud-pubsub
-gundi-client==1.0.1
-    # via
-    #   -r requirements.in
-    #   cdip-connector
+gundi-client==0.2.2
+    # via -r requirements.in
 gundi-client-v2==2.0.0
     # via -r requirements.in
 gundi-core==1.0.5
-    # via
-    #   cdip-connector
-    #   gundi-client
-    #   gundi-client-v2
+    # via gundi-client-v2
 h11==0.14.0
     # via
     #   httpcore
@@ -162,7 +159,6 @@ httpcore==0.17.2
 httpx==0.24.1
     # via
     #   earthranger-client
-    #   gundi-client
     #   gundi-client-v2
     #   respx
 idna==3.4
@@ -219,15 +215,15 @@ opentelemetry-instrumentation==0.35b0
     #   opentelemetry-instrumentation-httpx
     #   opentelemetry-instrumentation-requests
 opentelemetry-instrumentation-aiohttp-client==0.35b0
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   cdip-connector
 opentelemetry-instrumentation-confluent-kafka==0.35b0
     # via
     #   -r requirements.in
     #   cdip-connector
 opentelemetry-instrumentation-httpx==0.35b0
-    # via
-    #   -r requirements.in
-    #   cdip-connector
+    # via -r requirements.in
 opentelemetry-instrumentation-requests==0.35b0
     # via
     #   -r requirements.in
@@ -345,9 +341,7 @@ requests==2.28.1
     #   opentelemetry-exporter-otlp-proto-http
     #   smartconnect-client
 respx==0.20.1
-    # via
-    #   gundi-client
-    #   gundi-client-v2
+    # via gundi-client-v2
 robinhood-aiokafka==1.1.6
     # via faust
 rsa==4.9
@@ -376,7 +370,7 @@ timezonefinder==5.2.0
     # via smartconnect-client
 tomli==2.0.1
     # via pytest
-typing-extensions==4.7.0
+typing-extensions==4.7.1
     # via
     #   opentelemetry-sdk
     #   pydantic
