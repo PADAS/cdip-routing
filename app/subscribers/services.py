@@ -34,7 +34,6 @@ logger = logging.getLogger(__name__)
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
 _portal = PortalApi()
-_portal_v2 = GundiClient()
 
 
 async def get_outbound_config_detail(
