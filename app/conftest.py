@@ -493,3 +493,7 @@ def route_v2():
 @pytest.fixture
 def unprocessed_event_v2():
     return b'{"attributes": {"observation_type": "ev", "gundi_version": "v2", "gundi_id": "5b793d17-cd79-49c8-abaa-712cb40f2b54"}, "data": {"gundi_id": "5b793d17-cd79-49c8-abaa-712cb40f2b54", "related_to": "None", "owner": "e2d1b0fc-69fe-408b-afc5-7f54872730c0", "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6", "annotations": {}, "source_id": "afa0d606-c143-4705-955d-68133645db6d", "external_source_id": "Xyz123", "recorded_at": "2023-07-04T21:38:00+00:00", "location": {"lat": -51.667875, "lon": -72.71195, "alt": 1800.0, "hdop": null, "vdop": null}, "title": "Animal Detected", "event_type": null, "event_details": {"site_name": "Camera2G", "species": "Leopard", "tags": ["female adult", "male child"], "animal_count": 2}, "geometry": {}, "observation_type": "ev"}}'
+
+@pytest.fixture
+def unprocessed_attachment_v2():
+    return b'{"attributes": {"observation_type": "att", "gundi_version": "v2", "gundi_id": "8b62fdd5-2e70-40e1-b202-f80c6014d596"}, "data": {"gundi_id": "8b62fdd5-2e70-40e1-b202-f80c6014d596", "related_to": "5b793d17-cd79-49c8-abaa-712cb40f2b54", "owner": "na", "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6", "annotations": null, "source_id": "None", "external_source_id": "None", "file_path": "attachments/8b62fdd5-2e70-40e1-b202-f80c6014d596_2023-07-04-1851_leopard.jpg", "observation_type": "att"}}'
