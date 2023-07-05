@@ -328,7 +328,6 @@ async def test_retry_transformed_observations_on_portal_server_timeout_error(
     )
 
 
-
 @pytest.mark.asyncio
 async def test_process_observation_geoevent_and_route_to_kafka_dispatcher(
     mocker,
@@ -377,6 +376,59 @@ async def test_process_observation_geoevent_and_route_to_gcp_pubsub_dispatcher(
         mock_kafka_topic,
     )
     await process_observation(None, unprocessed_observation_geoevent)
+    # Check that the right methods, to publish to PuSub, were called
+    assert mock_pubsub_client.PublisherClient.called
+    assert mock_pubsub_client.PublisherClient.return_value.publish.called
+
+
+@pytest.mark.asyncio
+async def test_process_observation_cameratrap_and_route_to_kafka_dispatcher(
+    mocker,
+    mock_cache,
+    mock_gundi_client,
+    mock_pubsub_client,
+    mock_kafka_topic,
+    unprocessed_observation_cameratrap,
+    outbound_configuration_kafka,
+):
+    # Mock external dependencies
+    mock_gundi_client.get_outbound_integration_list.return_value = async_return(
+        [outbound_configuration_kafka]
+    )
+    mocker.patch("app.transform_service.services._cache_db", mock_cache)
+    mocker.patch("app.transform_service.services._portal", mock_gundi_client)
+    mocker.patch("app.subscribers.kafka_subscriber.pubsub", mock_pubsub_client)
+    mocker.patch(
+        "app.subscribers.kafka_subscriber.observations_transformed_topic",
+        mock_kafka_topic,
+    )
+    await process_observation(None, unprocessed_observation_cameratrap)
+    # Check that the right method, to publish to kafka, was called
+    assert mock_kafka_topic.send.called
+
+
+@pytest.mark.asyncio
+async def test_process_observation_cameratrap_and_route_to_gcp_pubsub_dispatcher(
+    mocker,
+    mock_cache,
+    mock_gundi_client,
+    mock_pubsub_client,
+    mock_kafka_topic,
+    unprocessed_observation_cameratrap,
+    outbound_configuration_gcp_pubsub,
+):
+    # Mock external dependencies
+    mock_gundi_client.get_outbound_integration_list.return_value = async_return(
+        [outbound_configuration_gcp_pubsub]
+    )
+    mocker.patch("app.transform_service.services._cache_db", mock_cache)
+    mocker.patch("app.transform_service.services._portal", mock_gundi_client)
+    mocker.patch("app.subscribers.kafka_subscriber.pubsub", mock_pubsub_client)
+    mocker.patch(
+        "app.subscribers.kafka_subscriber.observations_transformed_topic",
+        mock_kafka_topic,
+    )
+    await process_observation(None, unprocessed_observation_cameratrap)
     # Check that the right methods, to publish to PuSub, were called
     assert mock_pubsub_client.PublisherClient.called
     assert mock_pubsub_client.PublisherClient.return_value.publish.called
