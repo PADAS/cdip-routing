@@ -562,7 +562,8 @@ def transform_observation_v2(observation, destination, route_configuration):
         field_mapping_rule = FieldMappingRule(
             map=configuration.get("map", {}),
             source=configuration.get("provider_field", ""),
-            target=configuration.get("destination_field", "")
+            target=configuration.get("destination_field", ""),
+            default=configuration.get("default")
         )
         rules.append(field_mapping_rule)
 
