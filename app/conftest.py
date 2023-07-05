@@ -490,11 +490,27 @@ def route_v2():
              'base_url': 'https://test.traptagger.com', 'status': 'healthy'}], 'destinations': [
             {'id': '228225f3-91f9-4fe1-b013-353a229ce512', 'name': 'ER Load Testing', 'type': 'earth_ranger',
              'base_url': 'https://gundi-load-testing.pamdas.org', 'status': 'healthy'}],
-            'configuration': {'id': '5b3e3e73-94ad-42cb-a765-09a7193ae0b6',
-                              'name': 'Trap Tagger to ER - Event Type Mapping', 'data': {'field_mappings': {
-                    'ddd0946d-15b0-4308-b93d-e0470b6d33b6': {'ev': {'558225f3-91f9-4fe1-b013-353a229ce503': {
-                        'map': {'Leopard': 'leopard_sighting', 'wild_dog': 'wild_dog_sighting'},
-                        'provider_field': 'event_details__species', 'destination_field': 'event_type'}}}}}},
+            'configuration': {
+                'id': '5b3e3e73-94ad-42cb-a765-09a7193ae0b6',
+                'name': 'Trap Tagger to ER - Event Type Mapping',
+                'data': {
+                    'field_mappings': {
+                        'ddd0946d-15b0-4308-b93d-e0470b6d33b6': {
+                            'ev': {
+                                '558225f3-91f9-4fe1-b013-353a229ce503': {
+                                    'map': {
+                                        'Leopard':  'leopard_sighting',
+                                        'Wilddog':  'wild_dog_sighting',
+                                    },
+                                    'default': 'wildlife_sighting_rep',
+                                    'provider_field': 'event_details__species',
+                                    'destination_field': 'event_type'
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             'additional': {}
         }
     )
@@ -504,6 +520,105 @@ def route_v2():
 def unprocessed_event_v2():
     return b'{"attributes": {"observation_type": "ev", "gundi_version": "v2", "gundi_id": "5b793d17-cd79-49c8-abaa-712cb40f2b54"}, "data": {"gundi_id": "5b793d17-cd79-49c8-abaa-712cb40f2b54", "related_to": "None", "owner": "e2d1b0fc-69fe-408b-afc5-7f54872730c0", "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6", "annotations": {}, "source_id": "afa0d606-c143-4705-955d-68133645db6d", "external_source_id": "Xyz123", "recorded_at": "2023-07-04T21:38:00+00:00", "location": {"lat": -51.667875, "lon": -72.71195, "alt": 1800.0, "hdop": null, "vdop": null}, "title": "Animal Detected", "event_type": null, "event_details": {"site_name": "Camera2G", "species": "Leopard", "tags": ["female adult", "male child"], "animal_count": 2}, "geometry": {}, "observation_type": "ev"}}'
 
+
 @pytest.fixture
 def unprocessed_attachment_v2():
     return b'{"attributes": {"observation_type": "att", "gundi_version": "v2", "gundi_id": "8b62fdd5-2e70-40e1-b202-f80c6014d596"}, "data": {"gundi_id": "8b62fdd5-2e70-40e1-b202-f80c6014d596", "related_to": "5b793d17-cd79-49c8-abaa-712cb40f2b54", "owner": "na", "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6", "annotations": null, "source_id": "None", "external_source_id": "None", "file_path": "attachments/8b62fdd5-2e70-40e1-b202-f80c6014d596_2023-07-04-1851_leopard.jpg", "observation_type": "att"}}'
+
+
+@pytest.fixture
+def leopard_detected_event_v2():
+    return schemas_v2.Event(
+        gundi_id='b9b46dc1-e033-447d-a99b-0fe373ca04c9',
+        related_to='None',
+        owner='e2d1b0fc-69fe-408b-afc5-7f54872730c0',
+        data_provider_id='ddd0946d-15b0-4308-b93d-e0470b6d33b6',
+        annotations={},
+        source_id='afa0d606-c143-4705-955d-68133645db6d',
+        external_source_id='Xyz123',
+        recorded_at=datetime.datetime(2023, 7, 4, 21, 38, tzinfo=datetime.timezone.utc),
+        location=schemas_v2.Location(
+            lat=-51.667875,
+            lon=-72.71195,
+            alt=1800.0,
+            hdop=None,
+            vdop=None
+        ),
+        title='Leopard Detected',
+        event_type=None,
+        event_details={
+            'site_name': 'Camera2G',
+            'species': 'Leopard',
+            'tags': ['female adult', 'male child'],
+            'animal_count': 2
+        },
+        geometry={},
+        observation_type='ev'
+    )
+
+
+@pytest.fixture
+def unmapped_animal_detected_event_v2():
+    return schemas_v2.Event(
+        gundi_id='b9b46dc1-e033-447d-a99b-0fe373ca04c9',
+        related_to='None',
+        owner='e2d1b0fc-69fe-408b-afc5-7f54872730c0',
+        data_provider_id='ddd0946d-15b0-4308-b93d-e0470b6d33b6',
+        annotations={},
+        source_id='afa0d606-c143-4705-955d-68133645db6d',
+        external_source_id='Xyz123',
+        recorded_at=datetime.datetime(2023, 7, 4, 21, 38, tzinfo=datetime.timezone.utc),
+        location=schemas_v2.Location(
+            lat=-51.667875,
+            lon=-72.71195,
+            alt=1800.0,
+            hdop=None,
+            vdop=None
+        ),
+        title='Animal Detected',
+        event_type=None,
+        event_details={
+            'site_name': 'Camera2G',
+            'species': 'Unknown',
+            'tags': ['female adult', 'male child'],
+            'animal_count': 2
+        },
+        geometry={},
+        observation_type='ev'
+    )
+
+
+@pytest.fixture
+def destination_integration_v2_er():
+    return schemas_v2.ConnectionIntegration(
+        id='558225f3-91f9-4fe1-b013-353a229ce503',
+        name='ER Load Testing',
+        type='earth_ranger',
+        base_url='https://gundi-load-testing.pamdas.org',
+        status='healthy'
+    )
+
+
+@pytest.fixture
+def route_config_with_event_type_mappings():
+    return schemas_v2.RouteConfiguration(
+        id='1a3e3e73-94ad-42cb-a765-09a7193ae0b1',
+        name='Trap Tagger to ER - Event Type Mapping',
+        data={
+            'field_mappings': {
+                'ddd0946d-15b0-4308-b93d-e0470b6d33b6': {
+                    'ev': {
+                        '558225f3-91f9-4fe1-b013-353a229ce503': {
+                            'map': {
+                                'Leopard': 'leopard_sighting',
+                                'Wilddog': 'wild_dog_sighting'
+                            },
+                            'default': 'wildlife_sighting_rep',
+                            'provider_field': 'event_details__species',
+                            'destination_field': 'event_type'
+                        }
+                    }
+                }
+            }
+        }
+    )
