@@ -281,6 +281,15 @@ def unprocessed_observation_position():
 
 
 @pytest.fixture
+def unprocessed_observation_geoevent():
+    return b'{"attributes": {"observation_type": "ge"}, "data": {"id": null, "owner": "na", "integration_id": "anonymous_consumer", "device_id": "003", "recorded_at": "2023-07-05 09:16:02-03:00", "location": {"x": -55.784992, "y": 20.806785, "z": 0.0, "hdop": null, "vdop": null}, "additional": null, "title": "Rainfall", "event_type": "rainfall_rep", "event_details": {"amount_mm": 6, "height_m": 3}, "geometry": null, "observation_type": "ge"}}'
+
+
+@pytest.fixture
+def unprocessed_observation_cameratrap_event():
+    return b''
+
+@pytest.fixture
 def transformed_observation_position():
     return {
         "manufacturer_id": "018910980",
