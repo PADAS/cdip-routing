@@ -286,8 +286,9 @@ def unprocessed_observation_geoevent():
 
 
 @pytest.fixture
-def unprocessed_observation_cameratrap_event():
-    return b''
+def unprocessed_observation_cameratrap():
+    return b'{"attributes": {"observation_type": "ct"}, "data": {"id": null, "owner": "integration:17e7a1e0-168b-4f68-9392-35ec29222f13", "integration_id": "17e7a1e0-168b-4f68-9392-35ec29222f13", "device_id": "test_cam", "name": null, "type": "camerea-trap", "recorded_at": "2023-03-21 09:29:00-03:00", "location": {"x": -122.5, "y": 48.65, "z": 0.0, "hdop": null, "vdop": null}, "additional": null, "image_uri": "2023-07-04-1851_leopard.jpg", "camera_name": "test_cam", "camera_description": "Test camera", "camera_version": null, "observation_type": "ct"}}'
+
 
 @pytest.fixture
 def transformed_observation_position():
