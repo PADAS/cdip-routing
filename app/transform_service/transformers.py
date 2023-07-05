@@ -101,10 +101,11 @@ class TransformationRule(ABC):
 
 class FieldMappingRule(TransformationRule):
 
-    def __init__(self, map: dict, source: str, target: str):
+    def __init__(self, map: dict, source: str, target: str, default: str):
         self.map = map
         self.source = source
         self.target = target
+        self.default = default
 
     def _extract_value(self, message, source):
         fields = source.lower().strip().split("__")
@@ -118,7 +119,8 @@ class FieldMappingRule(TransformationRule):
         message[self.target] = self.map.get(
             self._extract_value(
                 message=message, source=self.source
-            )
+            ),
+            self.default
         )
 
 
