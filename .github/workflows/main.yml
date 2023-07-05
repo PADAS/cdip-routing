@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - main
-      - sik-1778-reports-with-attachments
 
 jobs:
   vars:
