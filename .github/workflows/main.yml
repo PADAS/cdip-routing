@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - 'release-**'
 
 jobs:
   vars:
@@ -27,9 +28,21 @@ jobs:
 
   deploy_stage:
     uses: PADAS/gundi-workflows/.github/workflows/deploy_k8s.yml@v1-stable
+    if: startsWith(github.ref, 'refs/heads/release')
     needs: [vars, build]
     with:
       environment: stage
+      chart_name: router-app
+      chart_version: '0.3.0'
+      repository: ${{ needs.vars.outputs.repository }}
+      tag: ${{ needs.vars.outputs.tag }}
+
+  deploy_prod:
+    uses: PADAS/gundi-workflows/.github/workflows/deploy_k8s.yml@v1-stable
+    if: startsWith(github.ref, 'refs/heads/release')
+    needs: [vars, build, deploy_stage]
+    with:
+      environment: prod
       chart_name: router-app
       chart_version: '0.3.0'
       repository: ${{ needs.vars.outputs.repository }}
