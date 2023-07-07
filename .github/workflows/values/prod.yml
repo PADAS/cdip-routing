@@ -7,8 +7,8 @@ router_app:
   env:
     GOOGLE_PUB_SUB_PROJECT_ID: "cdip-prod1-78ca"
     CDIP_ADMIN_ENDPOINT: "https://admin.gundiservice.org"
-    REDIS_HOST: "redis://10.78.161.148:6378"
-    KAFKA_BROKER: "pkc-6ojv2.us-west4.gcp.confluent.cloud:9092"
+    REDIS_HOST: "10.208.106.172"
+    KAFKA_BROKER: "pkc-lgk0v.us-west1.gcp.confluent.cloud:9092"
     TRACE_ENVIRONMENT: prod
     GCP_PROJECT_ID: cdip-prod1-78ca
     GCP_ENVIRONMENT: prod
