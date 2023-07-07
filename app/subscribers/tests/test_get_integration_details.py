@@ -3,7 +3,7 @@ from app.subscribers.services import (
     get_inbound_integration_detail,
     get_outbound_config_detail,
 )
-from gundi_client import schemas
+from cdip_connector.core import schemas
 
 
 @pytest.mark.asyncio
