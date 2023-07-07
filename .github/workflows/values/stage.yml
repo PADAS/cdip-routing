@@ -5,18 +5,9 @@ serviceAccount:
   name: "gundi-app-sa"
 router_app:
   env:
-    LOGGING_LEVEL: "INFO"
     GOOGLE_PUB_SUB_PROJECT_ID: "cdip-stage-78ca"
     CDIP_ADMIN_ENDPOINT: "https://admin.stage.gundiservice.org"
-    PUBSUB_ENABLED: "True"
-    REDIS_HOST: "redis-master.redis.svc.cluster.local"
-    STREAMING_TOPIC_NAME: "cdip-streaming-topic"
-    RETRY_SHORT_DELAY_MINUTES: "5"
-    RETRY_LONG_DELAY_MINUTES: "30"
-    RETRY_SHORT_ATTEMPTS: "6"
-    RETRY_LONG_ATTEMPTS: "12"
-    SMART_SSL_VERIFY: "False"
-    CONFLUENT_CLOUD_ENABLED: "True"
+    REDIS_HOST: "10.243.180.36"
     KAFKA_BROKER: "pkc-6ojv2.us-west4.gcp.confluent.cloud:9092"
     TRACE_ENVIRONMENT: chrisd
     GCP_PROJECT_ID: cdip-dev-78ca
