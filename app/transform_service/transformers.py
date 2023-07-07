@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 from urllib.parse import urlparse
 from typing import Any
 
-from cdip_connector.core import schemas, cdip_settings
+from gundi_core import schemas
+from cdip_connector.core import cdip_settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ class Transformer(ABC):
 
     @staticmethod
     @abstractmethod
-    def transform(message: schemas.CDIPBaseModel) -> Any:
+    def transform(message: schemas.CDIPBaseModel, rules: list = None) -> Any:
         ...
 
 
@@ -26,7 +27,7 @@ class ERPositionTransformer(Transformer):
     # destination_type: str = schemas.DestinationTypes.EarthRanger
 
     @staticmethod
-    def transform(position: schemas.Position) -> dict:
+    def transform(position: schemas.Position, rules: list = None) -> dict:
         if not position.location or not position.location.y or not position.location.x:
             logger.warning(f"bad position?? {position}")
         transformed_position = dict(
@@ -47,7 +48,7 @@ class ERPositionTransformer(Transformer):
 
 class ERGeoEventTransformer(Transformer):
     @staticmethod
-    def transform(geo_event: schemas.GeoEvent) -> dict:
+    def transform(geo_event: schemas.GeoEvent, rules: list = None) -> dict:
         return dict(
             title=geo_event.title,
             event_type=geo_event.event_type,
@@ -61,7 +62,7 @@ class ERGeoEventTransformer(Transformer):
 
 class ERCameraTrapTransformer(Transformer):
     @staticmethod
-    def transform(payload: schemas.CameraTrap) -> dict:
+    def transform(payload: schemas.CameraTrap, rules: list = None) -> dict:
         return dict(
             file=payload.image_uri,
             camera_name=payload.camera_name,
@@ -75,7 +76,7 @@ class ERCameraTrapTransformer(Transformer):
 
 class WPSWatchCameraTrapTransformer(Transformer):
     @staticmethod
-    def transform(payload: schemas.CameraTrap) -> dict:
+    def transform(payload: schemas.CameraTrap, rules: list = None) -> dict:
         # From and To are currently needed for current WPS Watch API
         # camera_name or device_id preceeding @ in 'To' is all that is necessary, other parts just useful for logging
         from_domain_name = f"{payload.integration_id}@{ADMIN_PORTAL_HOST}"
@@ -84,4 +85,68 @@ class WPSWatchCameraTrapTransformer(Transformer):
             Attachments="1",
             From=from_domain_name,
             To=f"{payload.camera_name}@upload.wpswatch.org",
+        )
+
+
+########################################################################################################################
+# GUNDI V2
+########################################################################################################################
+class TransformationRule(ABC):
+
+    @staticmethod
+    @abstractmethod
+    def apply(self, message: dict, **kwargs):
+        ...
+
+
+class FieldMappingRule(TransformationRule):
+
+    def __init__(self, map: dict, source: str, target: str, default: str):
+        self.map = map
+        self.source = source
+        self.target = target
+        self.default = default
+
+    def _extract_value(self, message, source):
+        fields = source.lower().strip().split("__")
+        value = message
+        while fields:
+            field = fields.pop(0)
+            value = value.get(field)
+        return value
+
+    def apply(self, message: dict, **kwargs):
+        message[self.target] = self.map.get(
+            self._extract_value(
+                message=message, source=self.source
+            ),
+            self.default
+        )
+
+
+class EREventTransformer(Transformer):
+    @staticmethod
+    def transform(message: schemas.v2.Event, rules: list = None) -> dict:
+        transformed_message = dict(
+            title=message.title,
+            event_type=message.event_type,
+            event_details=message.event_details,
+            time=message.recorded_at,
+            location=dict(
+                longitude=message.location.lon, latitude=message.location.lat
+            ),
+        )
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_message)
+        return transformed_message
+
+
+class ERAttachmentTransformer(Transformer):
+    @staticmethod
+    def transform(message: schemas.v2.Attachment, rules: list = None) -> dict:
+        # ToDo. Implement transformation logic for attachments
+        return dict(
+            file_path=message.file_path
         )

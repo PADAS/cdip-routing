@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import base64
 
 import requests
-from cdip_connector.core import schemas
+from gundi_core import schemas
 from cdip_connector.core.cloudstorage import get_cloud_storage
 from erclient import AsyncERClient
 from smartconnect import SmartClient
@@ -21,6 +21,7 @@ DEFAULT_TIMEOUT = (3.1, 20)
 
 
 class Dispatcher(ABC):
+    stream_type: schemas.StreamPrefixEnum
     stream_type: schemas.StreamPrefixEnum
     destination_type: schemas.DestinationTypes
 
