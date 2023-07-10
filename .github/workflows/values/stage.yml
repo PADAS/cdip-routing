@@ -9,7 +9,7 @@ router_app:
     CDIP_ADMIN_ENDPOINT: "https://admin.stage.gundiservice.org"
     REDIS_HOST: "10.243.180.36"
     KAFKA_BROKER: "pkc-6ojv2.us-west4.gcp.confluent.cloud:9092"
-    TRACE_ENVIRONMENT: chrisd
-    GCP_PROJECT_ID: cdip-dev-78ca
-    GCP_ENVIRONMENT: chrisd
+    TRACE_ENVIRONMENT: stage
+    GCP_PROJECT_ID: cdip-stage-78ca
+    GCP_ENVIRONMENT: stage
     
