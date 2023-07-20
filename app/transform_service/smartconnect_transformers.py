@@ -9,9 +9,9 @@ from typing import List, Optional, Tuple, Union
 import pytz
 import smartconnect
 import timezonefinder
-from cdip_connector.core import schemas
+from gundi_core import schemas
 from cdip_connector.core.cloudstorage import get_cloud_storage
-from cdip_connector.core.schemas import ERPatrol, ERPatrolSegment
+from gundi_core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel
 from smartconnect.models import (
     SMARTCONNECT_DATFORMAT,
