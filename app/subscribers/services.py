@@ -6,7 +6,8 @@ import aiohttp
 import logging
 from datetime import datetime, timedelta
 from uuid import UUID
-from cdip_connector.core import schemas, routing
+from cdip_connector.core import routing
+from gundi_core import schemas
 from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import (
@@ -23,6 +24,7 @@ from app.transform_service.dispatchers import (
 )
 from app.transform_service.services import transform_observation
 from gundi_client import PortalApi
+from gundi_client_v2 import GundiClient
 from app.settings import DEFAULT_REQUESTS_TIMEOUT
 
 
@@ -273,8 +275,11 @@ async def dispatch_transformed_observation(
         raise ReferenceDataError
 
 
-def convert_observation_to_cdip_schema(observation):
-    schema = schemas.models_by_stream_type[observation.get("observation_type")]
+def convert_observation_to_cdip_schema(observation, gundi_version="v1"):
+    if gundi_version == "v2":
+        schema = schemas.v2.models_by_stream_type[observation.get("observation_type")]
+    else:  # Default to v1
+        schema = schemas.models_by_stream_type[observation.get("observation_type")]
     return schema.parse_obj(observation)
 
 
