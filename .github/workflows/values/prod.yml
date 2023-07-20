@@ -2,7 +2,7 @@ serviceAccount:
   create: true
   annotations:
     iam.gke.io/gcp-service-account: gundi-app-sa-4bb07e9c@cdip-prod1-78ca.iam.gserviceaccount.com
-  name: "gundi-app-sa"
+  name: "router-app-sa"
 router_app:
   env:
     TRACE_ENVIRONMENT: prod
