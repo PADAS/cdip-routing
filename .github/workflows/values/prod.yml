@@ -12,4 +12,11 @@ router_app:
     KAFKA_BROKER: "pkc-lgk0v.us-west1.gcp.confluent.cloud:9092"
     GCP_PROJECT_ID: cdip-prod1-78ca
     GCP_ENVIRONMENT: prod
-    
+retry_long:
+  replicaCount: 1
+retry_short:
+  replicaCount: 1
+unprocessed:
+  replicaCount: 6
+transformed:
+  replicaCount: 1
