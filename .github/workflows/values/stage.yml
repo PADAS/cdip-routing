@@ -12,4 +12,11 @@ router_app:
     KAFKA_BROKER: "pkc-6ojv2.us-west4.gcp.confluent.cloud:9092"
     GCP_PROJECT_ID: cdip-stage-78ca
     GCP_ENVIRONMENT: stage
-    
+retry_long:
+  replicaCount: 1
+retry_short:
+  replicaCount: 1
+unprocessed:
+  replicaCount: 6
+transformed:
+  replicaCount: 1
