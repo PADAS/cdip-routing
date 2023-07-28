@@ -1,24 +1,23 @@
 serviceAccount:
   create: true
   annotations:
-    iam.gke.io/gcp-service-account: gundi-app-sa-da658892@cdip-dev-78ca.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: gundi-app-sa-b2b9960e@cdip-dev-78ca.iam.gserviceaccount.com
   name: "router-app-sa"
 router_app:
   env:
-    TRACE_ENVIRONMENT: "dev"
-    LOGGING_LEVEL: "INFO"
-    GOOGLE_PUB_SUB_PROJECT_ID: "cdip-stage-78ca"
+    TRACE_ENVIRONMENT: dev
+    GOOGLE_PUB_SUB_PROJECT_ID: cdip-dev-78ca
     CDIP_ADMIN_ENDPOINT: "https://admin.dev.gundiservice.org"
-    PUBSUB_ENABLED: "True"
-    REDIS_HOST: "redis-master.redis.svc.cluster.local"
-    STREAMING_TOPIC_NAME: "cdip-streaming-topic"
-    RETRY_SHORT_DELAY_MINUTES: "5"
-    RETRY_LONG_DELAY_MINUTES: "30"
-    RETRY_SHORT_ATTEMPTS: "6"
-    RETRY_LONG_ATTEMPTS: "12"
-    SMART_SSL_VERIFY: "False"
-    CONFLUENT_CLOUD_ENABLED: "True"
+    GUNDI_API_BASE_URL: "https://admin.dev.gundiservice.org"
+    REDIS_HOST: "10.3.176.132"
     KAFKA_BROKER: "pkc-6ojv2.us-west4.gcp.confluent.cloud:9092"
     GCP_PROJECT_ID: cdip-dev-78ca
-    GCP_ENVIRONMENT: chrisd
-    
+    GCP_ENVIRONMENT: dev
+retry_long:
+  replicaCount: 1
+retry_short:
+  replicaCount: 1
+unprocessed:
+  replicaCount: 1
+transformed:
+  replicaCount: 1
