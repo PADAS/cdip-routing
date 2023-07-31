@@ -146,7 +146,7 @@ grpcio-status==1.48.2
     #   google-cloud-pubsub
 gundi-client==0.2.2
     # via -r requirements.in
-gundi-client-v2==2.0.1
+gundi-client-v2==2.1.1
     # via -r requirements.in
 gundi-core==1.0.5
     # via gundi-client-v2
