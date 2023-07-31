@@ -531,7 +531,7 @@ transformers_map = {
 def transform_observation_v2(observation, destination, route_configuration):
     # Look for a proper transformer for this stream type and destination type
     stream_type = observation.observation_type
-    destination_type = destination.type
+    destination_type = destination.type.value
 
     Transformer = transformers_map.get(stream_type, {}).get(destination_type)
 
