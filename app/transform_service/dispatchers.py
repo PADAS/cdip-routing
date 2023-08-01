@@ -133,7 +133,8 @@ class SmartConnectDispatcher:
             if item.properties.smartAttributes.observationUuid in ('None', None):
                 item.properties.smartAttributes.observationUuid = str(uuid.uuid4())
 
-        if hasattr(item.properties.smartAttributes, 'attachments'):
+        if hasattr(item.properties.smartAttributes, 'attachments') \
+                and item.properties.smartAttributes.attachments is not None:
 
             # if the file does not already have ".data" then download and assign it.
             for file in item.properties.smartAttributes.attachments:
