@@ -28,11 +28,12 @@ jobs:
 
   deploy_dev:
     uses: PADAS/gundi-workflows/.github/workflows/deploy_k8s.yml@v1-stable
+    if: startsWith(github.ref, 'refs/heads/main')
     needs: [vars, build]
     with:
       environment: dev
       chart_name: router-app
-      chart_version: '0.5.1'
+      chart_version: '0.5.2'
       repository: ${{ needs.vars.outputs.repository }}
       tag: ${{ needs.vars.outputs.tag }}
 
@@ -43,7 +44,7 @@ jobs:
     with:
       environment: stage
       chart_name: router-app
-      chart_version: '0.5.1'
+      chart_version: '0.5.2'
       repository: ${{ needs.vars.outputs.repository }}
       tag: ${{ needs.vars.outputs.tag }}
 
@@ -54,6 +55,6 @@ jobs:
     with:
       environment: prod
       chart_name: router-app
-      chart_version: '0.5.1'
+      chart_version: '0.5.2'
       repository: ${{ needs.vars.outputs.repository }}
       tag: ${{ needs.vars.outputs.tag }}
