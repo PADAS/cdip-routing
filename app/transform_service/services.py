@@ -255,7 +255,7 @@ def transform_observation(
     # todo: need a better way than this to build the correct components.
     if (
         stream_type == schemas.StreamPrefixEnum.position
-        and config.type_slug == "movebank"  # schemas.DestinationTypes.Movebank.value
+        and config.type_slug == schemas.DestinationTypes.Movebank.value
     ):
         transformer = MBPositionTransformer
     elif (
