@@ -6,10 +6,13 @@ from typing import Any
 
 from gundi_core import schemas
 from cdip_connector.core import cdip_settings
+from datetime import timezone
 
 logger = logging.getLogger(__name__)
 
 ADMIN_PORTAL_HOST = urlparse(cdip_settings.PORTAL_API_ENDPOINT).hostname
+URN_GUNDI_PREFIX = "urn:gundi:"
+URN_GUNDI_FORMAT = "intsrc"
 
 
 class Transformer(ABC):
@@ -27,7 +30,7 @@ class ERPositionTransformer(Transformer):
     # destination_type: str = schemas.DestinationTypes.EarthRanger
 
     @staticmethod
-    def transform(position: schemas.Position, rules: list = None) -> dict:
+    def transform(position: schemas.Position, rules: list = None, **kwargs) -> dict:
         if not position.location or not position.location.y or not position.location.x:
             logger.warning(f"bad position?? {position}")
         transformed_position = dict(
@@ -48,7 +51,7 @@ class ERPositionTransformer(Transformer):
 
 class ERGeoEventTransformer(Transformer):
     @staticmethod
-    def transform(geo_event: schemas.GeoEvent, rules: list = None) -> dict:
+    def transform(geo_event: schemas.GeoEvent, rules: list = None, **kwargs) -> dict:
         return dict(
             title=geo_event.title,
             event_type=geo_event.event_type,
@@ -62,7 +65,7 @@ class ERGeoEventTransformer(Transformer):
 
 class ERCameraTrapTransformer(Transformer):
     @staticmethod
-    def transform(payload: schemas.CameraTrap, rules: list = None) -> dict:
+    def transform(payload: schemas.CameraTrap, rules: list = None, **kwargs) -> dict:
         return dict(
             file=payload.image_uri,
             camera_name=payload.camera_name,
@@ -76,7 +79,7 @@ class ERCameraTrapTransformer(Transformer):
 
 class WPSWatchCameraTrapTransformer(Transformer):
     @staticmethod
-    def transform(payload: schemas.CameraTrap, rules: list = None) -> dict:
+    def transform(payload: schemas.CameraTrap, rules: list = None, **kwargs) -> dict:
         # From and To are currently needed for current WPS Watch API
         # camera_name or device_id preceeding @ in 'To' is all that is necessary, other parts just useful for logging
         from_domain_name = f"{payload.integration_id}@{ADMIN_PORTAL_HOST}"
@@ -86,6 +89,46 @@ class WPSWatchCameraTrapTransformer(Transformer):
             From=from_domain_name,
             To=f"{payload.camera_name}@upload.wpswatch.org",
         )
+
+
+class MBPositionTransformer(Transformer):
+    @staticmethod
+    def transform(position: schemas.Position, rules: list = None, **kwargs) -> dict:
+        def build_tag_id_and_gundi_urn():
+            extra_dict = kwargs.get("extra_dict")
+            gundi_version = kwargs.get("gundi_version")
+            _tag_id = '.'.join(
+                [
+                    extra_dict.get("integration_type"),
+                    position.device_id,
+                    str(position.integration_id)
+                ]
+            )
+            _gundi_urn = '.'.join(
+                [
+                    URN_GUNDI_PREFIX + gundi_version,
+                    URN_GUNDI_FORMAT,
+                    str(position.integration_id),
+                    position.device_id
+                ]
+            )
+
+            return _tag_id, _gundi_urn
+
+        if not position.location or not position.location.y or not position.location.x:
+            logger.warning(f"bad position?? {position}")
+        tag_id, gundi_urn = build_tag_id_and_gundi_urn()
+        transformed_position = dict(
+            recorded_at=position.recorded_at.replace(tzinfo=timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f'),
+            tag_id=tag_id,
+            lon=position.location.x,
+            lat=position.location.y,
+            sensor_type="GPS",
+            tag_manufacturer_id=position.name,
+            gundi_urn=gundi_urn,
+        )
+
+        return transformed_position
 
 
 ########################################################################################################################
