@@ -1,15 +1,8 @@
-from gundi_core import schemas
+from uuid import UUID
 
 URN_GUNDI_PREFIX = "urn:gundi:"
 URN_GUNDI_FORMAT = "intsrc"
 
 
-def build_movebank_gundi_urn(gundi_version: str, position: schemas.Position):
-    return '.'.join(
-        [
-            URN_GUNDI_PREFIX + gundi_version,
-            URN_GUNDI_FORMAT,
-            str(position.integration_id),
-            position.device_id
-        ]
-    )
+def build_gundi_urn(gundi_version: str, integration_id: UUID, device_id: str):
+    return f"{URN_GUNDI_PREFIX}{gundi_version}.{URN_GUNDI_FORMAT}.{str(integration_id)}.{device_id}"
