@@ -39,6 +39,8 @@ from gundi_client_v2 import GundiClient
 logger = logging.getLogger(__name__)
 
 DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
+GUNDI_V1 = "v1"
+GUNDI_V2 = "v2"
 
 _portal = PortalApi()
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
@@ -242,7 +244,7 @@ class TransformerNotFound(Exception):
 
 
 def transform_observation(
-    *, stream_type: str, config: schemas.OutboundConfiguration, observation, gundi_version="v1"
+    *, stream_type: str, config: schemas.OutboundConfiguration, observation
 ) -> dict:
     transformer = None
     extra_dict = {
@@ -251,6 +253,7 @@ def transform_observation(
         ExtraKeys.OutboundIntId: config.id,
         ExtraKeys.StreamType: stream_type,
     }
+    additional_info = {}
 
     # todo: need a better way than this to build the correct components.
     if (
@@ -258,6 +261,12 @@ def transform_observation(
         and config.type_slug == schemas.DestinationTypes.Movebank.value
     ):
         transformer = MBPositionTransformer
+        additional_info.update(
+            **{
+                ExtraKeys.IntegrationType: config.inbound_type_slug,
+                ExtraKeys.InboundIntId: observation.integration_id,
+            }
+        )
     elif (
         stream_type == schemas.StreamPrefixEnum.position
         and config.type_slug == schemas.DestinationTypes.EarthRanger.value
@@ -291,7 +300,7 @@ def transform_observation(
         observation, ca_uuid = get_ca_uuid_for_er_patrol(patrol=observation)
         transformer = SmartERPatrolTransformer(config=config, ca_uuid=ca_uuid)
     if transformer:
-        return transformer.transform(observation, extra_dict=extra_dict, gundi_version=gundi_version)
+        return transformer.transform(observation, additional_info=additional_info, gundi_version=GUNDI_V1)
     else:
         logger.error(
             "No transformer found for stream type",
@@ -538,7 +547,7 @@ transformers_map = {
 }
 
 
-def transform_observation_v2(observation, destination, route_configuration, gundi_version="v2"):
+def transform_observation_v2(observation, destination, route_configuration):
     # Look for a proper transformer for this stream type and destination type
     stream_type = observation.observation_type
     destination_type = destination.type.value
