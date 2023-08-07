@@ -93,15 +93,13 @@ class WPSWatchCameraTrapTransformer(Transformer):
 class MBPositionTransformer(Transformer):
     @staticmethod
     def transform(position: schemas.Position, rules: list = None, **kwargs) -> dict:
+        """
+             kwargs:
+               - integration_type: manufacturer identifier (coming from inbound) needed for tag_id generation.
+               - gundi_version: Gundi version (v1 or v2) used to URN generation.
+        """
         def build_tag_id():
-            additional_info = kwargs.get("additional_info")
-            return '.'.join(
-                [
-                    additional_info.get("integration_type"),
-                    position.device_id,
-                    str(position.integration_id)
-                ]
-            )
+            return f"{kwargs.get('integration_type')}.{position.device_id}.{str(position.integration_id)}"
 
         if not position.location or not position.location.y or not position.location.x:
             logger.warning(f"bad position?? {position}")
