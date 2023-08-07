@@ -261,12 +261,8 @@ def transform_observation(
         and config.type_slug == schemas.DestinationTypes.Movebank.value
     ):
         transformer = MBPositionTransformer
-        additional_info.update(
-            **{
-                ExtraKeys.IntegrationType: config.inbound_type_slug,
-                ExtraKeys.InboundIntId: observation.integration_id,
-            }
-        )
+        additional_info["integration_type"] = config.inbound_type_slug
+        additional_info["gundi_version"] = GUNDI_V1
     elif (
         stream_type == schemas.StreamPrefixEnum.position
         and config.type_slug == schemas.DestinationTypes.EarthRanger.value
@@ -300,7 +296,7 @@ def transform_observation(
         observation, ca_uuid = get_ca_uuid_for_er_patrol(patrol=observation)
         transformer = SmartERPatrolTransformer(config=config, ca_uuid=ca_uuid)
     if transformer:
-        return transformer.transform(observation, additional_info=additional_info, gundi_version=GUNDI_V1)
+        return transformer.transform(observation, **additional_info)
     else:
         logger.error(
             "No transformer found for stream type",
