@@ -106,9 +106,10 @@ class MBPositionTransformer(Transformer):
         if not position.location or not position.location.y or not position.location.x:
             logger.warning(f"bad position?? {position}")
         tag_id = build_tag_id()
-        gundi_urn = helpers.build_movebank_gundi_urn(
+        gundi_urn = helpers.build_gundi_urn(
             gundi_version=kwargs.get("gundi_version"),
-            position=position
+            integration_id=position.integration_id,
+            device_id=position.device_id
         )
         transformed_position = dict(
             recorded_at=position.recorded_at.astimezone(tz=pytz.utc).strftime('%Y-%m-%d %H:%M:%S.%f'),
