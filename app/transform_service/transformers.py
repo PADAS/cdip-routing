@@ -1,18 +1,17 @@
 import json
 import logging
+import pytz
 from abc import ABC, abstractmethod
 from urllib.parse import urlparse
 from typing import Any
 
 from gundi_core import schemas
 from cdip_connector.core import cdip_settings
-from datetime import timezone
+from app.transform_service import helpers
 
 logger = logging.getLogger(__name__)
 
 ADMIN_PORTAL_HOST = urlparse(cdip_settings.PORTAL_API_ENDPOINT).hostname
-URN_GUNDI_PREFIX = "urn:gundi:"
-URN_GUNDI_FORMAT = "intsrc"
 
 
 class Transformer(ABC):
@@ -21,7 +20,7 @@ class Transformer(ABC):
 
     @staticmethod
     @abstractmethod
-    def transform(message: schemas.CDIPBaseModel, rules: list = None) -> Any:
+    def transform(message: schemas.CDIPBaseModel, rules: list = None, **kwargs) -> Any:
         ...
 
 
@@ -94,32 +93,25 @@ class WPSWatchCameraTrapTransformer(Transformer):
 class MBPositionTransformer(Transformer):
     @staticmethod
     def transform(position: schemas.Position, rules: list = None, **kwargs) -> dict:
-        def build_tag_id_and_gundi_urn():
-            extra_dict = kwargs.get("extra_dict")
-            gundi_version = kwargs.get("gundi_version")
-            _tag_id = '.'.join(
+        def build_tag_id():
+            additional_info = kwargs.get("additional_info")
+            return '.'.join(
                 [
-                    extra_dict.get("integration_type"),
+                    additional_info.get("integration_type"),
                     position.device_id,
                     str(position.integration_id)
                 ]
             )
-            _gundi_urn = '.'.join(
-                [
-                    URN_GUNDI_PREFIX + gundi_version,
-                    URN_GUNDI_FORMAT,
-                    str(position.integration_id),
-                    position.device_id
-                ]
-            )
-
-            return _tag_id, _gundi_urn
 
         if not position.location or not position.location.y or not position.location.x:
             logger.warning(f"bad position?? {position}")
-        tag_id, gundi_urn = build_tag_id_and_gundi_urn()
+        tag_id = build_tag_id()
+        gundi_urn = helpers.build_movebank_gundi_urn(
+            gundi_version=kwargs.get("gundi_version"),
+            position=position
+        )
         transformed_position = dict(
-            recorded_at=position.recorded_at.replace(tzinfo=timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f'),
+            recorded_at=position.recorded_at.astimezone(tz=pytz.utc).strftime('%Y-%m-%d %H:%M:%S.%f'),
             tag_id=tag_id,
             lon=position.location.x,
             lat=position.location.y,
