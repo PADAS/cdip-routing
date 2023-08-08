@@ -4,8 +4,7 @@ from app.transform_service import helpers
 from app.subscribers.services import extract_fields_from_message, convert_observation_to_cdip_schema
 
 
-@pytest.mark.asyncio
-async def test_movebank_transformer(
+def test_movebank_transformer(
     outbound_configuration_default,
     unprocessed_observation_position
 ):
