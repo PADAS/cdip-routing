@@ -110,7 +110,7 @@ class MBPositionTransformer(Transformer):
             device_id=position.device_id
         )
         transformed_position = dict(
-            recorded_at=position.recorded_at.astimezone(tz=pytz.utc).strftime('%Y-%m-%d %H:%M:%S.%f'),
+            recorded_at=position.recorded_at.astimezone(tz=pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
             tag_id=tag_id,
             lon=position.location.x,
             lat=position.location.y,
