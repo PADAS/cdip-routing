@@ -10,7 +10,6 @@ router_app:
     CDIP_ADMIN_ENDPOINT: "https://admin.dev.gundiservice.org"
     GUNDI_API_BASE_URL: "https://admin.dev.gundiservice.org"
     REDIS_HOST: "10.3.176.132"
-    KAFKA_BROKER: "pkc-6ojv2.us-west4.gcp.confluent.cloud:9092"
     GCP_PROJECT_ID: cdip-dev-78ca
     GCP_ENVIRONMENT: dev
     BUCKET_NAME: "cdip-files-dev"

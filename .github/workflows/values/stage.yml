@@ -10,7 +10,6 @@ router_app:
     CDIP_ADMIN_ENDPOINT: "https://admin.stage.gundiservice.org"
     GUNDI_API_BASE_URL: "https://admin.stage.gundiservice.org"
     REDIS_HOST: "10.243.180.36"
-    KAFKA_BROKER: "pkc-6ojv2.us-west4.gcp.confluent.cloud:9092"
     GCP_PROJECT_ID: cdip-stage-78ca
     GCP_ENVIRONMENT: stage
     BUCKET_NAME: "cdip-files-stage"
