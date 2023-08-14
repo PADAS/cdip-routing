@@ -26,7 +26,11 @@ from app.transform_service.transformers import (
     ERPositionTransformer,
     ERGeoEventTransformer,
     ERCameraTrapTransformer,
-    WPSWatchCameraTrapTransformer, EREventTransformer, ERAttachmentTransformer, FieldMappingRule,
+    WPSWatchCameraTrapTransformer,
+    EREventTransformer,
+    ERAttachmentTransformer,
+    FieldMappingRule,
+    MBPositionTransformer,
 )
 from gundi_client import PortalApi
 from gundi_client_v2 import GundiClient
@@ -35,6 +39,8 @@ from gundi_client_v2 import GundiClient
 logger = logging.getLogger(__name__)
 
 DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
+GUNDI_V1 = "v1"
+GUNDI_V2 = "v2"
 
 _portal = PortalApi()
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
@@ -242,13 +248,22 @@ def transform_observation(
 ) -> dict:
     transformer = None
     extra_dict = {
+        ExtraKeys.IntegrationType: config.inbound_type_slug,
         ExtraKeys.InboundIntId: observation.integration_id,
         ExtraKeys.OutboundIntId: config.id,
         ExtraKeys.StreamType: stream_type,
     }
+    additional_info = {}
 
     # todo: need a better way than this to build the correct components.
     if (
+        stream_type == schemas.StreamPrefixEnum.position
+        and config.type_slug == schemas.DestinationTypes.Movebank.value
+    ):
+        transformer = MBPositionTransformer
+        additional_info["integration_type"] = config.inbound_type_slug
+        additional_info["gundi_version"] = GUNDI_V1
+    elif (
         stream_type == schemas.StreamPrefixEnum.position
         and config.type_slug == schemas.DestinationTypes.EarthRanger.value
     ):
@@ -281,7 +296,7 @@ def transform_observation(
         observation, ca_uuid = get_ca_uuid_for_er_patrol(patrol=observation)
         transformer = SmartERPatrolTransformer(config=config, ca_uuid=ca_uuid)
     if transformer:
-        return transformer.transform(observation)
+        return transformer.transform(observation, **additional_info)
     else:
         logger.error(
             "No transformer found for stream type",

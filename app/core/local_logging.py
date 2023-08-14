@@ -68,6 +68,7 @@ class ExtraKeys(str, Enum):
 
     DeviceId = "device_id"
     InboundIntId = "inbound_integration_id"
+    IntegrationType = "integration_type"
     OutboundIntId = "outbound_integration_id"
     AttentionNeeded = "attention_needed"
     StreamType = "stream_type"
