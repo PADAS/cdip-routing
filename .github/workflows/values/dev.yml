@@ -7,8 +7,8 @@ router_app:
   env:
     TRACE_ENVIRONMENT: dev
     GOOGLE_PUB_SUB_PROJECT_ID: cdip-dev-78ca
-    CDIP_ADMIN_ENDPOINT: "https://admin.dev.gundiservice.org"
-    GUNDI_API_BASE_URL: "https://admin.dev.gundiservice.org"
+    CDIP_ADMIN_ENDPOINT: "https://api.dev.gundiservice.org"
+    GUNDI_API_BASE_URL: "https://api.dev.gundiservice.org"
     REDIS_HOST: "10.3.176.132"
     GCP_PROJECT_ID: cdip-dev-78ca
     GCP_ENVIRONMENT: dev
