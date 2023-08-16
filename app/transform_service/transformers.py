@@ -101,7 +101,11 @@ class MBPositionTransformer(Transformer):
         def build_tag_id():
             return f"{kwargs.get('integration_type')}.{position.device_id}.{str(position.integration_id)}"
 
-        if not position.location or not position.location.y or not position.location.x:
+        if helpers.check_bad_position(
+                position.location,
+                y=position.location.y,
+                x=position.location.x
+        ):
             logger.warning(f"bad position?? {position}")
         tag_id = build_tag_id()
         gundi_urn = helpers.build_gundi_urn(
@@ -160,7 +164,7 @@ class FieldMappingRule(TransformationRule):
 
 class EREventTransformer(Transformer):
     @staticmethod
-    def transform(message: schemas.v2.Event, rules: list = None) -> dict:
+    def transform(message: schemas.v2.Event, rules: list = None, **kwargs) -> dict:
         transformed_message = dict(
             title=message.title,
             event_type=message.event_type,
@@ -179,8 +183,44 @@ class EREventTransformer(Transformer):
 
 class ERAttachmentTransformer(Transformer):
     @staticmethod
-    def transform(message: schemas.v2.Attachment, rules: list = None) -> dict:
+    def transform(message: schemas.v2.Attachment, rules: list = None, **kwargs) -> dict:
         # ToDo. Implement transformation logic for attachments
         return dict(
             file_path=message.file_path
         )
+
+
+class MBObservationTransformer(Transformer):
+    @staticmethod
+    def transform(message: schemas.v2.Observation, rules: list = None, **kwargs) -> dict:
+        """
+             kwargs:
+               - provider: manufacturer object (coming from provider config) needed for tag_id generation.
+        """
+        provider = kwargs.get('provider')
+        def build_tag_id():
+            return f"{provider.type.value}.{message.source_id}.{str(message.data_provider_id)}"
+
+        if helpers.check_bad_position(
+                message.location,
+                y=message.location.lat,
+                x=message.location.lon
+        ):
+            logger.warning(f"bad position?? {message}")
+        tag_id = build_tag_id()
+        gundi_urn = helpers.build_gundi_urn(
+            gundi_version=kwargs.get("gundi_version"),
+            integration_id=message.data_provider_id,
+            device_id=message.source_id
+        )
+        transformed_position = dict(
+            recorded_at=message.recorded_at.astimezone(tz=pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            tag_id=tag_id,
+            lon=message.location.lon,
+            lat=message.location.lat,
+            sensor_type="GPS",
+            tag_manufacturer_id=message.name,
+            gundi_urn=gundi_urn,
+        )
+
+        return transformed_position
