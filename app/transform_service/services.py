@@ -370,6 +370,16 @@ def get_data_provider_id(observation, gundi_version="v1"):
     return observation.data_provider_id if gundi_version == "v2" else observation.integration_id
 
 
+def get_external_source_id(observation):
+    """
+        external_source_id is not present in Observation model
+    """
+    try:
+        return observation.external_source_id
+    except:
+        return None
+
+
 async def apply_source_configurations(*, observation, gundi_version="v1"):
     if gundi_version == "v2":
         # ToDo: Implement once we process observations
@@ -617,7 +627,7 @@ def build_transformed_message_attributes(observation, destination, gundi_version
             "related_to": str(observation.related_to) if observation.related_to else None,
             "stream_type": str(observation.observation_type),
             "source_id": str(observation.source_id),
-            "external_source_id": str(observation.external_source_id),
+            "external_source_id": str(get_external_source_id(observation)),
             "destination_id": str(destination.id),
             "data_provider_id": str(get_data_provider_id(observation, gundi_version)),
             "annotations": json.dumps(observation.annotations)
