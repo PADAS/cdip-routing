@@ -11,3 +11,7 @@ URN_GUNDI_FORMATS = {
 def build_gundi_urn(gundi_version: str, integration_id: UUID, device_id: str, urn_format: str = "integration_source"):
     format_id = URN_GUNDI_FORMATS.get(urn_format, URN_GUNDI_INTSRC_FORMAT)
     return f"{URN_GUNDI_PREFIX}{gundi_version}.{format_id}.{str(integration_id)}.{device_id}"
+
+
+def check_bad_position(location, x, y):
+    return not all([location, y, x])
