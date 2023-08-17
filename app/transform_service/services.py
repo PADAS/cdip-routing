@@ -617,7 +617,7 @@ def build_transformed_message_attributes(observation, destination, gundi_version
             "related_to": str(observation.related_to) if observation.related_to else None,
             "stream_type": str(observation.observation_type),
             "source_id": str(observation.source_id),
-            "external_source_id": observation.external_source_id,
+            "external_source_id": str(observation.external_source_id),
             "destination_id": str(destination.id),
             "data_provider_id": str(get_data_provider_id(observation, gundi_version)),
             "annotations": json.dumps(observation.annotations)
