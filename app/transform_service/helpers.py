@@ -13,5 +13,7 @@ def build_gundi_urn(gundi_version: str, integration_id: UUID, device_id: str, ur
     return f"{URN_GUNDI_PREFIX}{gundi_version}.{format_id}.{str(integration_id)}.{device_id}"
 
 
-def check_bad_position(location, x, y):
-    return not all([location, y, x])
+def is_valid_position(gundi_version: str, location):
+    if not location:
+        return False
+    return all([location.y, location.x]) if gundi_version == "v1" else all([location.lat, location.lon])

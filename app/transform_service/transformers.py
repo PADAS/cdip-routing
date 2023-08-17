@@ -101,10 +101,9 @@ class MBPositionTransformer(Transformer):
         def build_tag_id():
             return f"{kwargs.get('integration_type')}.{position.device_id}.{str(position.integration_id)}"
 
-        if helpers.check_bad_position(
-                position.location,
-                y=position.location.y,
-                x=position.location.x
+        if not helpers.is_valid_position(
+                kwargs.get("gundi_version"),
+                position.location
         ):
             logger.warning(f"bad position?? {position}")
         tag_id = build_tag_id()
@@ -119,7 +118,7 @@ class MBPositionTransformer(Transformer):
             lon=position.location.x,
             lat=position.location.y,
             sensor_type="GPS",
-            tag_manufacturer_id=position.name,
+            tag_manufacturer_name=kwargs.get('integration_type'),
             gundi_urn=gundi_urn,
         )
 
@@ -199,19 +198,18 @@ class MBObservationTransformer(Transformer):
         """
         provider = kwargs.get('provider')
         def build_tag_id():
-            return f"{provider.type.value}.{message.source_id}.{str(message.data_provider_id)}"
+            return f"{provider.type.value}.{message.external_source_id}.{str(message.data_provider_id)}"
 
-        if helpers.check_bad_position(
-                message.location,
-                y=message.location.lat,
-                x=message.location.lon
+        if not helpers.is_valid_position(
+                kwargs.get("gundi_version"),
+                message.location
         ):
             logger.warning(f"bad position?? {message}")
         tag_id = build_tag_id()
         gundi_urn = helpers.build_gundi_urn(
             gundi_version=kwargs.get("gundi_version"),
             integration_id=message.data_provider_id,
-            device_id=message.source_id
+            device_id=message.external_source_id
         )
         transformed_position = dict(
             recorded_at=message.recorded_at.astimezone(tz=pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
@@ -219,7 +217,7 @@ class MBObservationTransformer(Transformer):
             lon=message.location.lon,
             lat=message.location.lat,
             sensor_type="GPS",
-            tag_manufacturer_id=message.name,
+            tag_manufacturer_name=provider.type.name,
             gundi_urn=gundi_urn,
         )
 
