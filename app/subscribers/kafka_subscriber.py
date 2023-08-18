@@ -229,12 +229,14 @@ async def process_observation(key, message):
                 if gundi_version == "v2":
                     # ToDo: Implement a destination resolution algorithm considering all the routes and filters
                     connection = await get_connection(connection_id=observation.data_provider_id)
+                    provider = connection.provider
                     destinations = connection.destinations
                     default_route = await get_route(route_id=connection.default_route.id)
                     route_configuration = default_route.configuration
                     # ToDo: Get provider key from the route configuration
                     provider_key = str(observation.data_provider_id)
                 else:  # Default to v1
+                    provider = None
                     route_configuration = None
                     provider_key = None
                     destinations = await get_all_outbound_configs_for_id(
@@ -265,6 +267,7 @@ async def process_observation(key, message):
                     transformed_observation = transform_observation_to_destination_schema(
                         observation=observation,
                         destination=destination,
+                        provider=provider,
                         route_configuration=route_configuration,
                         gundi_version=gundi_version
                     )

@@ -31,6 +31,7 @@ from app.transform_service.transformers import (
     ERAttachmentTransformer,
     FieldMappingRule,
     MBPositionTransformer,
+    MBObservationTransformer
 )
 from gundi_client import PortalApi
 from gundi_client_v2 import GundiClient
@@ -540,10 +541,13 @@ transformers_map = {
     schemas.v2.StreamPrefixEnum.attachment.value: {
         schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer
     },
+    schemas.v2.StreamPrefixEnum.observation.value: {
+        schemas.DestinationTypes.Movebank.value: MBObservationTransformer
+    },
 }
 
 
-def transform_observation_v2(observation, destination, route_configuration):
+def transform_observation_v2(observation, destination, provider, route_configuration):
     # Look for a proper transformer for this stream type and destination type
     stream_type = observation.observation_type
     destination_type = destination.type.value
@@ -583,16 +587,17 @@ def transform_observation_v2(observation, destination, route_configuration):
         rules.append(field_mapping_rule)
 
     # Apply the transformer
-    return Transformer.transform(message=observation, rules=rules)
+    return Transformer.transform(message=observation, rules=rules, provider=provider, gundi_version=GUNDI_V2)
 
 
 def transform_observation_to_destination_schema(
-    *, observation, destination, gundi_version="v1", route_configuration=None
+    *, observation, destination, provider=None, gundi_version="v1", route_configuration=None
 ) -> dict:
     if gundi_version == "v2":
         return transform_observation_v2(
             observation=observation,
             destination=destination,
+            provider=provider,
             route_configuration=route_configuration
         )
     else:  # Default to v1
