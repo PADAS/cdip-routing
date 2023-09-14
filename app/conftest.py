@@ -569,6 +569,24 @@ def leopard_detected_event_v2():
 
 
 @pytest.fixture
+def observation_object_v2():
+    return schemas_v2.Observation.parse_obj(
+        {
+            "external_source_id": "bc14b256-dec0-4363-831d-39d0d2d85d50",
+            "source_name": "Logistics Truck A",
+            "type": "tracking-device",
+            "recorded_at": "2021-03-27 11:15:00+0200",
+            "location": {"lon": 35.43902, "lat": -1.59083},
+            "additional": {
+                "voltage": "7.4",
+                "fuel_level": 71,
+                "speed": "41 kph",
+            },
+        }
+    )
+
+
+@pytest.fixture
 def unmapped_animal_detected_event_v2():
     return schemas_v2.Event(
         gundi_id='b9b46dc1-e033-447d-a99b-0fe373ca04c9',
@@ -617,6 +635,15 @@ def integration_type_smartconnect():
 
 
 @pytest.fixture
+def integration_type_movebank():
+    return schemas_v2.ConnectionIntegrationType(
+        id="45c66a61-71e4-4664-a7f2-30d465f87bb7",
+        name="Movebank",
+        value='movebank'
+    )
+
+
+@pytest.fixture
 def destination_integration_v2_er(integration_type_er):
     return schemas_v2.ConnectionIntegration(
         id='338225f3-91f9-4fe1-b013-353a229ce504',
@@ -636,6 +663,17 @@ def destination_integration_v1_smartconnect(integration_type_smartconnect):
         username='something',
         password='something fancy'
     )
+
+@pytest.fixture
+def destination_integration_v2_movebank(integration_type_movebank):
+    return schemas_v2.ConnectionIntegration(
+        id='338225f3-91f9-4fe1-b013-353a229ce504',
+        name='MB Load Testing',
+        type=integration_type_movebank,
+        base_url='https://mb-load-testing.pamdas.org',
+        status='healthy'
+    )
+
 
 @pytest.fixture
 def route_config_with_event_type_mappings():
@@ -658,5 +696,16 @@ def route_config_with_event_type_mappings():
                     }
                 }
             }
+        }
+    )
+
+
+@pytest.fixture
+def route_config_with_no_mappings():
+    return schemas_v2.RouteConfiguration(
+        id='1a3e3e73-94ad-42cb-a765-09a7193ae0b1',
+        name='Trap Tagger to ER - No Mapping',
+        data={
+            'field_mappings': {}
         }
     )
