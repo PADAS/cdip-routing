@@ -21,7 +21,7 @@ def test_movebank_transformer(
         observation=observation
     )
     # Check dictionary schema
-    expected_keys = ["recorded_at", "tag_id", "lon", "lat", "sensor_type", "tag_manufacturer_id", "gundi_urn"]
+    expected_keys = ["recorded_at", "tag_id", "lon", "lat", "sensor_type", "tag_manufacturer_name", "gundi_urn"]
     for key in transformed_observation.keys():
         assert key in expected_keys
     # Check transformed_observation values
