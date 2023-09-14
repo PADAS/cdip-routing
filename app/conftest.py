@@ -3,6 +3,7 @@ import aiohttp
 import pytest
 import asyncio
 import gundi_core.schemas.v2 as schemas_v2
+import gundi_core.schemas.v1 as schemas_v1
 from aiohttp.client_reqrep import ConnectionKey
 from cdip_connector.core.schemas import OutboundConfiguration
 from cdip_connector.core.routing import TopicEnum
@@ -606,6 +607,14 @@ def integration_type_er():
         value='earth_ranger'
     )
 
+@pytest.fixture
+def integration_type_smartconnect():
+    return schemas_v1.OutbountIntegrationType(
+        id="03f7053e-653a-4b7d-b2e5-eb207ae52670",
+        name="SmartConnect",
+        value='smart_connect'
+    )
+
 
 @pytest.fixture
 def destination_integration_v2_er(integration_type_er):
@@ -617,6 +626,16 @@ def destination_integration_v2_er(integration_type_er):
         status='healthy'
     )
 
+@pytest.fixture
+def destination_integration_v1_smartconnect(integration_type_smartconnect):
+    return schemas_v1.OutboundConfiguration(
+        id='338225f3-91f9-4fe1-b013-353a229ce504',
+        name='SmartConnect Server',
+        type=integration_type_smartconnect,
+        endpoint='https://smartconnect.example.com',
+        username='something',
+        password='something fancy'
+    )
 
 @pytest.fixture
 def route_config_with_event_type_mappings():
