@@ -577,6 +577,7 @@ async def process_failed_unprocessed_observation(key, message):
             retry_unprocessed_message = create_retry_message(
                 raw_observation, attributes
             )
+
             retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
             extra_dict = {
                 ExtraKeys.DeviceId: device_id,
