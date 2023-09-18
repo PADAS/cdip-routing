@@ -65,3 +65,33 @@ async def test_movebank_transform_observation(
         assert key in expected_keys
     assert transformed_observation['tag_manufacturer_name'] == 'TrapTagger'
     assert transformed_observation['sensor_type'] == 'GPS'
+
+
+@pytest.mark.asyncio
+async def test_transform_observations_for_earthranger(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    observation_object_v2,
+    destination_integration_v2_er,
+    route_config_with_no_mappings,
+    connection_v2
+
+):
+    transformed_observation = transform_observation_v2(
+        observation=observation_object_v2,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=route_config_with_no_mappings
+    )
+    assert transformed_observation
+    assert transformed_observation.get("manufacturer_id") == observation_object_v2.external_source_id
+    assert transformed_observation.get("source_type") == observation_object_v2.type
+    assert transformed_observation.get("subject_name") == observation_object_v2.source_name
+    assert transformed_observation.get("recorded_at") == observation_object_v2.recorded_at
+    assert transformed_observation.get("location") == {
+        "lon": observation_object_v2.location.lon,
+        "lat": observation_object_v2.location.lat
+    }
+    assert transformed_observation.get("additional") == observation_object_v2.additional
+
