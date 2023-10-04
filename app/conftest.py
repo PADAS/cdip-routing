@@ -1,6 +1,7 @@
 import datetime
 import aiohttp
 import pytest
+import uuid
 import asyncio
 import gundi_core.schemas.v2 as schemas_v2
 import gundi_core.schemas.v1 as schemas_v1
@@ -625,14 +626,6 @@ def integration_type_er():
         value='earth_ranger'
     )
 
-@pytest.fixture
-def integration_type_smartconnect():
-    return schemas_v1.OutbountIntegrationType(
-        id="03f7053e-653a-4b7d-b2e5-eb207ae52670",
-        name="SmartConnect",
-        value='smart_connect'
-    )
-
 
 @pytest.fixture
 def integration_type_movebank():
@@ -654,14 +647,16 @@ def destination_integration_v2_er(integration_type_er):
     )
 
 @pytest.fixture
-def destination_integration_v1_smartconnect(integration_type_smartconnect):
+def destination_integration_v1_smartconnect():
     return schemas_v1.OutboundConfiguration(
         id='338225f3-91f9-4fe1-b013-353a229ce504',
         name='SmartConnect Server',
-        type=integration_type_smartconnect,
+        type=uuid.uuid4(),
         endpoint='https://smartconnect.example.com',
         username='something',
-        password='something fancy'
+        password='something fancy',
+        type_slug="smart_connect",
+        owner=uuid.uuid4()
     )
 
 @pytest.fixture
