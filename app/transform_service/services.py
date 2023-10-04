@@ -29,6 +29,7 @@ from app.transform_service.transformers import (
     WPSWatchCameraTrapTransformer,
     EREventTransformer,
     ERAttachmentTransformer,
+    ERObservationTransformer,
     FieldMappingRule,
     MBPositionTransformer,
     MBObservationTransformer
@@ -549,7 +550,8 @@ transformers_map = {
         schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer
     },
     schemas.v2.StreamPrefixEnum.observation.value: {
-        schemas.DestinationTypes.Movebank.value: MBObservationTransformer
+        schemas.DestinationTypes.Movebank.value: MBObservationTransformer,
+        schemas.DestinationTypes.EarthRanger.value: ERObservationTransformer
     },
 }
 

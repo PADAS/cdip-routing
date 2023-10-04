@@ -189,6 +189,33 @@ class ERAttachmentTransformer(Transformer):
         )
 
 
+class ERObservationTransformer(Transformer):
+
+    @staticmethod
+    def transform(message: schemas.v2.Observation, rules: list = None, **kwargs) -> dict:
+        if not message.location or not message.location.lat or not message.location.lon:
+            logger.warning(f"bad position?? {message}")
+        transformed_message = dict(
+            manufacturer_id=message.external_source_id,
+            source_type=message.type or "tracking-device",
+            subject_name=message.source_name or message.source_id,
+            recorded_at=message.recorded_at,
+            location={"lon": message.location.lon, "lat": message.location.lat},
+            additional=message.additional,
+        )
+
+        # ER does not except null subject_subtype so conditionally add to transformed position if set
+        if subject_type := message.subject_type:
+            transformed_message["subject_subtype"] = subject_type
+
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_message)
+
+        return transformed_message
+
+
 class MBObservationTransformer(Transformer):
     @staticmethod
     def transform(message: schemas.v2.Observation, rules: list = None, **kwargs) -> dict:
