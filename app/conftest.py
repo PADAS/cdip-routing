@@ -568,6 +568,23 @@ def leopard_detected_event_v2():
         observation_type='ev'
     )
 
+from smartconnect.models import SMARTRequest, SmartAttributes, Geometry, SMARTCONNECT_DATFORMAT, Properties
+@pytest.fixture
+def smartrequest_with_no_attachments():
+
+    smart_attributes = SmartAttributes(
+
+    )
+    return SMARTRequest(
+            type="Feature",
+            geometry=Geometry(coordinates=[0.1, 0.1], type="Point"),
+            properties=Properties(
+                dateTime=datetime.datetime.now().strftime(SMARTCONNECT_DATFORMAT),
+                smartDataType='',
+                smartFeatureType='',
+                smartAttributes=smart_attributes
+            ),
+        )
 
 @pytest.fixture
 def observation_object_v2():
