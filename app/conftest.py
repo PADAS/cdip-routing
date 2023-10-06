@@ -1,8 +1,10 @@
 import datetime
 import aiohttp
 import pytest
+import uuid
 import asyncio
 import gundi_core.schemas.v2 as schemas_v2
+import gundi_core.schemas.v1 as schemas_v1
 from aiohttp.client_reqrep import ConnectionKey
 from cdip_connector.core.schemas import OutboundConfiguration
 from cdip_connector.core.routing import TopicEnum
@@ -566,6 +568,23 @@ def leopard_detected_event_v2():
         observation_type='ev'
     )
 
+from smartconnect.models import SMARTRequest, SmartAttributes, Geometry, SMARTCONNECT_DATFORMAT, Properties
+@pytest.fixture
+def smartrequest_with_no_attachments():
+
+    smart_attributes = SmartAttributes(
+
+    )
+    return SMARTRequest(
+            type="Feature",
+            geometry=Geometry(coordinates=[0.1, 0.1], type="Point"),
+            properties=Properties(
+                dateTime=datetime.datetime.now().strftime(SMARTCONNECT_DATFORMAT),
+                smartDataType='',
+                smartFeatureType='',
+                smartAttributes=smart_attributes
+            ),
+        )
 
 @pytest.fixture
 def observation_object_v2():
@@ -644,6 +663,18 @@ def destination_integration_v2_er(integration_type_er):
         status='healthy'
     )
 
+@pytest.fixture
+def destination_integration_v1_smartconnect():
+    return schemas_v1.OutboundConfiguration(
+        id='338225f3-91f9-4fe1-b013-353a229ce504',
+        name='SmartConnect Server',
+        type=uuid.uuid4(),
+        endpoint='https://smartconnect.example.com',
+        username='something',
+        password='something fancy',
+        type_slug="smart_connect",
+        owner=uuid.uuid4()
+    )
 
 @pytest.fixture
 def destination_integration_v2_movebank(integration_type_movebank):

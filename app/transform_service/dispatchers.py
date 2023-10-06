@@ -133,10 +133,10 @@ class SmartConnectDispatcher:
             if item.properties.smartAttributes.observationUuid in ('None', None):
                 item.properties.smartAttributes.observationUuid = str(uuid.uuid4())
 
-        if hasattr(item.properties.smartAttributes, 'attachments'):
+        if attachments:= getattr(item.properties.smartAttributes, 'attachments', None):
 
             # if the file does not already have ".data" then download and assign it.
-            for file in item.properties.smartAttributes.attachments:
+            for file in attachments:
                 if file.data.startswith('gundi:storage'):
                     stored_name = file.data.split(':')[-1]
                     downloaded_file = get_cloud_storage().download(stored_name)
