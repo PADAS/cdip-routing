@@ -310,17 +310,22 @@ def transform_observation(
 
 
 def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
+
+    # TODO: This includes critical assumptions, inferring the CA from the contained events.
     segment: ERPatrolSegment
-    ca_uuids = []
+    ca_uuids = set()
     for segment in patrol.patrol_segments:
         for event in segment.event_details:
             event, event_ca_uuid = get_ca_uuid_for_event(event=event)
-            if event_ca_uuid not in ca_uuids:
-                ca_uuids.append(event_ca_uuid)
+            if event_ca_uuid:
+                ca_uuids.add(event_ca_uuid)
+
     if len(ca_uuids) > 1:
         raise CAConflictException(
             f"Patrol events are mapped to more than one ca_uuid: {ca_uuids}"
         )
+
+    # if no events are mapped to a ca_uuid, use the leader's ca_uuid
     if not ca_uuids:
         if not segment.leader:
             logger.warning(
@@ -329,8 +334,10 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
             )
             raise IndeterminableCAException("Unable to determine CA uuid for patrol")
         leader_ca_uuid = segment.leader.additional.get("ca_uuid")
-        ca_uuids.append(leader_ca_uuid)
-    ca_uuid = ca_uuids[0]
+        ca_uuids.add(leader_ca_uuid)
+
+    # TODO: this assumes only one ca_uuid is mapped to a patrol
+    ca_uuid = ca_uuids.pop()
     return patrol, ca_uuid
 
 import re
