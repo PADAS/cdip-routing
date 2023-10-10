@@ -556,7 +556,7 @@ transformers_map = {
 }
 
 
-def transform_observation_v2(observation, destination, provider, route_configuration):
+def transform_observation_v2(observation, destination, provider, route_configuration=None):
     # Look for a proper transformer for this stream type and destination type
     stream_type = observation.observation_type
     destination_type = destination.type.value
@@ -577,7 +577,7 @@ def transform_observation_v2(observation, destination, provider, route_configura
 
     # Check for extra configurations to apply
     rules = []
-    if field_mappings := route_configuration.data.get("field_mappings"):
+    if route_configuration and (field_mappings := route_configuration.data.get("field_mappings")):
         configuration = field_mappings.get(
             # First look for configurations for this data provider
             str(observation.data_provider_id), {}
