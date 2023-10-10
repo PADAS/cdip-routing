@@ -577,8 +577,7 @@ def transform_observation_v2(observation, destination, provider, route_configura
 
     # Check for extra configurations to apply
     rules = []
-    if route_configuration and route_configuration.data.get("field_mappings"):
-        field_mappings = route_configuration.data.get("field_mappings")
+    if route_configuration and (field_mappings := route_configuration.data.get("field_mappings")):
         configuration = field_mappings.get(
             # First look for configurations for this data provider
             str(observation.data_provider_id), {}
