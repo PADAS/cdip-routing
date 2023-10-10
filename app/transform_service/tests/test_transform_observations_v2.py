@@ -95,3 +95,40 @@ async def test_transform_observations_for_earthranger(
     }
     assert transformed_observation.get("additional") == observation_object_v2.additional
 
+
+@pytest.mark.asyncio
+async def test_transform_observations_without_route_configuration(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    observation_object_v2,
+    destination_integration_v2_er,
+    connection_v2
+
+):
+    transformed_observation = transform_observation_v2(
+        observation=observation_object_v2,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=None
+    )
+    assert transformed_observation
+
+
+@pytest.mark.asyncio
+async def test_transform_events_without_route_configuration(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    unmapped_animal_detected_event_v2,
+    destination_integration_v2_er,
+    connection_v2
+
+):
+    transformed_observation = transform_observation_v2(
+        observation=unmapped_animal_detected_event_v2,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=None
+    )
+    assert transformed_observation
