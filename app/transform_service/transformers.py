@@ -198,13 +198,13 @@ class ERObservationTransformer(Transformer):
         transformed_message = dict(
             manufacturer_id=message.external_source_id,
             source_type=message.type or "tracking-device",
-            subject_name=message.source_name or message.source_id,
+            subject_name=message.source_name or message.external_source_id,
             recorded_at=message.recorded_at,
             location={"lon": message.location.lon, "lat": message.location.lat},
             additional=message.additional,
         )
 
-        # ER does not except null subject_subtype so conditionally add to transformed position if set
+        # ER does not accept null subject_subtype so conditionally add to transformed position if set
         if subject_type := message.subject_type:
             transformed_message["subject_subtype"] = subject_type
 
