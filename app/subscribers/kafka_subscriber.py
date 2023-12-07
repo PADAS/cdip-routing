@@ -178,6 +178,10 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
         )
 
 
+def get_provider_key(provider):
+    return f"gundi_{provider.type.value}_{str(provider.id)}"
+
+
 @tracing.faust_instrumentation.load_context
 async def process_observation(key, message):
     """
@@ -233,8 +237,7 @@ async def process_observation(key, message):
                     destinations = connection.destinations
                     default_route = await get_route(route_id=connection.default_route.id)
                     route_configuration = default_route.configuration
-                    # ToDo: Get provider key from the route configuration
-                    provider_key = str(observation.data_provider_id)
+                    provider_key = get_provider_key(provider)  # i.e. gundi_cellstop_abc1234..
                 else:  # Default to v1
                     provider = None
                     route_configuration = None
