@@ -1,5 +1,5 @@
 import pytest
-from app.subscribers.kafka_subscriber import process_observation
+from app.subscribers.kafka_subscriber import process_observation, get_provider_key
 
 
 @pytest.mark.asyncio
@@ -37,3 +37,11 @@ async def test_process_attachments_v2(
     assert mock_pubsub_client.PublisherClient.called
     assert mock_pubsub_client.PublisherClient.return_value.publish.called
 
+
+@pytest.mark.asyncio
+async def test_default_provider_key(
+   connection_v2,
+):
+    provider = connection_v2.provider
+    provider_key = get_provider_key(provider)
+    assert provider_key == f"gundi_{provider.type.value}_{str(provider.id)}"
