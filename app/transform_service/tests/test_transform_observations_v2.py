@@ -132,3 +132,67 @@ async def test_transform_events_without_route_configuration(
         route_configuration=None
     )
     assert transformed_observation
+
+
+@pytest.mark.asyncio
+async def test_provider_key_mapping_with_default(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    unmapped_animal_detected_event_v2,
+    destination_integration_v2_er,
+    route_config_with_provider_key_mappings,
+    connection_v2
+):
+    # Test with a species that is not in the map
+    transformed_observation = transform_observation_v2(
+        observation=unmapped_animal_detected_event_v2,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=route_config_with_provider_key_mappings
+    )
+    # Check that it's mapped to the default type
+    assert transformed_observation.get('provider_key') == "mapipedia"
+
+
+@pytest.mark.asyncio
+async def test_provider_key_mapping_in_observations_v2(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    observation_object_v2,
+    destination_integration_v2_er,
+    route_config_with_provider_key_mappings,
+    connection_v2
+):
+    # Test with a species that is not in the map
+    transformed_observation = transform_observation_v2(
+        observation=observation_object_v2,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=route_config_with_provider_key_mappings
+    )
+    # Check that it's mapped to the default type
+    assert transformed_observation.get('provider_key') == "mapipedia"
+
+
+@pytest.mark.asyncio
+async def test_provider_key_mapping_in_events_v2(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    leopard_detected_event_v2,
+    destination_integration_v2_er,
+    route_config_with_provider_key_mappings,
+    connection_v2
+):
+    # Test with a species that is not in the map
+    transformed_observation = transform_observation_v2(
+        observation=leopard_detected_event_v2,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=route_config_with_provider_key_mappings
+    )
+    # Check that it's mapped to the default type
+    assert transformed_observation.get('provider_key') == "mapipedia"
+
