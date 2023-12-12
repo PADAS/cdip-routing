@@ -587,13 +587,17 @@ def transform_observation_v2(observation, destination, provider, route_configura
             # Then look for configurations for this destination
             str(destination.id), {}
         )
-        field_mapping_rule = FieldMappingRule(
-            map=configuration.get("map", {}),
-            source=configuration.get("provider_field", ""),
-            target=configuration.get("destination_field", ""),
-            default=configuration.get("default")
-        )
-        rules.append(field_mapping_rule)
+        if configuration:
+            destination_field = configuration.get("destination_field")
+            if not destination_field:
+                raise ReferenceDataError(f"No destination_field found in route configuration {route_configuration}")
+            field_mapping_rule = FieldMappingRule(
+                target=destination_field,
+                default=configuration.get("default"),
+                source=configuration.get("provider_field"),
+                map=configuration.get("map")
+            )
+            rules.append(field_mapping_rule)
 
     # Apply the transformer
     return Transformer.transform(message=observation, rules=rules, provider=provider, gundi_version=GUNDI_V2)
