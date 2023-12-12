@@ -138,7 +138,7 @@ class TransformationRule(ABC):
 
 class FieldMappingRule(TransformationRule):
 
-    def __init__(self, map: dict, source: str, target: str, default: str):
+    def __init__(self, target: str, default: str, map: dict = None, source: str = None):
         self.map = map
         self.source = source
         self.target = target
@@ -153,10 +153,19 @@ class FieldMappingRule(TransformationRule):
         return value
 
     def apply(self, message: dict, **kwargs):
+        if not self.source:
+            message[self.target] = self.default
+            return
+
+        source_value = self._extract_value(
+            message=message, source=self.source
+        )
+        if not self.map:
+            message[self.target] = source_value
+            return
+
         message[self.target] = self.map.get(
-            self._extract_value(
-                message=message, source=self.source
-            ),
+            source_value,
             self.default
         )
 

@@ -591,6 +591,7 @@ def observation_object_v2():
     return schemas_v2.Observation.parse_obj(
         {
             "external_source_id": "bc14b256-dec0-4363-831d-39d0d2d85d50",
+            "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
             "source_name": "Logistics Truck A",
             "type": "tracking-device",
             "recorded_at": "2021-03-27 11:15:00+0200",
@@ -704,6 +705,31 @@ def route_config_with_event_type_mappings():
                             'default': 'wildlife_sighting_rep',
                             'provider_field': 'event_details__species',
                             'destination_field': 'event_type'
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+@pytest.fixture
+def route_config_with_provider_key_mappings():
+    return schemas_v2.RouteConfiguration(
+        id='1a3e3e73-94ad-42cb-a765-09a7193ae0b1',
+        name='Trap Tagger to ER - Provider Key',
+        data={
+            'field_mappings': {
+                'ddd0946d-15b0-4308-b93d-e0470b6d33b6': {
+                    'ev': {
+                        '338225f3-91f9-4fe1-b013-353a229ce504': {
+                            'default': 'mapipedia',
+                            'destination_field': 'provider_key'
+                        }
+                    },
+                    'obv': {
+                        '338225f3-91f9-4fe1-b013-353a229ce504': {
+                            'default': 'mapipedia',
+                            'destination_field': 'provider_key'
                         }
                     }
                 }
