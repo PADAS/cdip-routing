@@ -11,7 +11,7 @@ import requests
 from gundi_core import schemas
 from cdip_connector.core.cloudstorage import get_cloud_storage
 from erclient import AsyncERClient
-from smartconnect import SmartClient
+from smartconnect import AsyncSmartClient
 from smartconnect.models import SMARTRequest, SMARTCompositeRequest
 import uuid
 
@@ -149,7 +149,7 @@ class SmartConnectDispatcher:
         item = SMARTCompositeRequest.parse_obj(item)
 
         # orchestration order of operations
-        smartclient = SmartClient(
+        smartclient = AsyncSmartClient(
             api=self.config.endpoint,
             username=self.config.login,
             password=self.config.password,
@@ -157,7 +157,7 @@ class SmartConnectDispatcher:
         )
         for patrol_request in item.patrol_requests:
             self.clean_smart_request(patrol_request)
-            smartclient.post_smart_request(
+            await smartclient.post_smart_request(
                 json=patrol_request.json(exclude_none=True), ca_uuid=item.ca_uuid
             )
         for waypoint_request in item.waypoint_requests:
@@ -173,13 +173,13 @@ class SmartConnectDispatcher:
             payload = waypoint_request.json(exclude_none=True)
             logger.debug('Waypoint payload.', extra={'payload': payload})
 
-            smartclient.post_smart_request(
+            await smartclient.post_smart_request(
                 json=payload,
                 ca_uuid=item.ca_uuid
             )
         for track_point_request in item.track_point_requests:
             self.clean_smart_request(track_point_request)
-            smartclient.post_smart_request(
+            await smartclient.post_smart_request(
                 json=track_point_request.json(exclude_none=True), ca_uuid=item.ca_uuid
             )
         return
