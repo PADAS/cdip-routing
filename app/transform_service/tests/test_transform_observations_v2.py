@@ -196,3 +196,31 @@ async def test_provider_key_mapping_in_events_v2(
     # Check that it's mapped to the default type
     assert transformed_observation.get('provider_key') == "mapipedia"
 
+
+@pytest.mark.asyncio
+async def test_transform_events_for_smart(
+    mocker,
+    smart_ca_uuid,
+    mock_smart_async_client_class,
+    animals_sign_event_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch("app.transform_service.smartconnect_transformers.AsyncSmartClient", mock_smart_async_client_class)
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None
+    )
+    assert transformed_observation
+    assert transformed_observation.get("ca_uuid") == smart_ca_uuid
+    assert len(transformed_observation.get("waypoint_requests", [])) == 1
+    waypoint = transformed_observation.get("waypoint_requests")[0]
+    assert waypoint.get("geometry", {}).get("coordinates", []) == [
+        animals_sign_event_v2.location.lon, animals_sign_event_v2.location.lat
+    ]
+    properties = waypoint.get("properties", {})
+    assert properties.get("smartDataType") == "incident"
+    assert properties.get("smartFeatureType") == "waypoint/new"
+    # ToDo: Check 'smartAttributes'

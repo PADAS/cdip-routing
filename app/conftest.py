@@ -8,6 +8,7 @@ import gundi_core.schemas.v1 as schemas_v1
 from aiohttp.client_reqrep import ConnectionKey
 from cdip_connector.core.schemas import OutboundConfiguration
 from cdip_connector.core.routing import TopicEnum
+from pydantic.types import UUID
 
 
 def async_return(result):
@@ -43,6 +44,45 @@ def mock_gundi_client(
     )
     mock_client.ensure_device.return_value = async_return(device)
     return mock_client
+
+
+@pytest.fixture
+def smart_ca_data_model():
+    dm = DataModel(use_language_code="en")
+    with open("app/transform_service/tests/test_datamodel.xml", "r") as f:
+        text = f.read()
+        dm.load(text)
+    return dm
+
+
+@pytest.fixture
+def smart_cm_data_models():
+    return []
+
+
+@pytest.fixture
+def mock_smart_async_client(mocker, smart_ca_data_model, smart_cm_data_models):
+    mock_client = mocker.MagicMock()
+    mock_client.get_incident.return_value = async_return(
+        None
+    )
+    mock_client.get_configurable_models.return_value = async_return(
+        smart_cm_data_models
+    )
+    mock_client.get_data_model.return_value = async_return(
+        smart_ca_data_model
+    )
+    mock_client.post_smart_request.return_value = async_return(
+        {"status": "success"}
+    )
+    return mock_client
+
+
+@pytest.fixture
+def mock_smart_async_client_class(mocker, mock_smart_async_client):
+    mock_smart_async_client_class = mocker.MagicMock()
+    mock_smart_async_client_class.return_value = mock_smart_async_client
+    return mock_smart_async_client_class
 
 
 def _set_side_effect_error_on_gundi_client_once(mock_client, error):
@@ -493,15 +533,15 @@ def route_v2():
             'id': '835897f9-1ef2-4d99-9c6c-ea2663380c1f', 'name': 'TrapTagger Default Route',
             'owner': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0',
             'data_providers': [
-            {'id': 'ddd0946d-15b0-4308-b93d-e0470b6d33b6', 'name': 'Trap Tagger',
-             'owner': {'id': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0', 'name': 'Test Organization'},
-             'type': {'id': '190e3710-3a29-4710-b932-f951222209a7', 'name': 'TrapTagger', 'value': 'traptagger'},
-             'base_url': 'https://test.traptagger.com', 'status': 'healthy'}],
+                {'id': 'ddd0946d-15b0-4308-b93d-e0470b6d33b6', 'name': 'Trap Tagger',
+                 'owner': {'id': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0', 'name': 'Test Organization'},
+                 'type': {'id': '190e3710-3a29-4710-b932-f951222209a7', 'name': 'TrapTagger', 'value': 'traptagger'},
+                 'base_url': 'https://test.traptagger.com', 'status': 'healthy'}],
             'destinations': [
-            {'id': '338225f3-91f9-4fe1-b013-353a229ce504', 'name': 'ER Load Testing',
-             'owner': {'id': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0', 'name': 'Test Organization'},
-             'type': {'id': '45c66a61-71e4-4664-a7f2-30d465f87aa6', 'name': 'EarthRanger', 'value': 'earth_ranger'},
-             'base_url': 'https://gundi-load-testing.pamdas.org', 'status': 'healthy'}],
+                {'id': '338225f3-91f9-4fe1-b013-353a229ce504', 'name': 'ER Load Testing',
+                 'owner': {'id': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0', 'name': 'Test Organization'},
+                 'type': {'id': '45c66a61-71e4-4664-a7f2-30d465f87aa6', 'name': 'EarthRanger', 'value': 'earth_ranger'},
+                 'base_url': 'https://gundi-load-testing.pamdas.org', 'status': 'healthy'}],
             'configuration': {
                 'id': '1a3e3e73-94ad-42cb-a765-09a7193ae0b1',
                 'name': 'Trap Tagger to ER - Event Type Mapping',
@@ -568,23 +608,26 @@ def leopard_detected_event_v2():
         observation_type='ev'
     )
 
-from smartconnect.models import SMARTRequest, SmartAttributes, Geometry, SMARTCONNECT_DATFORMAT, Properties
+
+from smartconnect.models import SMARTRequest, SmartAttributes, Geometry, SMARTCONNECT_DATFORMAT, Properties, DataModel
+
+
 @pytest.fixture
 def smartrequest_with_no_attachments():
-
     smart_attributes = SmartAttributes(
 
     )
     return SMARTRequest(
-            type="Feature",
-            geometry=Geometry(coordinates=[0.1, 0.1], type="Point"),
-            properties=Properties(
-                dateTime=datetime.datetime.now().strftime(SMARTCONNECT_DATFORMAT),
-                smartDataType='',
-                smartFeatureType='',
-                smartAttributes=smart_attributes
-            ),
-        )
+        type="Feature",
+        geometry=Geometry(coordinates=[0.1, 0.1], type="Point"),
+        properties=Properties(
+            dateTime=datetime.datetime.now().strftime(SMARTCONNECT_DATFORMAT),
+            smartDataType='',
+            smartFeatureType='',
+            smartAttributes=smart_attributes
+        ),
+    )
+
 
 @pytest.fixture
 def observation_object_v2():
@@ -637,6 +680,40 @@ def unmapped_animal_detected_event_v2():
 
 
 @pytest.fixture
+def animals_sign_event_v2():
+    return schemas_v2.Event(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        recorded_at=datetime.datetime(2023, 12, 28, 19, 26, tzinfo=datetime.timezone.utc),
+        location=schemas_v2.Location(
+            lat=-51.688645,
+            lon=-72.704440,
+            alt=1800.0,
+            hdop=None,
+            vdop=None
+        ),
+        title="Animal Sign",
+        event_type="animals_sign",
+        event_details={
+            "site_name": "MM Spot",
+            "species": "lion",
+            "tags": [
+                "adult",
+                "male"
+            ],
+            "animal_count": 2,
+            "ageofsign": "days"
+        },
+        geometry={},
+        observation_type="ev"
+    )
+
+
+@pytest.fixture
 def integration_type_er():
     return schemas_v2.ConnectionIntegrationType(
         id="45c66a61-71e4-4664-a7f2-30d465f87aa6",
@@ -664,6 +741,7 @@ def destination_integration_v2_er(integration_type_er):
         status='healthy'
     )
 
+
 @pytest.fixture
 def destination_integration_v1_smartconnect():
     return schemas_v1.OutboundConfiguration(
@@ -677,6 +755,7 @@ def destination_integration_v1_smartconnect():
         owner=uuid.uuid4()
     )
 
+
 @pytest.fixture
 def destination_integration_v2_movebank(integration_type_movebank):
     return schemas_v2.ConnectionIntegration(
@@ -685,6 +764,148 @@ def destination_integration_v2_movebank(integration_type_movebank):
         type=integration_type_movebank,
         base_url='https://mb-load-testing.pamdas.org',
         status='healthy'
+    )
+
+
+@pytest.fixture
+def integration_type_smart():
+    return schemas_v2.ConnectionIntegrationType(
+        id="56b76a61-53e4-4664-a7f2-21d465f87bc6",
+        name="SMART Connect",
+        value='smart_connect'
+    )
+
+
+@pytest.fixture
+def smart_ca_uuid():
+    return "a13b9201-6228-45e0-a75b-abe5b6a9f98e"
+
+
+@pytest.fixture
+def destination_integration_v2_smart(integration_type_smart, smart_ca_uuid):
+    return schemas_v2.Integration(
+        id=UUID('b42c9205-5228-49e0-a75b-ebe5b6a9f78e'),
+        name='Integration X SMART Connect',
+        type=schemas_v2.IntegrationType(
+            id=integration_type_smart.id,
+            name=integration_type_smart.name,
+            value=integration_type_smart.value,
+            description='',
+            actions=[
+                schemas_v2.IntegrationAction(id=UUID('b0a0e7ed-d668-41b5-96d2-397f026c4ecb'), type='auth',
+                                             name='Authenticate', value='auth',
+                                             description='Authenticate against smart',
+                                             action_schema={'type': 'object', 'title': 'SMARTAuthActionConfig',
+                                                            'required': ['login', 'password'], 'properties': {
+                                                     'login': {'type': 'string', 'title': 'Login'},
+                                                     'endpoint': {'type': 'string', 'title': 'Endpoint'},
+                                                     'password': {'type': 'string', 'title': 'Password'}}}),
+                schemas_v2.IntegrationAction(id=UUID('ebe72917-c112-4064-9f38-707bbd14a50f'), type='push',
+                                             name='Push Events', value='push_events',
+                                             description='Send Events to SMART Connect (a.k.a Incidents or waypoints)',
+                                             action_schema={'type': 'object', 'title': 'SMARTPushEventActionConfig',
+                                                            'properties': {
+                                                                'ca_uuid': {'type': 'string', 'title': 'Ca Uuid',
+                                                                            'format': 'uuid'},
+                                                                'version': {'type': 'string', 'title': 'Version'},
+                                                                'ca_uuids': {'type': 'array',
+                                                                             'items': {'type': 'string',
+                                                                                       'format': 'uuid'},
+                                                                             'title': 'Ca Uuids'},
+                                                                'transformation_rules': {
+                                                                    '$ref': '#/definitions/TransformationRules'},
+                                                                'configurable_models_lists': {'type': 'object',
+                                                                                              'title': 'Configurable Models Lists'},
+                                                                'configurable_models_enabled': {'type': 'array',
+                                                                                                'items': {
+                                                                                                    'type': 'string',
+                                                                                                    'format': 'uuid'},
+                                                                                                'title': 'Configurable Models Enabled'}},
+                                                            'definitions': {
+                                                                'OptionMap': {'type': 'object', 'title': 'OptionMap',
+                                                                              'required': ['from_key', 'to_key'],
+                                                                              'properties': {
+                                                                                  'to_key': {'type': 'string',
+                                                                                             'title': 'To Key'},
+                                                                                  'from_key': {'type': 'string',
+                                                                                               'title': 'From Key'}}},
+                                                                'CategoryPair': {'type': 'object',
+                                                                                 'title': 'CategoryPair',
+                                                                                 'required': ['event_type',
+                                                                                              'category_path'],
+                                                                                 'properties': {
+                                                                                     'event_type': {'type': 'string',
+                                                                                                    'title': 'Event Type'},
+                                                                                     'category_path': {'type': 'string',
+                                                                                                       'title': 'Category Path'}}},
+                                                                'AttributeMapper': {'type': 'object',
+                                                                                    'title': 'AttributeMapper',
+                                                                                    'required': ['from_key', 'to_key'],
+                                                                                    'properties': {
+                                                                                        'type': {'type': 'string',
+                                                                                                 'title': 'Type',
+                                                                                                 'default': 'string'},
+                                                                                        'to_key': {'type': 'string',
+                                                                                                   'title': 'To Key'},
+                                                                                        'from_key': {'type': 'string',
+                                                                                                     'title': 'From Key'},
+                                                                                        'event_types': {'type': 'array',
+                                                                                                        'items': {
+                                                                                                            'type': 'string'},
+                                                                                                        'title': 'Event Types'},
+                                                                                        'options_map': {'type': 'array',
+                                                                                                        'items': {
+                                                                                                            '$ref': '#/definitions/OptionMap'},
+                                                                                                        'title': 'Options Map'},
+                                                                                        'default_option': {
+                                                                                            'type': 'string',
+                                                                                            'title': 'Default Option'}}},
+                                                                'TransformationRules': {'type': 'object',
+                                                                                        'title': 'TransformationRules',
+                                                                                        'properties': {'category_map': {
+                                                                                            'type': 'array', 'items': {
+                                                                                                '$ref': '#/definitions/CategoryPair'},
+                                                                                            'title': 'Category Map',
+                                                                                            'default': []},
+                                                                                            'attribute_map': {
+                                                                                                'type': 'array',
+                                                                                                'items': {
+                                                                                                    '$ref': '#/definitions/AttributeMapper'},
+                                                                                                'title': 'Attribute Map',
+                                                                                                'default': []}}}}})
+            ]
+        ),
+        base_url='https://integrationx.smartconservationtools.org/server',
+        enabled=True,
+        owner=schemas_v2.Organization(id=UUID('a91b400b-482a-4546-8fcb-ee42b01deeb6'), name='Test Org', description=''),
+        configurations=[
+            schemas_v2.IntegrationActionConfiguration(id=UUID('55760315-3d68-4925-bf2d-c4d39de433c9'),
+                                                      integration=UUID('b42c9205-5228-49e0-a75b-ebe5b6a9f78e'),
+                                                      action=schemas_v2.IntegrationActionSummery(
+                                                          id=UUID('ebe72917-c112-4064-9f38-707bbd14a50f'), type='push',
+                                                          name='Push Events', value='push_events'),
+                                                      data={'version': '7.5.3',
+                                                            'ca_uuids': [smart_ca_uuid],
+                                                            'transformation_rules': {'category_map': [],
+                                                                                     'attribute_map': []}}),
+            schemas_v2.IntegrationActionConfiguration(id=UUID('abce8c67-a74c-46fd-b5c3-62a7b76f2b17'),
+                                                      integration=UUID('b42c9205-5228-49e0-a75b-ebe5b6a9f78e'),
+                                                      action=schemas_v2.IntegrationActionSummery(
+                                                          id=UUID('b0a0e7ed-d668-41b5-96d2-397f026c4ecb'), type='auth',
+                                                          name='Authenticate', value='auth'),
+                                                      data={'login': 'gundisupport',
+                                                            'endpoint': 'https://treekangarooconnect.smartconservationtools.org/server',
+                                                            'password': 'gundisupport'})
+        ],
+        default_route=None,
+        additional={},
+        status={
+            'id': 'mockid-b16a-4dbd-ad32-197c58aeef59',
+            'is_healthy': True,
+            'details': 'Last observation has been delivered with success.',
+            'observation_delivered_24hrs': 50231,
+            'last_observation_delivered_at': '2023-03-31T11:20:00+0200'
+        }
     )
 
 
@@ -711,6 +932,7 @@ def route_config_with_event_type_mappings():
             }
         }
     )
+
 
 @pytest.fixture
 def route_config_with_provider_key_mappings():

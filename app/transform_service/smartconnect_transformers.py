@@ -8,12 +8,12 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Tuple, Union, Any
 
 import pytz
-import smartconnect
 import timezonefinder
 from gundi_core import schemas
 from cdip_connector.core.cloudstorage import get_cloud_storage
 from gundi_core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel
+from smartconnect import SmartClient, AsyncSmartClient
 from smartconnect.models import (
     SMARTCONNECT_DATFORMAT,
     SMARTRequest,
@@ -140,7 +140,7 @@ class SMARTTransformer:
 
         # ToDo: Use the async client.
         # This requires refactoring to move any network calls out of __init__
-        self.smartconnect_client = smartconnect.SmartClient(
+        self.smartconnect_client = SmartClient(
             api=config.endpoint,
             username=config.login,
             password=config.password,
@@ -842,7 +842,7 @@ class SMARTTransformerV2(Transformer, ABC):
         self._version = self.push_config.version or "7.5"
         logger.info(f"Using SMART Integration version {self._version}")
 
-        self.smartconnect_client = smartconnect.AsyncSmartClient(
+        self.smartconnect_client = AsyncSmartClient(
             api=self.auth_config.endpoint or f"{self.config.base_url}/server",
             username=self.auth_config.login,
             password=self.auth_config.password,
@@ -860,7 +860,6 @@ class SMARTTransformerV2(Transformer, ABC):
 
         self.ca_timezone = self._default_timezone
         self._transformation_rules = self.push_config.transformation_rules
-        self.cloud_storage = get_cloud_storage()
 
     async def get_ca(self, config):
         if not self.ca:
