@@ -20,7 +20,7 @@ from app.transform_service.smartconnect_transformers import (
     SmartEventTransformer,
     SmartERPatrolTransformer,
     CAConflictException,
-    IndeterminableCAException,
+    IndeterminableCAException, SmartEventTransformerV2,
 )
 from app.transform_service.transformers import (
     ERPositionTransformer,
@@ -245,7 +245,7 @@ class TransformerNotFound(Exception):
     pass
 
 
-def transform_observation(
+async def transform_observation(
     *, stream_type: str, config: schemas.OutboundConfiguration, observation
 ) -> dict:
     transformer = None
@@ -262,29 +262,29 @@ def transform_observation(
         stream_type == schemas.StreamPrefixEnum.position
         and config.type_slug == schemas.DestinationTypes.Movebank.value
     ):
-        transformer = MBPositionTransformer
+        transformer = MBPositionTransformer()
         additional_info["integration_type"] = config.inbound_type_slug
         additional_info["gundi_version"] = GUNDI_V1
     elif (
         stream_type == schemas.StreamPrefixEnum.position
         and config.type_slug == schemas.DestinationTypes.EarthRanger.value
     ):
-        transformer = ERPositionTransformer
+        transformer = ERPositionTransformer()
     elif (
         stream_type == schemas.StreamPrefixEnum.geoevent
         and config.type_slug == schemas.DestinationTypes.EarthRanger.value
     ):
-        transformer = ERGeoEventTransformer
+        transformer = ERGeoEventTransformer()
     elif (
         stream_type == schemas.StreamPrefixEnum.camera_trap
         and config.type_slug == schemas.DestinationTypes.EarthRanger.value
     ):
-        transformer = ERCameraTrapTransformer
+        transformer = ERCameraTrapTransformer()
     elif (
         stream_type == schemas.StreamPrefixEnum.camera_trap
         and config.type_slug == schemas.DestinationTypes.WPSWatch.value
     ):
-        transformer = WPSWatchCameraTrapTransformer
+        transformer = WPSWatchCameraTrapTransformer()
     elif (
         stream_type == schemas.StreamPrefixEnum.geoevent
         or stream_type == schemas.StreamPrefixEnum.earthranger_event
@@ -298,7 +298,7 @@ def transform_observation(
         observation, ca_uuid = get_ca_uuid_for_er_patrol(patrol=observation)
         transformer = SmartERPatrolTransformer(config=config, ca_uuid=ca_uuid)
     if transformer:
-        return transformer.transform(observation, **additional_info)
+        return await transformer.transform(observation, **additional_info)
     else:
         logger.error(
             "No transformer found for stream type",
@@ -341,7 +341,7 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
     return patrol, ca_uuid
 
 import re
-def get_ca_uuid_for_event(*args, event: Union[schemas.EREvent, schemas.GeoEvent]):
+def get_ca_uuid_for_event(*args, event: Union[schemas.EREvent, schemas.GeoEvent, schemas.v2.Event]):
 
     assert not args, "get_ca_uuid_for_event takes only keyword args"
 
@@ -544,19 +544,25 @@ async def get_integration(*, integration_id):
 # Map to get the right transformer for the observation type and destination
 transformers_map = {
     schemas.v2.StreamPrefixEnum.event.value: {
-        schemas.DestinationTypes.EarthRanger.value: EREventTransformer
+        schemas.DestinationTypes.EarthRanger.value: EREventTransformer,
+        schemas.DestinationTypes.SmartConnect.value: SmartEventTransformerV2
     },
     schemas.v2.StreamPrefixEnum.attachment.value: {
         schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer
     },
     schemas.v2.StreamPrefixEnum.observation.value: {
         schemas.DestinationTypes.Movebank.value: MBObservationTransformer,
-        schemas.DestinationTypes.EarthRanger.value: ERObservationTransformer
+        schemas.DestinationTypes.EarthRanger.value: ERObservationTransformer,
     },
+    # ToDo. Support patrols in SMART v2?
+    # schemas.StreamPrefixEnum.earthranger_patrol : {
+    #     schemas.DestinationTypes.SmartConnect.value: SmartERPatrolTransformerV2
+    # }
 }
 
 
-def transform_observation_v2(observation, destination, provider, route_configuration=None):
+# ToDo: receive configurations, optionally
+async def transform_observation_v2(observation, destination, provider, route_configuration=None):
     # Look for a proper transformer for this stream type and destination type
     stream_type = observation.observation_type
     destination_type = destination.type.value
@@ -600,21 +606,22 @@ def transform_observation_v2(observation, destination, provider, route_configura
             rules.append(field_mapping_rule)
 
     # Apply the transformer
-    return Transformer.transform(message=observation, rules=rules, provider=provider, gundi_version=GUNDI_V2)
+    transformer = Transformer(config=destination)
+    return await transformer.transform(message=observation, rules=rules, provider=provider, gundi_version=GUNDI_V2)
 
 
-def transform_observation_to_destination_schema(
+async def transform_observation_to_destination_schema(
     *, observation, destination, provider=None, gundi_version="v1", route_configuration=None
 ) -> dict:
     if gundi_version == "v2":
-        return transform_observation_v2(
+        return await transform_observation_v2(
             observation=observation,
             destination=destination,
             provider=provider,
             route_configuration=route_configuration
         )
     else:  # Default to v1
-        return transform_observation(
+        return await transform_observation(
             observation=observation,
             stream_type=observation.observation_type,
             config=destination,

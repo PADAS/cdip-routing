@@ -18,9 +18,11 @@ class Transformer(ABC):
     stream_type: schemas.StreamPrefixEnum
     destination_type: schemas.DestinationTypes
 
-    @staticmethod
+    def __init__(self, *, config=None, **kwargs):
+        self.config = config
+
     @abstractmethod
-    def transform(message: schemas.CDIPBaseModel, rules: list = None, **kwargs) -> Any:
+    async def transform(self, message, rules: list = None, **kwargs) -> Any:
         ...
 
 
@@ -28,8 +30,7 @@ class ERPositionTransformer(Transformer):
     # stream_type: schemas.StreamPrefixEnum = schemas.StreamPrefixEnum.position
     # destination_type: str = schemas.DestinationTypes.EarthRanger
 
-    @staticmethod
-    def transform(position: schemas.Position, rules: list = None, **kwargs) -> dict:
+    async def transform(self, position: schemas.Position, rules: list = None, **kwargs) -> dict:
         if not position.location or not position.location.y or not position.location.x:
             logger.warning(f"bad position?? {position}")
         transformed_position = dict(
@@ -49,8 +50,8 @@ class ERPositionTransformer(Transformer):
 
 
 class ERGeoEventTransformer(Transformer):
-    @staticmethod
-    def transform(geo_event: schemas.GeoEvent, rules: list = None, **kwargs) -> dict:
+
+    async def transform(self, geo_event: schemas.GeoEvent, rules: list = None, **kwargs) -> dict:
         return dict(
             title=geo_event.title,
             event_type=geo_event.event_type,
@@ -63,8 +64,8 @@ class ERGeoEventTransformer(Transformer):
 
 
 class ERCameraTrapTransformer(Transformer):
-    @staticmethod
-    def transform(payload: schemas.CameraTrap, rules: list = None, **kwargs) -> dict:
+
+    async def transform(self, payload: schemas.CameraTrap, rules: list = None, **kwargs) -> dict:
         return dict(
             file=payload.image_uri,
             camera_name=payload.camera_name,
@@ -77,8 +78,8 @@ class ERCameraTrapTransformer(Transformer):
 
 
 class WPSWatchCameraTrapTransformer(Transformer):
-    @staticmethod
-    def transform(payload: schemas.CameraTrap, rules: list = None, **kwargs) -> dict:
+
+    async def transform(self, payload: schemas.CameraTrap, rules: list = None, **kwargs) -> dict:
         # From and To are currently needed for current WPS Watch API
         # camera_name or device_id preceeding @ in 'To' is all that is necessary, other parts just useful for logging
         from_domain_name = f"{payload.integration_id}@{ADMIN_PORTAL_HOST}"
@@ -91,8 +92,8 @@ class WPSWatchCameraTrapTransformer(Transformer):
 
 
 class MBPositionTransformer(Transformer):
-    @staticmethod
-    def transform(position: schemas.Position, rules: list = None, **kwargs) -> dict:
+
+    async def transform(self, position: schemas.Position, rules: list = None, **kwargs) -> dict:
         """
              kwargs:
                - integration_type: manufacturer identifier (coming from inbound) needed for tag_id generation.
@@ -171,8 +172,8 @@ class FieldMappingRule(TransformationRule):
 
 
 class EREventTransformer(Transformer):
-    @staticmethod
-    def transform(message: schemas.v2.Event, rules: list = None, **kwargs) -> dict:
+
+    async def transform(self, message: schemas.v2.Event, rules: list = None, **kwargs) -> dict:
         transformed_message = dict(
             title=message.title,
             event_type=message.event_type,
@@ -190,8 +191,8 @@ class EREventTransformer(Transformer):
 
 
 class ERAttachmentTransformer(Transformer):
-    @staticmethod
-    def transform(message: schemas.v2.Attachment, rules: list = None, **kwargs) -> dict:
+
+    async def transform(self, message: schemas.v2.Attachment, rules: list = None, **kwargs) -> dict:
         # ToDo. Implement transformation logic for attachments
         return dict(
             file_path=message.file_path
@@ -200,8 +201,8 @@ class ERAttachmentTransformer(Transformer):
 
 class ERObservationTransformer(Transformer):
 
-    @staticmethod
-    def transform(message: schemas.v2.Observation, rules: list = None, **kwargs) -> dict:
+
+    async def transform(self, message: schemas.v2.Observation, rules: list = None, **kwargs) -> dict:
         if not message.location or not message.location.lat or not message.location.lon:
             logger.warning(f"bad position?? {message}")
         transformed_message = dict(
@@ -226,8 +227,8 @@ class ERObservationTransformer(Transformer):
 
 
 class MBObservationTransformer(Transformer):
-    @staticmethod
-    def transform(message: schemas.v2.Observation, rules: list = None, **kwargs) -> dict:
+
+    async def transform(self, message: schemas.v2.Observation, rules: list = None, **kwargs) -> dict:
         """
              kwargs:
                - provider: manufacturer object (coming from provider config) needed for tag_id generation.
