@@ -7,7 +7,8 @@ from app.transform_service import helpers
 from app.subscribers.services import extract_fields_from_message, convert_observation_to_cdip_schema
 
 
-def test_movebank_transformer(
+@pytest.mark.asyncio
+async def test_movebank_transformer(
     outbound_configuration_default,
     unprocessed_observation_position
 ):
@@ -15,7 +16,7 @@ def test_movebank_transformer(
     observation = convert_observation_to_cdip_schema(raw_observation, gundi_version="v1")
     # Set Movebank values
     outbound_configuration_default.type_slug = "movebank"
-    transformed_observation = transform_observation(
+    transformed_observation = await transform_observation(
         stream_type=observation.observation_type,
         config=outbound_configuration_default,
         observation=observation

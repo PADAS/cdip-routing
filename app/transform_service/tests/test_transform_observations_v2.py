@@ -13,7 +13,7 @@ async def test_event_type_mapping(
     connection_v2
 
 ):
-    transformed_observation = transform_observation_v2(
+    transformed_observation = await transform_observation_v2(
         observation=leopard_detected_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
@@ -33,7 +33,7 @@ async def test_event_type_mapping_default(
     connection_v2
 ):
     # Test with a species that is not in the map
-    transformed_observation = transform_observation_v2(
+    transformed_observation = await transform_observation_v2(
         observation=unmapped_animal_detected_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
@@ -53,7 +53,7 @@ async def test_movebank_transform_observation(
     route_config_with_no_mappings,
     connection_v2
 ):
-    transformed_observation = transform_observation_v2(
+    transformed_observation = await transform_observation_v2(
         observation=observation_object_v2,
         destination=destination_integration_v2_movebank,
         provider=connection_v2.provider,
@@ -78,7 +78,7 @@ async def test_transform_observations_for_earthranger(
     connection_v2
 
 ):
-    transformed_observation = transform_observation_v2(
+    transformed_observation = await transform_observation_v2(
         observation=observation_object_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
@@ -106,7 +106,7 @@ async def test_transform_observations_without_route_configuration(
     connection_v2
 
 ):
-    transformed_observation = transform_observation_v2(
+    transformed_observation = await transform_observation_v2(
         observation=observation_object_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
@@ -125,7 +125,7 @@ async def test_transform_events_without_route_configuration(
     connection_v2
 
 ):
-    transformed_observation = transform_observation_v2(
+    transformed_observation = await transform_observation_v2(
         observation=unmapped_animal_detected_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
@@ -145,7 +145,7 @@ async def test_provider_key_mapping_with_default(
     connection_v2
 ):
     # Test with a species that is not in the map
-    transformed_observation = transform_observation_v2(
+    transformed_observation = await transform_observation_v2(
         observation=unmapped_animal_detected_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
@@ -166,7 +166,7 @@ async def test_provider_key_mapping_in_observations_v2(
     connection_v2
 ):
     # Test with a species that is not in the map
-    transformed_observation = transform_observation_v2(
+    transformed_observation = await transform_observation_v2(
         observation=observation_object_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
@@ -187,7 +187,7 @@ async def test_provider_key_mapping_in_events_v2(
     connection_v2
 ):
     # Test with a species that is not in the map
-    transformed_observation = transform_observation_v2(
+    transformed_observation = await transform_observation_v2(
         observation=leopard_detected_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
