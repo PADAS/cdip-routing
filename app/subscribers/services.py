@@ -427,7 +427,3 @@ def get_key_for_transformed_observation(current_key: bytes, destination_id: UUID
         new_key = f"{current_key.decode('utf-8')}.{str(destination_id)}"
         return new_key.encode("utf-8")
 
-
-if __name__ == "__main__":
-    c = get_outbound_config_detail("34891e4d-0170-4937-917d-46e79fdee082")
-    print(c)
