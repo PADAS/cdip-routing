@@ -305,8 +305,8 @@ def device():
             "type": "b069e5bd-a473-4c02-9227-27b6134615a4",
             "owner": "088a191a-bcf3-471b-9e7d-6ba8bc71be9e",
             "endpoint": "https://logins.bidtrack.co.za/restintegration/",
-            "login": "ZULULANDRR",
-            "password": "Rh1n0#@!",
+            "login": "fakeusername",
+            "password": "F@keP@ssw0rd!",
             "token": "",
             "type_slug": "bidtrack",
             "provider": "bidtrack",
@@ -893,9 +893,9 @@ def destination_integration_v2_smart(integration_type_smart, smart_ca_uuid):
                                                       action=schemas_v2.IntegrationActionSummery(
                                                           id=UUID('b0a0e7ed-d668-41b5-96d2-397f026c4ecb'), type='auth',
                                                           name='Authenticate', value='auth'),
-                                                      data={'login': 'gundisupport',
-                                                            'endpoint': 'https://treekangarooconnect.smartconservationtools.org/server',
-                                                            'password': 'gundisupport'})
+                                                      data={'login': 'fakeusername',
+                                                            'endpoint': 'https://integrationx.smartconservationtools.org/server',
+                                                            'password': 'F@keP@ssw0rd!'})
         ],
         default_route=None,
         additional={},
