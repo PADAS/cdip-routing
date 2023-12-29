@@ -10,16 +10,15 @@ async def test_event_type_mapping(
     leopard_detected_event_v2,
     destination_integration_v2_er,
     route_config_with_event_type_mappings,
-    connection_v2
-
+    connection_v2,
 ):
     transformed_observation = await transform_observation_v2(
         observation=leopard_detected_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
-        route_configuration=route_config_with_event_type_mappings
+        route_configuration=route_config_with_event_type_mappings,
     )
-    assert transformed_observation['event_type'] == 'leopard_sighting'
+    assert transformed_observation["event_type"] == "leopard_sighting"
 
 
 @pytest.mark.asyncio
@@ -30,17 +29,17 @@ async def test_event_type_mapping_default(
     unmapped_animal_detected_event_v2,
     destination_integration_v2_er,
     route_config_with_event_type_mappings,
-    connection_v2
+    connection_v2,
 ):
     # Test with a species that is not in the map
     transformed_observation = await transform_observation_v2(
         observation=unmapped_animal_detected_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
-        route_configuration=route_config_with_event_type_mappings
+        route_configuration=route_config_with_event_type_mappings,
     )
     # Check that it's mapped to the default type
-    assert transformed_observation['event_type'] == 'wildlife_sighting_rep'
+    assert transformed_observation["event_type"] == "wildlife_sighting_rep"
 
 
 @pytest.mark.asyncio
@@ -51,20 +50,28 @@ async def test_movebank_transform_observation(
     observation_object_v2,
     destination_integration_v2_movebank,
     route_config_with_no_mappings,
-    connection_v2
+    connection_v2,
 ):
     transformed_observation = await transform_observation_v2(
         observation=observation_object_v2,
         destination=destination_integration_v2_movebank,
         provider=connection_v2.provider,
-        route_configuration=route_config_with_no_mappings
+        route_configuration=route_config_with_no_mappings,
     )
     # Check dictionary schema
-    expected_keys = ["recorded_at", "tag_id", "lon", "lat", "sensor_type", "tag_manufacturer_name", "gundi_urn"]
+    expected_keys = [
+        "recorded_at",
+        "tag_id",
+        "lon",
+        "lat",
+        "sensor_type",
+        "tag_manufacturer_name",
+        "gundi_urn",
+    ]
     for key in transformed_observation.keys():
         assert key in expected_keys
-    assert transformed_observation['tag_manufacturer_name'] == 'TrapTagger'
-    assert transformed_observation['sensor_type'] == 'GPS'
+    assert transformed_observation["tag_manufacturer_name"] == "TrapTagger"
+    assert transformed_observation["sensor_type"] == "GPS"
 
 
 @pytest.mark.asyncio
@@ -75,23 +82,29 @@ async def test_transform_observations_for_earthranger(
     observation_object_v2,
     destination_integration_v2_er,
     route_config_with_no_mappings,
-    connection_v2
-
+    connection_v2,
 ):
     transformed_observation = await transform_observation_v2(
         observation=observation_object_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
-        route_configuration=route_config_with_no_mappings
+        route_configuration=route_config_with_no_mappings,
     )
     assert transformed_observation
-    assert transformed_observation.get("manufacturer_id") == observation_object_v2.external_source_id
+    assert (
+        transformed_observation.get("manufacturer_id")
+        == observation_object_v2.external_source_id
+    )
     assert transformed_observation.get("source_type") == observation_object_v2.type
-    assert transformed_observation.get("subject_name") == observation_object_v2.source_name
-    assert transformed_observation.get("recorded_at") == observation_object_v2.recorded_at
+    assert (
+        transformed_observation.get("subject_name") == observation_object_v2.source_name
+    )
+    assert (
+        transformed_observation.get("recorded_at") == observation_object_v2.recorded_at
+    )
     assert transformed_observation.get("location") == {
         "lon": observation_object_v2.location.lon,
-        "lat": observation_object_v2.location.lat
+        "lat": observation_object_v2.location.lat,
     }
     assert transformed_observation.get("additional") == observation_object_v2.additional
 
@@ -103,14 +116,13 @@ async def test_transform_observations_without_route_configuration(
     mock_pubsub_client,
     observation_object_v2,
     destination_integration_v2_er,
-    connection_v2
-
+    connection_v2,
 ):
     transformed_observation = await transform_observation_v2(
         observation=observation_object_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
-        route_configuration=None
+        route_configuration=None,
     )
     assert transformed_observation
 
@@ -122,14 +134,13 @@ async def test_transform_events_without_route_configuration(
     mock_pubsub_client,
     unmapped_animal_detected_event_v2,
     destination_integration_v2_er,
-    connection_v2
-
+    connection_v2,
 ):
     transformed_observation = await transform_observation_v2(
         observation=unmapped_animal_detected_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
-        route_configuration=None
+        route_configuration=None,
     )
     assert transformed_observation
 
@@ -142,17 +153,17 @@ async def test_provider_key_mapping_with_default(
     unmapped_animal_detected_event_v2,
     destination_integration_v2_er,
     route_config_with_provider_key_mappings,
-    connection_v2
+    connection_v2,
 ):
     # Test with a species that is not in the map
     transformed_observation = await transform_observation_v2(
         observation=unmapped_animal_detected_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
-        route_configuration=route_config_with_provider_key_mappings
+        route_configuration=route_config_with_provider_key_mappings,
     )
     # Check that it's mapped to the default type
-    assert transformed_observation.get('provider_key') == "mapipedia"
+    assert transformed_observation.get("provider_key") == "mapipedia"
 
 
 @pytest.mark.asyncio
@@ -163,17 +174,17 @@ async def test_provider_key_mapping_in_observations_v2(
     observation_object_v2,
     destination_integration_v2_er,
     route_config_with_provider_key_mappings,
-    connection_v2
+    connection_v2,
 ):
     # Test with a species that is not in the map
     transformed_observation = await transform_observation_v2(
         observation=observation_object_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
-        route_configuration=route_config_with_provider_key_mappings
+        route_configuration=route_config_with_provider_key_mappings,
     )
     # Check that it's mapped to the default type
-    assert transformed_observation.get('provider_key') == "mapipedia"
+    assert transformed_observation.get("provider_key") == "mapipedia"
 
 
 @pytest.mark.asyncio
@@ -184,17 +195,17 @@ async def test_provider_key_mapping_in_events_v2(
     leopard_detected_event_v2,
     destination_integration_v2_er,
     route_config_with_provider_key_mappings,
-    connection_v2
+    connection_v2,
 ):
     # Test with a species that is not in the map
     transformed_observation = await transform_observation_v2(
         observation=leopard_detected_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
-        route_configuration=route_config_with_provider_key_mappings
+        route_configuration=route_config_with_provider_key_mappings,
     )
     # Check that it's mapped to the default type
-    assert transformed_observation.get('provider_key') == "mapipedia"
+    assert transformed_observation.get("provider_key") == "mapipedia"
 
 
 @pytest.mark.asyncio
@@ -206,21 +217,31 @@ async def test_transform_events_for_smart(
     connection_v2,
     destination_integration_v2_smart,
 ):
-    mocker.patch("app.transform_service.smartconnect_transformers.AsyncSmartClient", mock_smart_async_client_class)
+    mocker.patch(
+        "app.transform_service.smartconnect_transformers.AsyncSmartClient",
+        mock_smart_async_client_class,
+    )
     transformed_observation = await transform_observation_v2(
         observation=animals_sign_event_v2,
         destination=destination_integration_v2_smart,
         provider=connection_v2.provider,
-        route_configuration=None
+        route_configuration=None,
     )
     assert transformed_observation
     assert transformed_observation.get("ca_uuid") == smart_ca_uuid
     assert len(transformed_observation.get("waypoint_requests", [])) == 1
     waypoint = transformed_observation.get("waypoint_requests")[0]
     assert waypoint.get("geometry", {}).get("coordinates", []) == [
-        animals_sign_event_v2.location.lon, animals_sign_event_v2.location.lat
+        animals_sign_event_v2.location.lon,
+        animals_sign_event_v2.location.lat,
     ]
     properties = waypoint.get("properties", {})
     assert properties.get("smartDataType") == "incident"
     assert properties.get("smartFeatureType") == "waypoint/new"
-    # ToDo: Check 'smartAttributes'
+    attributes = properties.get("smartAttributes", {})
+    assert len(attributes.get("observationGroups", [])) == 1
+    observation_group = attributes["observationGroups"][0]
+    assert len(observation_group.get("observations", [])) == 1
+    observation = observation_group["observations"][0]
+    assert observation.get("category") == "animals.sign"
+    assert observation.get("attributes") == {"ageofsign": "days", "species": "lion"}
