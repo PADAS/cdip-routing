@@ -26,11 +26,11 @@ def mock_cache(mocker):
 
 @pytest.fixture
 def mock_gundi_client(
-        mocker,
-        inbound_integration_config,
-        outbound_integration_config,
-        outbound_integration_config_list,
-        device,
+    mocker,
+    inbound_integration_config,
+    outbound_integration_config,
+    outbound_integration_config_list,
+    device,
 ):
     mock_client = mocker.MagicMock()
     mock_client.get_inbound_integration.return_value = async_return(
@@ -63,18 +63,12 @@ def smart_cm_data_models():
 @pytest.fixture
 def mock_smart_async_client(mocker, smart_ca_data_model, smart_cm_data_models):
     mock_client = mocker.MagicMock()
-    mock_client.get_incident.return_value = async_return(
-        None
-    )
+    mock_client.get_incident.return_value = async_return(None)
     mock_client.get_configurable_models.return_value = async_return(
         smart_cm_data_models
     )
-    mock_client.get_data_model.return_value = async_return(
-        smart_ca_data_model
-    )
-    mock_client.post_smart_request.return_value = async_return(
-        {"status": "success"}
-    )
+    mock_client.get_data_model.return_value = async_return(smart_ca_data_model)
+    mock_client.post_smart_request.return_value = async_return({"status": "success"})
     return mock_client
 
 
@@ -89,29 +83,26 @@ def _set_side_effect_error_on_gundi_client_once(mock_client, error):
     # Side effects to raise an exception only the first time each method is called
     mock_client.get_inbound_integration.side_effect = [
         error,
-        async_return(inbound_integration_config)
+        async_return(inbound_integration_config),
     ]
     mock_client.get_outbound_integration.side_effect = [
         error,
-        async_return(outbound_integration_config)
+        async_return(outbound_integration_config),
     ]
     mock_client.get_outbound_integration_list.side_effect = [
         error,
-        async_return(outbound_integration_config_list)
+        async_return(outbound_integration_config_list),
     ]
-    mock_client.ensure_device.side_effect = [
-        error,
-        async_return(device)
-    ]
+    mock_client.ensure_device.side_effect = [error, async_return(device)]
 
 
 @pytest.fixture
 def mock_gundi_client_with_client_connector_error_once(
-        mocker,
-        inbound_integration_config,
-        outbound_integration_config,
-        outbound_integration_config_list,
-        device,
+    mocker,
+    inbound_integration_config,
+    outbound_integration_config,
+    outbound_integration_config_list,
+    device,
 ):
     mock_client = mocker.MagicMock()
     # Simulate a connection error
@@ -123,41 +114,47 @@ def mock_gundi_client_with_client_connector_error_once(
             ssl=True,
             proxy=None,
             proxy_auth=None,
-            proxy_headers_hash=None
+            proxy_headers_hash=None,
         ),
-        os_error=ConnectionError()
+        os_error=ConnectionError(),
     )
-    _set_side_effect_error_on_gundi_client_once(mock_client=mock_client, error=client_connector_error)
+    _set_side_effect_error_on_gundi_client_once(
+        mock_client=mock_client, error=client_connector_error
+    )
     return mock_client
 
 
 @pytest.fixture
 def mock_gundi_client_with_server_disconnected_error_once(
-        mocker,
-        inbound_integration_config,
-        outbound_integration_config,
-        outbound_integration_config_list,
-        device,
+    mocker,
+    inbound_integration_config,
+    outbound_integration_config,
+    outbound_integration_config_list,
+    device,
 ):
     mock_client = mocker.MagicMock()
     # Simulate a server disconnected error
     server_disconnected_error = aiohttp.ServerDisconnectedError()
-    _set_side_effect_error_on_gundi_client_once(mock_client=mock_client, error=server_disconnected_error)
+    _set_side_effect_error_on_gundi_client_once(
+        mock_client=mock_client, error=server_disconnected_error
+    )
     return mock_client
 
 
 @pytest.fixture
 def mock_gundi_client_with_server_timeout_error_once(
-        mocker,
-        inbound_integration_config,
-        outbound_integration_config,
-        outbound_integration_config_list,
-        device,
+    mocker,
+    inbound_integration_config,
+    outbound_integration_config,
+    outbound_integration_config_list,
+    device,
 ):
     mock_client = mocker.MagicMock()
     # Simulate a server disconnected error
     server_timeout_error = aiohttp.ServerTimeoutError()
-    _set_side_effect_error_on_gundi_client_once(mock_client=mock_client, error=server_timeout_error)
+    _set_side_effect_error_on_gundi_client_once(
+        mock_client=mock_client, error=server_timeout_error
+    )
     return mock_client
 
 
@@ -175,7 +172,10 @@ def mock_pubsub_client_with_timeout_once(mocker, gcp_pubsub_publish_response):
     mock_client = mocker.MagicMock()
     mock_publisher = mocker.MagicMock()
     # Side effects to raise an exception only the first time it's called
-    mock_publisher.publish.side_effect = [asyncio.TimeoutError(), async_return(gcp_pubsub_publish_response)]
+    mock_publisher.publish.side_effect = [
+        asyncio.TimeoutError(),
+        async_return(gcp_pubsub_publish_response),
+    ]
     mock_client.PublisherClient.return_value = mock_publisher
     return mock_client
 
@@ -185,7 +185,10 @@ def mock_pubsub_client_with_client_error_once(mocker, gcp_pubsub_publish_respons
     mock_client = mocker.MagicMock()
     mock_publisher = mocker.MagicMock()
     # Side effects to raise an exception only the first time it's called
-    mock_publisher.publish.side_effect = [aiohttp.ClientError(), async_return(gcp_pubsub_publish_response)]
+    mock_publisher.publish.side_effect = [
+        aiohttp.ClientError(),
+        async_return(gcp_pubsub_publish_response),
+    ]
     mock_client.PublisherClient.return_value = mock_publisher
     return mock_client
 
@@ -220,7 +223,7 @@ def mock_kafka_topics_dic(new_kafka_topic):
         TopicEnum.observations_transformed: new_kafka_topic(),
         TopicEnum.observations_transformed_retry_short: new_kafka_topic(),
         TopicEnum.observations_transformed_retry_long: new_kafka_topic(),
-        TopicEnum.observations_transformed_deadletter: new_kafka_topic()
+        TopicEnum.observations_transformed_deadletter: new_kafka_topic(),
     }
     return topics_dict
 
@@ -436,21 +439,17 @@ def outbound_configuration_default():
 # ToDo: Find a common place for mocks and testing utilities that can be reused across services
 @pytest.fixture
 def mock_gundi_client_v2(
-        mocker,
-        connection_v2,
-        destination_integration_v2,
-        route_v2,
+    mocker,
+    connection_v2,
+    destination_integration_v2,
+    route_v2,
 ):
     mock_client = mocker.MagicMock()
-    mock_client.get_connection_details.return_value = async_return(
-        connection_v2
-    )
+    mock_client.get_connection_details.return_value = async_return(connection_v2)
     mock_client.get_integration_details.return_value = async_return(
         destination_integration_v2
     )
-    mock_client.get_route_details.return_value = async_return(
-        route_v2
-    )
+    mock_client.get_route_details.return_value = async_return(route_v2)
     mock_client.__aenter__.return_value = mock_client
     return mock_client
 
@@ -466,41 +465,119 @@ def mock_gundi_client_v2_class(mocker, mock_gundi_client_v2):
 def destination_integration_v2():
     # ToDo: Move mocks used by routing, dispatchers, etc. to a common place
     return schemas_v2.Integration.parse_obj(
-        {'id': '338225f3-91f9-4fe1-b013-353a229ce504', 'name': 'ER Load Testing',
-         'base_url': 'https://gundi-load-testing.pamdas.org', 'enabled': True,
-         'type': {'id': '45c66a61-71e4-4664-a7f2-30d465f87aa6', 'name': 'EarthRanger', 'value': 'earth_ranger',
-                  'description': 'Integration type for Earth Ranger Sites', 'actions': [
-                 {'id': '43ec4163-2f40-43fc-af62-bca1db77c06b', 'type': 'auth', 'name': 'Authenticate', 'value': 'auth',
-                  'description': 'Authenticate against Earth Ranger',
-                  'schema': {'type': 'object', 'required': ['token'], 'properties': {'token': {'type': 'string'}}}},
-                 {'id': '036c2098-f494-40ec-a595-710b314d5ea5', 'type': 'pull', 'name': 'Pull Positions',
-                  'value': 'pull_positions', 'description': 'Pull position data from an Earth Ranger site',
-                  'schema': {'type': 'object', 'required': ['endpoint'],
-                             'properties': {'endpoint': {'type': 'string'}}}},
-                 {'id': '9286bb71-9aca-425a-881f-7fe0b2dba4f4', 'type': 'push', 'name': 'Push Events',
-                  'value': 'push_events', 'description': 'EarthRanger sites support sending Events (a.k.a Reports)',
-                  'schema': {}},
-                 {'id': 'aae0cf50-fbc7-4810-84fd-53fb75020a43', 'type': 'push', 'name': 'Push Positions',
-                  'value': 'push_positions', 'description': 'Push position data to an Earth Ranger site',
-                  'schema': {'type': 'object', 'required': ['endpoint'],
-                             'properties': {'endpoint': {'type': 'string'}}}}]},
-         'owner': {'id': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0', 'name': 'Test Organization', 'description': ''},
-         'configurations': [
-             {'id': '013ea7ce-4944-4f7e-8a2f-e5338b3741ce', 'integration': '338225f3-91f9-4fe1-b013-353a229ce504',
-              'action': {'id': '43ec4163-2f40-43fc-af62-bca1db77c06b', 'type': 'auth', 'name': 'Authenticate',
-                         'value': 'auth'}, 'data': {'token': '1390d87681cd1d01ad07c2d0f57d15d6079ae9ab'}},
-             {'id': '5de91c7b-f28a-4ce7-8137-273ac10674d2', 'integration': '338225f3-91f9-4fe1-b013-353a229ce504',
-              'action': {'id': 'aae0cf50-fbc7-4810-84fd-53fb75020a43', 'type': 'push', 'name': 'Push Positions',
-                         'value': 'push_positions'}, 'data': {'endpoint': 'api/v1/positions'}},
-             {'id': '7947b19e-1d2d-4ca3-bd6c-74976ae1de68', 'integration': '338225f3-91f9-4fe1-b013-353a229ce504',
-              'action': {'id': '036c2098-f494-40ec-a595-710b314d5ea5', 'type': 'pull', 'name': 'Pull Positions',
-                         'value': 'pull_positions'}, 'data': {'endpoint': 'api/v1/positions'}}],
-         'additional': {'topic': 'destination-v2-338225f3-91f9-4fe1-b013-353a229ce504-dev', 'broker': 'gcp_pubsub'},
-         'default_route': {'id': '38dd8ec2-b3ee-4c31-940e-b6cc9c1f4326', 'name': 'Mukutan - Load Testing'},
-         'status': {'id': 'mockid-b16a-4dbd-ad32-197c58aeef59', 'is_healthy': True,
-                    'details': 'Last observation has been delivered with success.',
-                    'observation_delivered_24hrs': 50231, 'last_observation_delivered_at': '2023-03-31T11:20:00+0200'}
-         }
+        {
+            "id": "338225f3-91f9-4fe1-b013-353a229ce504",
+            "name": "ER Load Testing",
+            "base_url": "https://gundi-load-testing.pamdas.org",
+            "enabled": True,
+            "type": {
+                "id": "45c66a61-71e4-4664-a7f2-30d465f87aa6",
+                "name": "EarthRanger",
+                "value": "earth_ranger",
+                "description": "Integration type for Earth Ranger Sites",
+                "actions": [
+                    {
+                        "id": "43ec4163-2f40-43fc-af62-bca1db77c06b",
+                        "type": "auth",
+                        "name": "Authenticate",
+                        "value": "auth",
+                        "description": "Authenticate against Earth Ranger",
+                        "schema": {
+                            "type": "object",
+                            "required": ["token"],
+                            "properties": {"token": {"type": "string"}},
+                        },
+                    },
+                    {
+                        "id": "036c2098-f494-40ec-a595-710b314d5ea5",
+                        "type": "pull",
+                        "name": "Pull Positions",
+                        "value": "pull_positions",
+                        "description": "Pull position data from an Earth Ranger site",
+                        "schema": {
+                            "type": "object",
+                            "required": ["endpoint"],
+                            "properties": {"endpoint": {"type": "string"}},
+                        },
+                    },
+                    {
+                        "id": "9286bb71-9aca-425a-881f-7fe0b2dba4f4",
+                        "type": "push",
+                        "name": "Push Events",
+                        "value": "push_events",
+                        "description": "EarthRanger sites support sending Events (a.k.a Reports)",
+                        "schema": {},
+                    },
+                    {
+                        "id": "aae0cf50-fbc7-4810-84fd-53fb75020a43",
+                        "type": "push",
+                        "name": "Push Positions",
+                        "value": "push_positions",
+                        "description": "Push position data to an Earth Ranger site",
+                        "schema": {
+                            "type": "object",
+                            "required": ["endpoint"],
+                            "properties": {"endpoint": {"type": "string"}},
+                        },
+                    },
+                ],
+            },
+            "owner": {
+                "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                "name": "Test Organization",
+                "description": "",
+            },
+            "configurations": [
+                {
+                    "id": "013ea7ce-4944-4f7e-8a2f-e5338b3741ce",
+                    "integration": "338225f3-91f9-4fe1-b013-353a229ce504",
+                    "action": {
+                        "id": "43ec4163-2f40-43fc-af62-bca1db77c06b",
+                        "type": "auth",
+                        "name": "Authenticate",
+                        "value": "auth",
+                    },
+                    "data": {"token": "1390d87681cd1d01ad07c2d0f57d15d6079ae9ab"},
+                },
+                {
+                    "id": "5de91c7b-f28a-4ce7-8137-273ac10674d2",
+                    "integration": "338225f3-91f9-4fe1-b013-353a229ce504",
+                    "action": {
+                        "id": "aae0cf50-fbc7-4810-84fd-53fb75020a43",
+                        "type": "push",
+                        "name": "Push Positions",
+                        "value": "push_positions",
+                    },
+                    "data": {"endpoint": "api/v1/positions"},
+                },
+                {
+                    "id": "7947b19e-1d2d-4ca3-bd6c-74976ae1de68",
+                    "integration": "338225f3-91f9-4fe1-b013-353a229ce504",
+                    "action": {
+                        "id": "036c2098-f494-40ec-a595-710b314d5ea5",
+                        "type": "pull",
+                        "name": "Pull Positions",
+                        "value": "pull_positions",
+                    },
+                    "data": {"endpoint": "api/v1/positions"},
+                },
+            ],
+            "additional": {
+                "topic": "destination-v2-338225f3-91f9-4fe1-b013-353a229ce504-dev",
+                "broker": "gcp_pubsub",
+            },
+            "default_route": {
+                "id": "38dd8ec2-b3ee-4c31-940e-b6cc9c1f4326",
+                "name": "Mukutan - Load Testing",
+            },
+            "status": {
+                "id": "mockid-b16a-4dbd-ad32-197c58aeef59",
+                "is_healthy": True,
+                "details": "Last observation has been delivered with success.",
+                "observation_delivered_24hrs": 50231,
+                "last_observation_delivered_at": "2023-03-31T11:20:00+0200",
+            },
+        }
     )
 
 
@@ -508,20 +585,55 @@ def destination_integration_v2():
 def connection_v2():
     return schemas_v2.Connection.parse_obj(
         {
-            'id': 'ddd0946d-15b0-4308-b93d-e0470b6d33b6',
-            'provider': {'id': 'ddd0946d-15b0-4308-b93d-e0470b6d33b6', 'name': 'Trap Tagger',
-                         'owner': {'id': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0', 'name': 'Test Organization'},
-                         'type': {'id': '190e3710-3a29-4710-b932-f951222209a7', 'name': 'TrapTagger',
-                                  'value': 'traptagger'}, 'base_url': 'https://test.traptagger.com',
-                         'status': 'healthy'}, 'destinations': [
-            {'id': '338225f3-91f9-4fe1-b013-353a229ce504', 'name': 'ER Load Testing',
-             'owner': {'id': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0', 'name': 'Test Organization'},
-             'type': {'id': '45c66a61-71e4-4664-a7f2-30d465f87aa6', 'name': 'EarthRanger', 'value': 'earth_ranger'},
-             'base_url': 'https://gundi-load-testing.pamdas.org', 'status': 'healthy'}],
-            'routing_rules': [{'id': '835897f9-1ef2-4d99-9c6c-ea2663380c1f', 'name': 'TrapTagger Default Route'}],
-            'default_route': {'id': '835897f9-1ef2-4d99-9c6c-ea2663380c1f', 'name': 'TrapTagger Default Route'},
-            'owner': {'id': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0', 'name': 'Test Organization', 'description': ''},
-            'status': 'healthy'
+            "id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+            "provider": {
+                "id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "name": "Trap Tagger",
+                "owner": {
+                    "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                    "name": "Test Organization",
+                },
+                "type": {
+                    "id": "190e3710-3a29-4710-b932-f951222209a7",
+                    "name": "TrapTagger",
+                    "value": "traptagger",
+                },
+                "base_url": "https://test.traptagger.com",
+                "status": "healthy",
+            },
+            "destinations": [
+                {
+                    "id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                    "name": "ER Load Testing",
+                    "owner": {
+                        "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                        "name": "Test Organization",
+                    },
+                    "type": {
+                        "id": "45c66a61-71e4-4664-a7f2-30d465f87aa6",
+                        "name": "EarthRanger",
+                        "value": "earth_ranger",
+                    },
+                    "base_url": "https://gundi-load-testing.pamdas.org",
+                    "status": "healthy",
+                }
+            ],
+            "routing_rules": [
+                {
+                    "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                    "name": "TrapTagger Default Route",
+                }
+            ],
+            "default_route": {
+                "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                "name": "TrapTagger Default Route",
+            },
+            "owner": {
+                "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                "name": "Test Organization",
+                "description": "",
+            },
+            "status": "healthy",
         }
     )
 
@@ -530,40 +642,65 @@ def connection_v2():
 def route_v2():
     return schemas_v2.Route.parse_obj(
         {
-            'id': '835897f9-1ef2-4d99-9c6c-ea2663380c1f', 'name': 'TrapTagger Default Route',
-            'owner': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0',
-            'data_providers': [
-                {'id': 'ddd0946d-15b0-4308-b93d-e0470b6d33b6', 'name': 'Trap Tagger',
-                 'owner': {'id': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0', 'name': 'Test Organization'},
-                 'type': {'id': '190e3710-3a29-4710-b932-f951222209a7', 'name': 'TrapTagger', 'value': 'traptagger'},
-                 'base_url': 'https://test.traptagger.com', 'status': 'healthy'}],
-            'destinations': [
-                {'id': '338225f3-91f9-4fe1-b013-353a229ce504', 'name': 'ER Load Testing',
-                 'owner': {'id': 'e2d1b0fc-69fe-408b-afc5-7f54872730c0', 'name': 'Test Organization'},
-                 'type': {'id': '45c66a61-71e4-4664-a7f2-30d465f87aa6', 'name': 'EarthRanger', 'value': 'earth_ranger'},
-                 'base_url': 'https://gundi-load-testing.pamdas.org', 'status': 'healthy'}],
-            'configuration': {
-                'id': '1a3e3e73-94ad-42cb-a765-09a7193ae0b1',
-                'name': 'Trap Tagger to ER - Event Type Mapping',
-                'data': {
-                    'field_mappings': {
-                        'ddd0946d-15b0-4308-b93d-e0470b6d33b6': {
-                            'ev': {
-                                '338225f3-91f9-4fe1-b013-353a229ce504': {
-                                    'map': {
-                                        'Leopard': 'leopard_sighting',
-                                        'Wilddog': 'wild_dog_sighting'
+            "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+            "name": "TrapTagger Default Route",
+            "owner": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+            "data_providers": [
+                {
+                    "id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                    "name": "Trap Tagger",
+                    "owner": {
+                        "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                        "name": "Test Organization",
+                    },
+                    "type": {
+                        "id": "190e3710-3a29-4710-b932-f951222209a7",
+                        "name": "TrapTagger",
+                        "value": "traptagger",
+                    },
+                    "base_url": "https://test.traptagger.com",
+                    "status": "healthy",
+                }
+            ],
+            "destinations": [
+                {
+                    "id": "338225f3-91f9-4fe1-b013-353a229ce504",
+                    "name": "ER Load Testing",
+                    "owner": {
+                        "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                        "name": "Test Organization",
+                    },
+                    "type": {
+                        "id": "45c66a61-71e4-4664-a7f2-30d465f87aa6",
+                        "name": "EarthRanger",
+                        "value": "earth_ranger",
+                    },
+                    "base_url": "https://gundi-load-testing.pamdas.org",
+                    "status": "healthy",
+                }
+            ],
+            "configuration": {
+                "id": "1a3e3e73-94ad-42cb-a765-09a7193ae0b1",
+                "name": "Trap Tagger to ER - Event Type Mapping",
+                "data": {
+                    "field_mappings": {
+                        "ddd0946d-15b0-4308-b93d-e0470b6d33b6": {
+                            "ev": {
+                                "338225f3-91f9-4fe1-b013-353a229ce504": {
+                                    "map": {
+                                        "Leopard": "leopard_sighting",
+                                        "Wilddog": "wild_dog_sighting",
                                     },
-                                    'default': 'wildlife_sighting_rep',
-                                    'provider_field': 'event_details__species',
-                                    'destination_field': 'event_type'
+                                    "default": "wildlife_sighting_rep",
+                                    "provider_field": "event_details__species",
+                                    "destination_field": "event_type",
                                 }
                             }
                         }
                     }
-                }
+                },
             },
-            'additional': {}
+            "additional": {},
         }
     )
 
@@ -581,50 +718,51 @@ def unprocessed_attachment_v2():
 @pytest.fixture
 def leopard_detected_event_v2():
     return schemas_v2.Event(
-        gundi_id='b9b46dc1-e033-447d-a99b-0fe373ca04c9',
-        related_to='None',
-        owner='e2d1b0fc-69fe-408b-afc5-7f54872730c0',
-        data_provider_id='ddd0946d-15b0-4308-b93d-e0470b6d33b6',
+        gundi_id="b9b46dc1-e033-447d-a99b-0fe373ca04c9",
+        related_to="None",
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
         annotations={},
-        source_id='afa0d606-c143-4705-955d-68133645db6d',
-        external_source_id='Xyz123',
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
         recorded_at=datetime.datetime(2023, 7, 4, 21, 38, tzinfo=datetime.timezone.utc),
         location=schemas_v2.Location(
-            lat=-51.667875,
-            lon=-72.71195,
-            alt=1800.0,
-            hdop=None,
-            vdop=None
+            lat=-51.667875, lon=-72.71195, alt=1800.0, hdop=None, vdop=None
         ),
-        title='Leopard Detected',
+        title="Leopard Detected",
         event_type=None,
         event_details={
-            'site_name': 'Camera2G',
-            'species': 'Leopard',
-            'tags': ['female adult', 'male child'],
-            'animal_count': 2
+            "site_name": "Camera2G",
+            "species": "Leopard",
+            "tags": ["female adult", "male child"],
+            "animal_count": 2,
         },
         geometry={},
-        observation_type='ev'
+        observation_type="ev",
     )
 
 
-from smartconnect.models import SMARTRequest, SmartAttributes, Geometry, SMARTCONNECT_DATFORMAT, Properties, DataModel
+from smartconnect.models import (
+    SMARTRequest,
+    SmartAttributes,
+    Geometry,
+    SMARTCONNECT_DATFORMAT,
+    Properties,
+    DataModel,
+)
 
 
 @pytest.fixture
 def smartrequest_with_no_attachments():
-    smart_attributes = SmartAttributes(
-
-    )
+    smart_attributes = SmartAttributes()
     return SMARTRequest(
         type="Feature",
         geometry=Geometry(coordinates=[0.1, 0.1], type="Point"),
         properties=Properties(
             dateTime=datetime.datetime.now().strftime(SMARTCONNECT_DATFORMAT),
-            smartDataType='',
-            smartFeatureType='',
-            smartAttributes=smart_attributes
+            smartDataType="",
+            smartFeatureType="",
+            smartAttributes=smart_attributes,
         ),
     )
 
@@ -651,31 +789,27 @@ def observation_object_v2():
 @pytest.fixture
 def unmapped_animal_detected_event_v2():
     return schemas_v2.Event(
-        gundi_id='b9b46dc1-e033-447d-a99b-0fe373ca04c9',
-        related_to='None',
-        owner='e2d1b0fc-69fe-408b-afc5-7f54872730c0',
-        data_provider_id='ddd0946d-15b0-4308-b93d-e0470b6d33b6',
+        gundi_id="b9b46dc1-e033-447d-a99b-0fe373ca04c9",
+        related_to="None",
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
         annotations={},
-        source_id='afa0d606-c143-4705-955d-68133645db6d',
-        external_source_id='Xyz123',
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
         recorded_at=datetime.datetime(2023, 7, 4, 21, 38, tzinfo=datetime.timezone.utc),
         location=schemas_v2.Location(
-            lat=-51.667875,
-            lon=-72.71195,
-            alt=1800.0,
-            hdop=None,
-            vdop=None
+            lat=-51.667875, lon=-72.71195, alt=1800.0, hdop=None, vdop=None
         ),
-        title='Animal Detected',
+        title="Animal Detected",
         event_type=None,
         event_details={
-            'site_name': 'Camera2G',
-            'species': 'Unknown',
-            'tags': ['female adult', 'male child'],
-            'animal_count': 2
+            "site_name": "Camera2G",
+            "species": "Unknown",
+            "tags": ["female adult", "male child"],
+            "animal_count": 2,
         },
         geometry={},
-        observation_type='ev'
+        observation_type="ev",
     )
 
 
@@ -688,28 +822,23 @@ def animals_sign_event_v2():
         annotations={},
         source_id="afa0d606-c143-4705-955d-68133645db6d",
         external_source_id="Xyz123",
-        recorded_at=datetime.datetime(2023, 12, 28, 19, 26, tzinfo=datetime.timezone.utc),
+        recorded_at=datetime.datetime(
+            2023, 12, 28, 19, 26, tzinfo=datetime.timezone.utc
+        ),
         location=schemas_v2.Location(
-            lat=-51.688645,
-            lon=-72.704440,
-            alt=1800.0,
-            hdop=None,
-            vdop=None
+            lat=-51.688645, lon=-72.704440, alt=1800.0, hdop=None, vdop=None
         ),
         title="Animal Sign",
         event_type="animals_sign",
         event_details={
             "site_name": "MM Spot",
             "species": "lion",
-            "tags": [
-                "adult",
-                "male"
-            ],
+            "tags": ["adult", "male"],
             "animal_count": 2,
-            "ageofsign": "days"
+            "ageofsign": "days",
         },
         geometry={},
-        observation_type="ev"
+        observation_type="ev",
     )
 
 
@@ -718,52 +847,50 @@ def integration_type_er():
     return schemas_v2.ConnectionIntegrationType(
         id="45c66a61-71e4-4664-a7f2-30d465f87aa6",
         name="EarthRanger",
-        value='earth_ranger'
+        value="earth_ranger",
     )
 
 
 @pytest.fixture
 def integration_type_movebank():
     return schemas_v2.ConnectionIntegrationType(
-        id="45c66a61-71e4-4664-a7f2-30d465f87bb7",
-        name="Movebank",
-        value='movebank'
+        id="45c66a61-71e4-4664-a7f2-30d465f87bb7", name="Movebank", value="movebank"
     )
 
 
 @pytest.fixture
 def destination_integration_v2_er(integration_type_er):
     return schemas_v2.ConnectionIntegration(
-        id='338225f3-91f9-4fe1-b013-353a229ce504',
-        name='ER Load Testing',
+        id="338225f3-91f9-4fe1-b013-353a229ce504",
+        name="ER Load Testing",
         type=integration_type_er,
-        base_url='https://gundi-load-testing.pamdas.org',
-        status='healthy'
+        base_url="https://gundi-load-testing.pamdas.org",
+        status="healthy",
     )
 
 
 @pytest.fixture
 def destination_integration_v1_smartconnect():
     return schemas_v1.OutboundConfiguration(
-        id='338225f3-91f9-4fe1-b013-353a229ce504',
-        name='SmartConnect Server',
+        id="338225f3-91f9-4fe1-b013-353a229ce504",
+        name="SmartConnect Server",
         type=uuid.uuid4(),
-        endpoint='https://smartconnect.example.com',
-        username='something',
-        password='something fancy',
+        endpoint="https://smartconnect.example.com",
+        username="something",
+        password="something fancy",
         type_slug="smart_connect",
-        owner=uuid.uuid4()
+        owner=uuid.uuid4(),
     )
 
 
 @pytest.fixture
 def destination_integration_v2_movebank(integration_type_movebank):
     return schemas_v2.ConnectionIntegration(
-        id='338225f3-91f9-4fe1-b013-353a229ce504',
-        name='MB Load Testing',
+        id="338225f3-91f9-4fe1-b013-353a229ce504",
+        name="MB Load Testing",
         type=integration_type_movebank,
-        base_url='https://mb-load-testing.pamdas.org',
-        status='healthy'
+        base_url="https://mb-load-testing.pamdas.org",
+        status="healthy",
     )
 
 
@@ -772,7 +899,7 @@ def integration_type_smart():
     return schemas_v2.ConnectionIntegrationType(
         id="56b76a61-53e4-4664-a7f2-21d465f87bc6",
         name="SMART Connect",
-        value='smart_connect'
+        value="smart_connect",
     )
 
 
@@ -784,188 +911,249 @@ def smart_ca_uuid():
 @pytest.fixture
 def destination_integration_v2_smart(integration_type_smart, smart_ca_uuid):
     return schemas_v2.Integration(
-        id=UUID('b42c9205-5228-49e0-a75b-ebe5b6a9f78e'),
-        name='Integration X SMART Connect',
+        id=UUID("b42c9205-5228-49e0-a75b-ebe5b6a9f78e"),
+        name="Integration X SMART Connect",
         type=schemas_v2.IntegrationType(
             id=integration_type_smart.id,
             name=integration_type_smart.name,
             value=integration_type_smart.value,
-            description='',
+            description="",
             actions=[
-                schemas_v2.IntegrationAction(id=UUID('b0a0e7ed-d668-41b5-96d2-397f026c4ecb'), type='auth',
-                                             name='Authenticate', value='auth',
-                                             description='Authenticate against smart',
-                                             action_schema={'type': 'object', 'title': 'SMARTAuthActionConfig',
-                                                            'required': ['login', 'password'], 'properties': {
-                                                     'login': {'type': 'string', 'title': 'Login'},
-                                                     'endpoint': {'type': 'string', 'title': 'Endpoint'},
-                                                     'password': {'type': 'string', 'title': 'Password'}}}),
-                schemas_v2.IntegrationAction(id=UUID('ebe72917-c112-4064-9f38-707bbd14a50f'), type='push',
-                                             name='Push Events', value='push_events',
-                                             description='Send Events to SMART Connect (a.k.a Incidents or waypoints)',
-                                             action_schema={'type': 'object', 'title': 'SMARTPushEventActionConfig',
-                                                            'properties': {
-                                                                'ca_uuid': {'type': 'string', 'title': 'Ca Uuid',
-                                                                            'format': 'uuid'},
-                                                                'version': {'type': 'string', 'title': 'Version'},
-                                                                'ca_uuids': {'type': 'array',
-                                                                             'items': {'type': 'string',
-                                                                                       'format': 'uuid'},
-                                                                             'title': 'Ca Uuids'},
-                                                                'transformation_rules': {
-                                                                    '$ref': '#/definitions/TransformationRules'},
-                                                                'configurable_models_lists': {'type': 'object',
-                                                                                              'title': 'Configurable Models Lists'},
-                                                                'configurable_models_enabled': {'type': 'array',
-                                                                                                'items': {
-                                                                                                    'type': 'string',
-                                                                                                    'format': 'uuid'},
-                                                                                                'title': 'Configurable Models Enabled'}},
-                                                            'definitions': {
-                                                                'OptionMap': {'type': 'object', 'title': 'OptionMap',
-                                                                              'required': ['from_key', 'to_key'],
-                                                                              'properties': {
-                                                                                  'to_key': {'type': 'string',
-                                                                                             'title': 'To Key'},
-                                                                                  'from_key': {'type': 'string',
-                                                                                               'title': 'From Key'}}},
-                                                                'CategoryPair': {'type': 'object',
-                                                                                 'title': 'CategoryPair',
-                                                                                 'required': ['event_type',
-                                                                                              'category_path'],
-                                                                                 'properties': {
-                                                                                     'event_type': {'type': 'string',
-                                                                                                    'title': 'Event Type'},
-                                                                                     'category_path': {'type': 'string',
-                                                                                                       'title': 'Category Path'}}},
-                                                                'AttributeMapper': {'type': 'object',
-                                                                                    'title': 'AttributeMapper',
-                                                                                    'required': ['from_key', 'to_key'],
-                                                                                    'properties': {
-                                                                                        'type': {'type': 'string',
-                                                                                                 'title': 'Type',
-                                                                                                 'default': 'string'},
-                                                                                        'to_key': {'type': 'string',
-                                                                                                   'title': 'To Key'},
-                                                                                        'from_key': {'type': 'string',
-                                                                                                     'title': 'From Key'},
-                                                                                        'event_types': {'type': 'array',
-                                                                                                        'items': {
-                                                                                                            'type': 'string'},
-                                                                                                        'title': 'Event Types'},
-                                                                                        'options_map': {'type': 'array',
-                                                                                                        'items': {
-                                                                                                            '$ref': '#/definitions/OptionMap'},
-                                                                                                        'title': 'Options Map'},
-                                                                                        'default_option': {
-                                                                                            'type': 'string',
-                                                                                            'title': 'Default Option'}}},
-                                                                'TransformationRules': {'type': 'object',
-                                                                                        'title': 'TransformationRules',
-                                                                                        'properties': {'category_map': {
-                                                                                            'type': 'array', 'items': {
-                                                                                                '$ref': '#/definitions/CategoryPair'},
-                                                                                            'title': 'Category Map',
-                                                                                            'default': []},
-                                                                                            'attribute_map': {
-                                                                                                'type': 'array',
-                                                                                                'items': {
-                                                                                                    '$ref': '#/definitions/AttributeMapper'},
-                                                                                                'title': 'Attribute Map',
-                                                                                                'default': []}}}}})
-            ]
+                schemas_v2.IntegrationAction(
+                    id=UUID("b0a0e7ed-d668-41b5-96d2-397f026c4ecb"),
+                    type="auth",
+                    name="Authenticate",
+                    value="auth",
+                    description="Authenticate against smart",
+                    action_schema={
+                        "type": "object",
+                        "title": "SMARTAuthActionConfig",
+                        "required": ["login", "password"],
+                        "properties": {
+                            "login": {"type": "string", "title": "Login"},
+                            "endpoint": {"type": "string", "title": "Endpoint"},
+                            "password": {"type": "string", "title": "Password"},
+                        },
+                    },
+                ),
+                schemas_v2.IntegrationAction(
+                    id=UUID("ebe72917-c112-4064-9f38-707bbd14a50f"),
+                    type="push",
+                    name="Push Events",
+                    value="push_events",
+                    description="Send Events to SMART Connect (a.k.a Incidents or waypoints)",
+                    action_schema={
+                        "type": "object",
+                        "title": "SMARTPushEventActionConfig",
+                        "properties": {
+                            "ca_uuid": {
+                                "type": "string",
+                                "title": "Ca Uuid",
+                                "format": "uuid",
+                            },
+                            "version": {"type": "string", "title": "Version"},
+                            "ca_uuids": {
+                                "type": "array",
+                                "items": {"type": "string", "format": "uuid"},
+                                "title": "Ca Uuids",
+                            },
+                            "transformation_rules": {
+                                "$ref": "#/definitions/TransformationRules"
+                            },
+                            "configurable_models_lists": {
+                                "type": "object",
+                                "title": "Configurable Models Lists",
+                            },
+                            "configurable_models_enabled": {
+                                "type": "array",
+                                "items": {"type": "string", "format": "uuid"},
+                                "title": "Configurable Models Enabled",
+                            },
+                        },
+                        "definitions": {
+                            "OptionMap": {
+                                "type": "object",
+                                "title": "OptionMap",
+                                "required": ["from_key", "to_key"],
+                                "properties": {
+                                    "to_key": {"type": "string", "title": "To Key"},
+                                    "from_key": {"type": "string", "title": "From Key"},
+                                },
+                            },
+                            "CategoryPair": {
+                                "type": "object",
+                                "title": "CategoryPair",
+                                "required": ["event_type", "category_path"],
+                                "properties": {
+                                    "event_type": {
+                                        "type": "string",
+                                        "title": "Event Type",
+                                    },
+                                    "category_path": {
+                                        "type": "string",
+                                        "title": "Category Path",
+                                    },
+                                },
+                            },
+                            "AttributeMapper": {
+                                "type": "object",
+                                "title": "AttributeMapper",
+                                "required": ["from_key", "to_key"],
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "title": "Type",
+                                        "default": "string",
+                                    },
+                                    "to_key": {"type": "string", "title": "To Key"},
+                                    "from_key": {"type": "string", "title": "From Key"},
+                                    "event_types": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                        "title": "Event Types",
+                                    },
+                                    "options_map": {
+                                        "type": "array",
+                                        "items": {"$ref": "#/definitions/OptionMap"},
+                                        "title": "Options Map",
+                                    },
+                                    "default_option": {
+                                        "type": "string",
+                                        "title": "Default Option",
+                                    },
+                                },
+                            },
+                            "TransformationRules": {
+                                "type": "object",
+                                "title": "TransformationRules",
+                                "properties": {
+                                    "category_map": {
+                                        "type": "array",
+                                        "items": {"$ref": "#/definitions/CategoryPair"},
+                                        "title": "Category Map",
+                                        "default": [],
+                                    },
+                                    "attribute_map": {
+                                        "type": "array",
+                                        "items": {
+                                            "$ref": "#/definitions/AttributeMapper"
+                                        },
+                                        "title": "Attribute Map",
+                                        "default": [],
+                                    },
+                                },
+                            },
+                        },
+                    },
+                ),
+            ],
         ),
-        base_url='https://integrationx.smartconservationtools.org/server',
+        base_url="https://integrationx.smartconservationtools.org/server",
         enabled=True,
-        owner=schemas_v2.Organization(id=UUID('a91b400b-482a-4546-8fcb-ee42b01deeb6'), name='Test Org', description=''),
+        owner=schemas_v2.Organization(
+            id=UUID("a91b400b-482a-4546-8fcb-ee42b01deeb6"),
+            name="Test Org",
+            description="",
+        ),
         configurations=[
-            schemas_v2.IntegrationActionConfiguration(id=UUID('55760315-3d68-4925-bf2d-c4d39de433c9'),
-                                                      integration=UUID('b42c9205-5228-49e0-a75b-ebe5b6a9f78e'),
-                                                      action=schemas_v2.IntegrationActionSummery(
-                                                          id=UUID('ebe72917-c112-4064-9f38-707bbd14a50f'), type='push',
-                                                          name='Push Events', value='push_events'),
-                                                      data={'version': '7.5.3',
-                                                            'ca_uuids': [smart_ca_uuid],
-                                                            'transformation_rules': {'category_map': [],
-                                                                                     'attribute_map': []}}),
-            schemas_v2.IntegrationActionConfiguration(id=UUID('abce8c67-a74c-46fd-b5c3-62a7b76f2b17'),
-                                                      integration=UUID('b42c9205-5228-49e0-a75b-ebe5b6a9f78e'),
-                                                      action=schemas_v2.IntegrationActionSummery(
-                                                          id=UUID('b0a0e7ed-d668-41b5-96d2-397f026c4ecb'), type='auth',
-                                                          name='Authenticate', value='auth'),
-                                                      data={'login': 'fakeusername',
-                                                            'endpoint': 'https://integrationx.smartconservationtools.org/server',
-                                                            'password': '***REMOVED***'})
+            schemas_v2.IntegrationActionConfiguration(
+                id=UUID("55760315-3d68-4925-bf2d-c4d39de433c9"),
+                integration=UUID("b42c9205-5228-49e0-a75b-ebe5b6a9f78e"),
+                action=schemas_v2.IntegrationActionSummery(
+                    id=UUID("ebe72917-c112-4064-9f38-707bbd14a50f"),
+                    type="push",
+                    name="Push Events",
+                    value="push_events",
+                ),
+                data={
+                    "version": "7.5.3",
+                    "ca_uuids": [smart_ca_uuid],
+                    "transformation_rules": {"category_map": [], "attribute_map": []},
+                },
+            ),
+            schemas_v2.IntegrationActionConfiguration(
+                id=UUID("abce8c67-a74c-46fd-b5c3-62a7b76f2b17"),
+                integration=UUID("b42c9205-5228-49e0-a75b-ebe5b6a9f78e"),
+                action=schemas_v2.IntegrationActionSummery(
+                    id=UUID("b0a0e7ed-d668-41b5-96d2-397f026c4ecb"),
+                    type="auth",
+                    name="Authenticate",
+                    value="auth",
+                ),
+                data={
+                    "login": "fakeusername",
+                    "endpoint": "https://integrationx.smartconservationtools.org/server",
+                    "password": "***REMOVED***",
+                },
+            ),
         ],
         default_route=None,
         additional={},
         status={
-            'id': 'mockid-b16a-4dbd-ad32-197c58aeef59',
-            'is_healthy': True,
-            'details': 'Last observation has been delivered with success.',
-            'observation_delivered_24hrs': 50231,
-            'last_observation_delivered_at': '2023-03-31T11:20:00+0200'
-        }
+            "id": "mockid-b16a-4dbd-ad32-197c58aeef59",
+            "is_healthy": True,
+            "details": "Last observation has been delivered with success.",
+            "observation_delivered_24hrs": 50231,
+            "last_observation_delivered_at": "2023-03-31T11:20:00+0200",
+        },
     )
 
 
 @pytest.fixture
 def route_config_with_event_type_mappings():
     return schemas_v2.RouteConfiguration(
-        id='1a3e3e73-94ad-42cb-a765-09a7193ae0b1',
-        name='Trap Tagger to ER - Event Type Mapping',
+        id="1a3e3e73-94ad-42cb-a765-09a7193ae0b1",
+        name="Trap Tagger to ER - Event Type Mapping",
         data={
-            'field_mappings': {
-                'ddd0946d-15b0-4308-b93d-e0470b6d33b6': {
-                    'ev': {
-                        '338225f3-91f9-4fe1-b013-353a229ce504': {
-                            'map': {
-                                'Leopard': 'leopard_sighting',
-                                'Wilddog': 'wild_dog_sighting'
+            "field_mappings": {
+                "ddd0946d-15b0-4308-b93d-e0470b6d33b6": {
+                    "ev": {
+                        "338225f3-91f9-4fe1-b013-353a229ce504": {
+                            "map": {
+                                "Leopard": "leopard_sighting",
+                                "Wilddog": "wild_dog_sighting",
                             },
-                            'default': 'wildlife_sighting_rep',
-                            'provider_field': 'event_details__species',
-                            'destination_field': 'event_type'
+                            "default": "wildlife_sighting_rep",
+                            "provider_field": "event_details__species",
+                            "destination_field": "event_type",
                         }
                     }
                 }
             }
-        }
+        },
     )
 
 
 @pytest.fixture
 def route_config_with_provider_key_mappings():
     return schemas_v2.RouteConfiguration(
-        id='1a3e3e73-94ad-42cb-a765-09a7193ae0b1',
-        name='Trap Tagger to ER - Provider Key',
+        id="1a3e3e73-94ad-42cb-a765-09a7193ae0b1",
+        name="Trap Tagger to ER - Provider Key",
         data={
-            'field_mappings': {
-                'ddd0946d-15b0-4308-b93d-e0470b6d33b6': {
-                    'ev': {
-                        '338225f3-91f9-4fe1-b013-353a229ce504': {
-                            'default': 'mapipedia',
-                            'destination_field': 'provider_key'
+            "field_mappings": {
+                "ddd0946d-15b0-4308-b93d-e0470b6d33b6": {
+                    "ev": {
+                        "338225f3-91f9-4fe1-b013-353a229ce504": {
+                            "default": "mapipedia",
+                            "destination_field": "provider_key",
                         }
                     },
-                    'obv': {
-                        '338225f3-91f9-4fe1-b013-353a229ce504': {
-                            'default': 'mapipedia',
-                            'destination_field': 'provider_key'
+                    "obv": {
+                        "338225f3-91f9-4fe1-b013-353a229ce504": {
+                            "default": "mapipedia",
+                            "destination_field": "provider_key",
                         }
-                    }
+                    },
                 }
             }
-        }
+        },
     )
 
 
 @pytest.fixture
 def route_config_with_no_mappings():
     return schemas_v2.RouteConfiguration(
-        id='1a3e3e73-94ad-42cb-a765-09a7193ae0b1',
-        name='Trap Tagger to ER - No Mapping',
-        data={
-            'field_mappings': {}
-        }
+        id="1a3e3e73-94ad-42cb-a765-09a7193ae0b1",
+        name="Trap Tagger to ER - No Mapping",
+        data={"field_mappings": {}},
     )
