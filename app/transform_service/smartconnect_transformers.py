@@ -800,7 +800,7 @@ class SMARTTransformerV2(Transformer, ABC):
                 "Unable to determine CA uuid for observation. Please set 'ca_uuids' in the portal."
             )
 
-        self._version = self.push_config.version or "7.5"
+        self._version = self.auth_config.version or "7.5"
         logger.info(f"Using SMART Integration version {self._version}")
 
         self.smartconnect_client = AsyncSmartClient(
