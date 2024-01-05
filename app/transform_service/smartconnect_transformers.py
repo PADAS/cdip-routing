@@ -158,7 +158,7 @@ class SMARTTransformer:
         transformation_rules_dict = self._config.additional.get(
             "transformation_rules", {}
         )
-        self._transformation_rules = TransformationRules.parse_obj(
+        self._transformation_rules = SMARTTransformationRules.parse_obj(
             transformation_rules_dict
         )
         self.cloud_storage = get_cloud_storage()
@@ -804,7 +804,7 @@ class SMARTTransformerV2(Transformer, ABC):
         logger.info(f"Using SMART Integration version {self._version}")
 
         self.smartconnect_client = AsyncSmartClient(
-            api=self.auth_config.endpoint or f"{self.config.base_url}/server",
+            api=f"{self.config.base_url}/server",
             username=self.auth_config.login,
             password=self.auth_config.password,
             version=self._version,
@@ -830,7 +830,7 @@ class SMARTTransformerV2(Transformer, ABC):
                 )
             except Exception as ex:
                 self.logger.warning(
-                    f"Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
+                    f"Failed to get CA Metadata for endpoint: {self.config.base_url}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
                 )
                 self.ca = None
         return self.ca
