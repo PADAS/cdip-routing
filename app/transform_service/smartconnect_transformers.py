@@ -12,6 +12,11 @@ import timezonefinder
 from gundi_core import schemas
 from cdip_connector.core.cloudstorage import get_cloud_storage
 from gundi_core.schemas import ERPatrol, ERPatrolSegment
+from gundi_core.schemas.v2 import (
+    SMARTTransformationRules,
+    SMARTPushEventActionConfig,
+    SMARTAuthActionConfig,
+)
 from pydantic import BaseModel
 from smartconnect import SmartClient, AsyncSmartClient
 from smartconnect.models import (
@@ -36,61 +41,11 @@ from packaging import version
 logger = logging.getLogger(__name__)
 
 
-# Smart Connect Outbound configuration models.
-class CategoryPair(BaseModel):
-    event_type: str
-    category_path: str
-
-
-# class CategoriesMap(BaseModel):
-#     pairs: List[CategoryPair]
-
-
-class OptionMap(BaseModel):
-    from_key: str
-    to_key: str
-
-
-class AttributeMapper(BaseModel):
-    from_key: str
-    to_key: str
-    type: Optional[str] = "string"
-    options_map: Optional[List[OptionMap]]
-    default_option: Optional[str]
-    event_types: Optional[List[str]]
-
-
-class TransformationRules(BaseModel):
-    category_map: Optional[List[CategoryPair]] = []
-    attribute_map: Optional[List[AttributeMapper]] = []
-
-
+# Legacy config for Gundi v1 additional field
 class SmartConnectConfigurationAdditional(BaseModel):
     ca_uuid: uuid.UUID
-    transformation_rules: Optional[TransformationRules]
+    transformation_rules: Optional[SMARTTransformationRules]
     version: Optional[str]
-
-
-class SMARTTransformationRules(BaseModel):
-    category_map: Optional[List[CategoryPair]] = []
-    attribute_map: Optional[List[AttributeMapper]] = []
-
-
-# ToDo: Move this configurations to gundi-core if we need to use them in other services
-class SMARTAuthActionConfig(BaseModel):
-    endpoint: Optional[str]
-    login: str
-    password: str
-
-
-class SMARTPushEventActionConfig(BaseModel):
-    ca_uuid: Optional[uuid.UUID]
-    ca_uuids: Optional[List[uuid.UUID]]
-    configurable_models_enabled: Optional[List[uuid.UUID]]
-    configurable_models_lists: Optional[dict]
-    transformation_rules: Optional[TransformationRules]
-    version: Optional[str]
-    timezone: Optional[str]
 
 
 class CAConflictException(Exception):
@@ -161,12 +116,16 @@ class SMARTTransformer:
             )
 
         try:
-            self.cm_uuids = config.additional.get('configurable_models_enabled', [])
+            self.cm_uuids = config.additional.get("configurable_models_enabled", [])
 
-            self._configurable_models = list([
-                self.smartconnect_client.get_configurable_data_model(cm_uuid=cm_uuid)
-                for cm_uuid in self.cm_uuids
-            ])
+            self._configurable_models = list(
+                [
+                    self.smartconnect_client.get_configurable_data_model(
+                        cm_uuid=cm_uuid
+                    )
+                    for cm_uuid in self.cm_uuids
+                ]
+            )
 
         except Exception as e:
             self._ca_config_datamodel = []
@@ -233,16 +192,15 @@ class SMARTTransformer:
             if matched_category := cm.get_category(path=search_for):
                 return matched_category["hkeyPath"]
 
-
         # direct data model match
         if matched_category := self._ca_datamodel.get_category(path=event.event_type):
-            return matched_category['path']
+            return matched_category["path"]
 
         # convert ER event type to CA path syntax
         if matched_category := self._ca_datamodel.get_category(
-                path=str.replace(event.event_type, "_", ".")
-            ):
-            return matched_category['path']
+            path=str.replace(event.event_type, "_", ".")
+        ):
+            return matched_category["path"]
 
         # Last option is a match in translation rules.
         for t in self._transformation_rules.category_map:
@@ -255,7 +213,8 @@ class SMARTTransformer:
         # Favor a match in configurable model.
         for cm in self._configurable_models:
             attr = cm.get_attribute(key=key)
-            if attr: break
+            if attr:
+                break
         else:
             attr = self._ca_datamodel.get_attribute(key=key)
 
@@ -364,7 +323,8 @@ class SMARTTransformer:
                 ).decode()
 
                 file = File(
-                    filename=event_file.get("filename"), data=f'gundi:storage:{download_file_name}' # downloaded_file_base64
+                    filename=event_file.get("filename"),
+                    data=f"gundi:storage:{download_file_name}",  # downloaded_file_base64
                 )
                 attachments.append(file)
 
@@ -385,7 +345,7 @@ class SMARTTransformer:
 
         # Clean up observation UUID in case it was set to a str(None).
         # TODO: If this resolves the issue, then we should follow-up with a cleaner in SmartObservation.
-        if observation_uuid == 'None':
+        if observation_uuid == "None":
             observation_uuid = str(uuid.uuid4())  # Provide a UUID as str
 
         smart_observation = SmartObservation(
@@ -790,16 +750,12 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
 ########################################################################################################################
 def find_config_for_action(configurations, action_value):
     return next(
-        (
-            config for config in configurations
-            if config.action.value == action_value
-        ),
-        None
+        (config for config in configurations if config.action.value == action_value),
+        None,
     )
 
 
 class SMARTTransformerV2(Transformer, ABC):
-
     def __init__(self, *, config=None, **kwargs):
         super().__init__(config=config, **kwargs)
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -807,8 +763,7 @@ class SMARTTransformerV2(Transformer, ABC):
         # Look for the configuration of the authentication action
         configurations = config.configurations
         auth_config = find_config_for_action(
-            configurations=configurations,
-            action_value="auth"
+            configurations=configurations, action_value="auth"
         )
         if not auth_config:
             raise ValueError(
@@ -816,8 +771,7 @@ class SMARTTransformerV2(Transformer, ABC):
             )
         self.auth_config = SMARTAuthActionConfig.parse_obj(auth_config.data)
         push_events_config = find_config_for_action(
-            configurations=configurations,
-            action_value="push_events"
+            configurations=configurations, action_value="push_events"
         )
         if not push_events_config:
             raise ValueError(
@@ -830,9 +784,16 @@ class SMARTTransformerV2(Transformer, ABC):
         self.cm_uuids = self.push_config.configurable_models_enabled or []
         self.ca = None
         # Handle 0:N SMART CA Mapping. Look for CA in kwargs, then look in config
-        self.ca_uuid = kwargs.get("ca_uuid", str(self.push_config.ca_uuid) if self.push_config.ca_uuid else None)  # priority to passed in ca_uuid
+        self.ca_uuid = kwargs.get(
+            "ca_uuid",
+            str(self.push_config.ca_uuid) if self.push_config.ca_uuid else None,
+        )  # priority to passed in ca_uuid
         # Look for CA in ca_uuids if only 1 CA is mapped
-        if not self.ca_uuid and self.push_config.ca_uuids and len(self.push_config.ca_uuids) == 1:
+        if (
+            not self.ca_uuid
+            and self.push_config.ca_uuids
+            and len(self.push_config.ca_uuids) == 1
+        ):
             self.ca_uuid = str(self.push_config.ca_uuids[0])
         if not self.ca_uuid:
             raise IndeterminableCAException(
@@ -877,10 +838,14 @@ class SMARTTransformerV2(Transformer, ABC):
     async def get_configurable_models(self):
         if not self._configurable_models:
             try:
-                self._configurable_models = list([
-                    await self.smartconnect_client.get_configurable_data_model(cm_uuid=cm_uuid)
-                    for cm_uuid in self.cm_uuids
-                ])
+                self._configurable_models = list(
+                    [
+                        await self.smartconnect_client.get_configurable_data_model(
+                            cm_uuid=cm_uuid
+                        )
+                        for cm_uuid in self.cm_uuids
+                    ]
+                )
             except Exception as e:
                 self._ca_config_datamodel = []
                 logger.exception(
@@ -938,20 +903,22 @@ class SMARTTransformerV2(Transformer, ABC):
         # direct data model match
         ca_datamodel = await self.get_ca_datamodel()
         if matched_category := ca_datamodel.get_category(path=event.event_type):
-            return matched_category['path']
+            return matched_category["path"]
 
         # convert event type to CA path syntax
         if matched_category := ca_datamodel.get_category(
-                path=str.replace(event.event_type, "_", ".")
-            ):
-            return matched_category['path']
+            path=str.replace(event.event_type, "_", ".")
+        ):
+            return matched_category["path"]
 
         # Last option is a match in translation rules.
         for t in self._transformation_rules.category_map:
             if t.event_type == event.event_type:
                 return t.category_path
 
-    async def _resolve_attribute(self, key, value) -> Tuple[Union[str, None], Union[str, None]]:
+    async def _resolve_attribute(
+        self, key, value
+    ) -> Tuple[Union[str, None], Union[str, None]]:
         attr = None
 
         # Favor a match in configurable model.
@@ -1113,13 +1080,14 @@ class SmartEventTransformerV2(SMARTTransformerV2):
     Transform a single Event into an Independent Incident.
     """
 
-    def __init__(
-        self, *, config: SMARTPushEventActionConfig, **kwargs
-    ):
+    def __init__(self, *, config: SMARTPushEventActionConfig, **kwargs):
         super().__init__(config=config, **kwargs)
 
-    async def transform(self, message: schemas.v2.Event, rules: list = None, **kwargs) -> dict:
+    async def transform(
+        self, message: schemas.v2.Event, rules: list = None, **kwargs
+    ) -> dict:
         from app.transform_service.services import get_ca_uuid_for_event
+
         message, message_ca_uuid = get_ca_uuid_for_event(event=message)
         if message_ca_uuid:
             self.ca_uuid = str(message_ca_uuid)
