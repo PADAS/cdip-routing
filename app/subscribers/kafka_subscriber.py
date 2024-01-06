@@ -266,10 +266,16 @@ async def process_observation(key, message):
                     )
 
                 for destination in destinations:
+                    # Get additional configuration for the destination
+                    if gundi_version == "v2":
+                        destination_integration = await get_integration(integration_id=destination.id)
+                        broker_config = destination_integration.additional
+                    else:
+                        broker_config = destination.additional
                     # Transform the observation for the destination
-                    transformed_observation = transform_observation_to_destination_schema(
+                    transformed_observation = await transform_observation_to_destination_schema(
                         observation=observation,
-                        destination=destination,
+                        destination=destination_integration if gundi_version == "v2" else destination,
                         provider=provider,
                         route_configuration=route_configuration,
                         gundi_version=gundi_version
@@ -286,12 +292,6 @@ async def process_observation(key, message):
                         f"Transformed observation: {transformed_observation}, attributes: {attributes}"
                     )
 
-                    # Check which broker to use to route the message
-                    if gundi_version == "v2":
-                        destination_integration = await get_integration(integration_id=destination.id)
-                        broker_config = destination_integration.additional
-                    else:
-                        broker_config = destination.additional
                     broker_type = broker_config.get("broker", Broker.KAFKA.value).strip().lower()
                     current_span.set_attribute("broker", broker_type)
                     if broker_type not in supported_brokers:
