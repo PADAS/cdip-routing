@@ -13,6 +13,7 @@ router_app:
     GCP_PROJECT_ID: cdip-prod1-78ca
     GCP_ENVIRONMENT: prod
     BUCKET_NAME: "cdip-files-prod"
+    MOVEBANK_DISPATCHER_DEFAULT_TOPIC: "destination-movebank-prod"
 retry_long:
   replicaCount: 1
 retry_short:

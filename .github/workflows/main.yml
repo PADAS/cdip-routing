@@ -33,7 +33,7 @@ jobs:
     with:
       environment: dev
       chart_name: router-app
-      chart_version: '0.6.0'
+      chart_version: '0.6.1'
       repository: ${{ needs.vars.outputs.repository }}
       tag: ${{ needs.vars.outputs.tag }}
 
@@ -44,7 +44,7 @@ jobs:
     with:
       environment: stage
       chart_name: router-app
-      chart_version: '0.6.0'
+      chart_version: '0.6.1'
       repository: ${{ needs.vars.outputs.repository }}
       tag: ${{ needs.vars.outputs.tag }}
 
@@ -55,6 +55,6 @@ jobs:
     with:
       environment: prod
       chart_name: router-app
-      chart_version: '0.6.0'
+      chart_version: '0.6.1'
       repository: ${{ needs.vars.outputs.repository }}
       tag: ${{ needs.vars.outputs.tag }}
