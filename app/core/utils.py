@@ -1,6 +1,6 @@
 import logging
 from enum import Enum
-
+import aioredis
 import walrus
 from hashlib import md5
 from uuid import UUID
@@ -33,8 +33,10 @@ def get_redis_db():
     logger.debug(
         f"Connecting to REDIS DB :{settings.REDIS_DB} at {settings.REDIS_HOST}:{settings.REDIS_PORT}"
     )
-    return walrus.Database(
-        host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB
+    return aioredis.from_url(
+        f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}",
+        encoding="utf-8",
+        decode_responses=True,
     )
 
 

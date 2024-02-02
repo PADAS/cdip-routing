@@ -48,7 +48,7 @@ async def get_outbound_config_detail(
     }
 
     cache_key = f"outbound_detail.{outbound_id}"
-    cached = _cache_db.get(cache_key)
+    cached = await _cache_db.get(cache_key)
 
     if cached:
         config = schemas.OutboundConfiguration.parse_raw(cached)
@@ -90,7 +90,9 @@ async def get_outbound_config_detail(
                 "Connection Error",
                 extra={**extra_dict, ExtraKeys.Url: target_url},
             )
-            raise ReferenceDataError(f"Failed to connect to the portal at {target_url}, {e}")
+            raise ReferenceDataError(
+                f"Failed to connect to the portal at {target_url}, {e}"
+            )
         except aiohttp.ClientResponseError as e:
             target_url = str(e.request_info.url)
             logger.exception(
@@ -118,7 +120,7 @@ async def get_outbound_config_detail(
                 )
             else:
                 if config:  # don't cache empty response
-                    _cache_db.setex(cache_key, _cache_ttl, config.json())
+                    await _cache_db.setex(cache_key, _cache_ttl, config.json())
                 return config
 
 
@@ -134,7 +136,7 @@ async def get_inbound_integration_detail(
     }
 
     cache_key = f"inbound_detail.{integration_id}"
-    cached = _cache_db.get(cache_key)
+    cached = await _cache_db.get(cache_key)
 
     if cached:
         config = schemas.IntegrationInformation.parse_raw(cached)
@@ -194,7 +196,7 @@ async def get_inbound_integration_detail(
                 )
             else:
                 if config:  # don't cache empty response
-                    _cache_db.setex(cache_key, _cache_ttl, config.json())
+                    await _cache_db.setex(cache_key, _cache_ttl, config.json())
                 return config
 
 
@@ -255,7 +257,9 @@ async def dispatch_transformed_observation(
                         ExtraKeys.AttentionNeeded: True,
                     },
                 )
-                raise DispatcherException(f"Exception occurred dispatching observation {e}")
+                raise DispatcherException(
+                    f"Exception occurred dispatching observation {e}"
+                )
         else:
             extra_dict[ExtraKeys.Provider] = config.type_slug
             logger.error(
@@ -426,4 +430,3 @@ def get_key_for_transformed_observation(current_key: bytes, destination_id: UUID
     else:
         new_key = f"{current_key.decode('utf-8')}.{str(destination_id)}"
         return new_key.encode("utf-8")
-
