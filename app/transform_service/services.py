@@ -20,7 +20,8 @@ from app.transform_service.smartconnect_transformers import (
     SmartEventTransformer,
     SmartERPatrolTransformer,
     CAConflictException,
-    IndeterminableCAException, SmartEventTransformerV2,
+    IndeterminableCAException,
+    SmartEventTransformerV2,
 )
 from app.transform_service.transformers import (
     ERPositionTransformer,
@@ -32,7 +33,7 @@ from app.transform_service.transformers import (
     ERObservationTransformer,
     FieldMappingRule,
     MBPositionTransformer,
-    MBObservationTransformer
+    MBObservationTransformer,
 )
 from gundi_client import PortalApi
 from gundi_client_v2 import GundiClient
@@ -63,7 +64,7 @@ async def get_all_outbound_configs_for_id(
     }
 
     cache_key = f"device_destinations.{inbound_id}.{device_id}"
-    cached = _cache_db.get(cache_key)
+    cached = await _cache_db.get(cache_key)
 
     if cached:
         configs = OutboundConfigurations.parse_raw(cached).configurations
@@ -98,7 +99,9 @@ async def get_all_outbound_configs_for_id(
                 "Connection Error",
                 extra={**extra_dict, ExtraKeys.Url: target_url},
             )
-            raise ReferenceDataError(f"Failed to connect to the portal at {target_url}, {e}")
+            raise ReferenceDataError(
+                f"Failed to connect to the portal at {target_url}, {e}"
+            )
         except aiohttp.ClientResponseError as e:
             target_url = str(e.request_info.url)
             logger.exception(
@@ -128,7 +131,7 @@ async def get_all_outbound_configs_for_id(
             else:
                 configs = OutboundConfigurations(configurations=configurations)
                 if configurations:  # don't cache empty response
-                    _cache_db.setex(cache_key, _cache_ttl, configs.json())
+                    await _cache_db.setex(cache_key, _cache_ttl, configs.json())
                 return configs.configurations
 
 
@@ -185,7 +188,7 @@ async def ensure_device_integration(integration_id, device_id: str):
     }
 
     cache_key = f"device_detail.{integration_id}.{device_id}"
-    cached = _cache_db.get(cache_key)
+    cached = await _cache_db.get(cache_key)
 
     if cached:
         device = schemas.Device.parse_raw(cached)
@@ -225,7 +228,7 @@ async def ensure_device_integration(integration_id, device_id: str):
                 )
 
             if device:  # don't cache empty response
-                _cache_db.setex(cache_key, _cache_ttl, device.json())
+                await _cache_db.setex(cache_key, _cache_ttl, device.json())
             return device
 
         except Exception as e:
@@ -340,12 +343,19 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
     ca_uuid = ca_uuids.pop()
     return patrol, ca_uuid
 
+
 import re
-def get_ca_uuid_for_event(*args, event: Union[schemas.EREvent, schemas.GeoEvent, schemas.v2.Event]):
+
+
+def get_ca_uuid_for_event(
+    *args, event: Union[schemas.EREvent, schemas.GeoEvent, schemas.v2.Event]
+):
 
     assert not args, "get_ca_uuid_for_event takes only keyword args"
 
-    uuid_pattern = re.compile('[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.I)
+    uuid_pattern = re.compile(
+        "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I
+    )
 
     """get ca_uuid from prefix of event_type and strip it from event_type"""
     elements = event.event_type.split("_")
@@ -370,12 +380,17 @@ def get_ca_uuid_for_event(*args, event: Union[schemas.EREvent, schemas.GeoEvent,
 # GUNDI V2
 ########################################################################################################################
 
+
 def get_source_id(observation, gundi_version="v1"):
     return observation.source_id if gundi_version == "v2" else observation.device_id
 
 
 def get_data_provider_id(observation, gundi_version="v1"):
-    return observation.data_provider_id if gundi_version == "v2" else observation.integration_id
+    return (
+        observation.data_provider_id
+        if gundi_version == "v2"
+        else observation.integration_id
+    )
 
 
 async def apply_source_configurations(*, observation, gundi_version="v1"):
@@ -386,67 +401,57 @@ async def apply_source_configurations(*, observation, gundi_version="v1"):
         return await update_observation_with_device_configuration(observation)
 
 
-def write_to_cache_safe(key, ttl, instance, extra_dict):
+async def write_to_cache_safe(key, ttl, instance, extra_dict):
     if not instance:
         logger.warning(
-            f"[write_to_cache_safe]> Ignoring null instance.",
-            extra={**extra_dict}
+            f"[write_to_cache_safe]> Ignoring null instance.", extra={**extra_dict}
         )
     try:
-        _cache_db.setex(key, ttl, instance.json())
+        await _cache_db.setex(key, ttl, instance.json())
     except redis_exceptions.ConnectionError as e:
         logger.warning(
-            f"ConnectionError while writing to Cache: {e}",
-            extra={**extra_dict}
+            f"ConnectionError while writing to Cache: {e}", extra={**extra_dict}
         )
     except Exception as e:
         logger.warning(
-            f"Unknown Error while writing to Cache: {e}",
-            extra={**extra_dict}
+            f"Unknown Error while writing to Cache: {e}", extra={**extra_dict}
         )
 
 
 async def get_connection(*, connection_id):
     connection = None
-    extra_dict = {
-        "connection_id": connection_id
-    }
+    extra_dict = {"connection_id": connection_id}
     try:
         cache_key = f"connection_detail.{connection_id}"
-        cached_data = _cache_db.get(cache_key)
+        cached_data = await _cache_db.get(cache_key)
         if cached_data:
             logger.debug(
                 "Connection details retrieved from cache.",
-                extra={
-                    **extra_dict,
-                    "cache_key": cache_key
-                },
+                extra={**extra_dict, "cache_key": cache_key},
             )
             connection = schemas.v2.Connection.parse_raw(cached_data)
         else:  # Not in cache, retrieve it from the portal
             logger.debug(
                 "Cache Miss. Retrieving connection details from the portal..",
-                extra={
-                    **extra_dict,
-                    "cache_key": cache_key
-                },
+                extra={**extra_dict, "cache_key": cache_key},
             )
-            connection = await portal_v2.get_connection_details(integration_id=connection_id)
+            connection = await portal_v2.get_connection_details(
+                integration_id=connection_id
+            )
     except redis_exceptions.ConnectionError as e:
         logger.error(
-            f"ConnectionError while reading connection details from Cache: {e}", extra={**extra_dict}
+            f"ConnectionError while reading connection details from Cache: {e}",
+            extra={**extra_dict},
         )
         connection = None
     except Exception as e:
         logger.error(
-            f"Internal Error while getting connection details: {e}", extra={**extra_dict}
+            f"Internal Error while getting connection details: {e}",
+            extra={**extra_dict},
         )
     else:
-        write_to_cache_safe(
-            key=cache_key,
-            ttl=_cache_ttl,
-            instance=connection,
-            extra_dict=extra_dict
+        await write_to_cache_safe(
+            key=cache_key, ttl=_cache_ttl, instance=connection, extra_dict=extra_dict
         )
     finally:
         return connection
@@ -454,44 +459,34 @@ async def get_connection(*, connection_id):
 
 async def get_route(*, route_id):
     route = None
-    extra_dict = {
-        "connection_id": route_id
-    }
+    extra_dict = {"connection_id": route_id}
     try:
         cache_key = f"route_detail.{route_id}"
-        cached_data = _cache_db.get(cache_key)
+        cached_data = await _cache_db.get(cache_key)
         if cached_data:
             logger.debug(
                 "Route details retrieved from cache.",
-                extra={
-                    **extra_dict,
-                    "cache_key": cache_key
-                },
+                extra={**extra_dict, "cache_key": cache_key},
             )
             route = schemas.v2.Route.parse_raw(cached_data)
         else:  # Not in cache, retrieve it from the portal
             logger.debug(
                 "Cache Miss. Retrieving route details from the portal..",
-                extra={
-                    **extra_dict,
-                    "cache_key": cache_key
-                },
+                extra={**extra_dict, "cache_key": cache_key},
             )
             route = await portal_v2.get_route_details(route_id=route_id)
     except redis_exceptions.ConnectionError as e:
         logger.error(
-            f"ConnectionError while reading route details from Cache: {e}", extra={**extra_dict}
+            f"ConnectionError while reading route details from Cache: {e}",
+            extra={**extra_dict},
         )
     except Exception as e:
         logger.error(
             f"Internal Error while getting route details: {e}", extra={**extra_dict}
         )
     else:
-        write_to_cache_safe(
-            key=cache_key,
-            ttl=_cache_ttl,
-            instance=route,
-            extra_dict=extra_dict
+        await write_to_cache_safe(
+            key=cache_key, ttl=_cache_ttl, instance=route, extra_dict=extra_dict
         )
     finally:
         return route
@@ -499,53 +494,47 @@ async def get_route(*, route_id):
 
 async def get_integration(*, integration_id):
     integration = None
-    extra_dict = {
-        "integration_id": integration_id
-    }
+    extra_dict = {"integration_id": integration_id}
     try:
         cache_key = f"integration_v2_detail.{integration_id}"
-        cached_data = _cache_db.get(cache_key)
+        cached_data = await _cache_db.get(cache_key)
         if cached_data:
             logger.debug(
                 "Integration details retrieved from cache.",
-                extra={
-                    **extra_dict,
-                    "cache_key": cache_key
-                },
+                extra={**extra_dict, "cache_key": cache_key},
             )
             integration = schemas.v2.Integration.parse_raw(cached_data)
         else:  # Not in cache, retrieve it from the portal
             logger.debug(
                 "Cache Miss. Retrieving integration details from the portal..",
-                extra={
-                    **extra_dict,
-                    "cache_key": cache_key
-                },
+                extra={**extra_dict, "cache_key": cache_key},
             )
-            integration = await portal_v2.get_integration_details(integration_id=integration_id)
+            integration = await portal_v2.get_integration_details(
+                integration_id=integration_id
+            )
     except redis_exceptions.ConnectionError as e:
         logger.error(
-            f"ConnectionError while reading integration details from Cache: {e}", extra={**extra_dict}
+            f"ConnectionError while reading integration details from Cache: {e}",
+            extra={**extra_dict},
         )
     except Exception as e:
         logger.error(
-            f"Internal Error while getting integration details: {e}", extra={**extra_dict}
+            f"Internal Error while getting integration details: {e}",
+            extra={**extra_dict},
         )
     else:
-        write_to_cache_safe(
-            key=cache_key,
-            ttl=_cache_ttl,
-            instance=integration,
-            extra_dict=extra_dict
+        await write_to_cache_safe(
+            key=cache_key, ttl=_cache_ttl, instance=integration, extra_dict=extra_dict
         )
     finally:
         return integration
+
 
 # Map to get the right transformer for the observation type and destination
 transformers_map = {
     schemas.v2.StreamPrefixEnum.event.value: {
         schemas.DestinationTypes.EarthRanger.value: EREventTransformer,
-        schemas.DestinationTypes.SmartConnect.value: SmartEventTransformerV2
+        schemas.DestinationTypes.SmartConnect.value: SmartEventTransformerV2,
     },
     schemas.v2.StreamPrefixEnum.attachment.value: {
         schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer
@@ -562,7 +551,9 @@ transformers_map = {
 
 
 # ToDo: receive configurations, optionally
-async def transform_observation_v2(observation, destination, provider, route_configuration=None):
+async def transform_observation_v2(
+    observation, destination, provider, route_configuration=None
+):
     # Look for a proper transformer for this stream type and destination type
     stream_type = observation.observation_type
     destination_type = destination.type.value
@@ -575,7 +566,7 @@ async def transform_observation_v2(observation, destination, provider, route_con
             extra={
                 ExtraKeys.StreamType: stream_type,
                 ExtraKeys.DestinationType: destination_type,
-            }
+            },
         )
         raise TransformerNotFound(
             f"No transformer found for {stream_type} dest: {destination_type}"
@@ -583,42 +574,59 @@ async def transform_observation_v2(observation, destination, provider, route_con
 
     # Check for extra configurations to apply
     rules = []
-    if route_configuration and (field_mappings := route_configuration.data.get("field_mappings")):
-        configuration = field_mappings.get(
-            # First look for configurations for this data provider
-            str(observation.data_provider_id), {}
-        ).get(  # Then look for configurations for this stream type
-            str(stream_type), {}
-        ).get(
-            # Then look for configurations for this destination
-            str(destination.id), {}
+    if route_configuration and (
+        field_mappings := route_configuration.data.get("field_mappings")
+    ):
+        configuration = (
+            field_mappings.get(
+                # First look for configurations for this data provider
+                str(observation.data_provider_id),
+                {},
+            )
+            .get(  # Then look for configurations for this stream type
+                str(stream_type), {}
+            )
+            .get(
+                # Then look for configurations for this destination
+                str(destination.id),
+                {},
+            )
         )
         if configuration:
             destination_field = configuration.get("destination_field")
             if not destination_field:
-                raise ReferenceDataError(f"No destination_field found in route configuration {route_configuration}")
+                raise ReferenceDataError(
+                    f"No destination_field found in route configuration {route_configuration}"
+                )
             field_mapping_rule = FieldMappingRule(
                 target=destination_field,
                 default=configuration.get("default"),
                 source=configuration.get("provider_field"),
-                map=configuration.get("map")
+                map=configuration.get("map"),
             )
             rules.append(field_mapping_rule)
 
     # Apply the transformer
     transformer = Transformer(config=destination)
-    return await transformer.transform(message=observation, rules=rules, provider=provider, gundi_version=GUNDI_V2)
+    return await transformer.transform(
+        message=observation, rules=rules, provider=provider, gundi_version=GUNDI_V2
+    )
 
 
 async def transform_observation_to_destination_schema(
-    *, observation, destination, provider=None, gundi_version="v1", route_configuration=None
+    *,
+    observation,
+    destination,
+    provider=None,
+    gundi_version="v1",
+    route_configuration=None,
 ) -> dict:
     if gundi_version == "v2":
         return await transform_observation_v2(
             observation=observation,
             destination=destination,
             provider=provider,
-            route_configuration=route_configuration
+            route_configuration=route_configuration,
         )
     else:  # Default to v1
         return await transform_observation(
@@ -628,19 +636,23 @@ async def transform_observation_to_destination_schema(
         )
 
 
-def build_transformed_message_attributes(observation, destination, gundi_version, provider_key=None):
+def build_transformed_message_attributes(
+    observation, destination, gundi_version, provider_key=None
+):
     if gundi_version == "v2":
         return {
             "gundi_version": gundi_version,
             "provider_key": provider_key,
             "gundi_id": str(observation.gundi_id),
-            "related_to": str(observation.related_to) if observation.related_to else None,
+            "related_to": str(observation.related_to)
+            if observation.related_to
+            else None,
             "stream_type": str(observation.observation_type),
             "source_id": str(observation.source_id),
             "external_source_id": str(observation.external_source_id),
             "destination_id": str(destination.id),
             "data_provider_id": str(get_data_provider_id(observation, gundi_version)),
-            "annotations": json.dumps(observation.annotations)
+            "annotations": json.dumps(observation.annotations),
         }
     else:  # default to v1
         return {
