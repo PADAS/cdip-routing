@@ -20,7 +20,16 @@ def async_return(result):
 @pytest.fixture
 def mock_cache(mocker):
     mock_cache = mocker.MagicMock()
-    mock_cache.get.return_value = None
+    mock_cache.set.return_value = async_return(None)
+    mock_cache.get.return_value = async_return(None)
+    mock_cache.setex.return_value = async_return(None)
+    mock_cache.incr.return_value = mock_cache
+    mock_cache.decr.return_value = async_return(None)
+    mock_cache.expire.return_value = mock_cache
+    mock_cache.execute.return_value = async_return((1, True))
+    mock_cache.__aenter__.return_value = mock_cache
+    mock_cache.__aexit__.return_value = None
+    mock_cache.pipeline.return_value = mock_cache
     return mock_cache
 
 
