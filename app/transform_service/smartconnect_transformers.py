@@ -93,56 +93,16 @@ class SMARTTransformer:
         self._version = self._config.additional.get("version", "7.5")
         logger.info(f"Using SMART Integration version {self._version}")
 
-        # ToDo: Use the async client.
         # This requires refactoring to move any network calls out of __init__
-        self.smartconnect_client = SmartClient(
+        self.smartconnect_client = AsyncSmartClient(
             api=config.endpoint,
             username=config.login,
             password=config.password,
             version=self._version,
         )
-
-        try:
-            self._ca_datamodel = self.smartconnect_client.get_data_model(
-                ca_uuid=self.ca_uuid
-            )
-        except Exception as e:
-            logger.exception(
-                f"Error getting data model for SMART CA: {self.ca_uuid}",
-                extra={ExtraKeys.Error: e},
-            )
-            raise ReferenceDataError(
-                f"Error getting data model for SMART CA: {self.ca_uuid}"
-            )
-
-        try:
-            self.cm_uuids = config.additional.get("configurable_models_enabled", [])
-
-            self._configurable_models = list(
-                [
-                    self.smartconnect_client.get_configurable_data_model(
-                        cm_uuid=cm_uuid
-                    )
-                    for cm_uuid in self.cm_uuids
-                ]
-            )
-
-        except Exception as e:
-            self._ca_config_datamodel = []
-            logger.exception(
-                f"Error getting config data model for SMART CA: {self.ca_uuid}",
-                extra={ExtraKeys.Error: e},
-            )
-
-        try:
-            self.ca = self.smartconnect_client.get_conservation_area(
-                ca_uuid=self.ca_uuid
-            )
-        except Exception as ex:
-            self.logger.warning(
-                f"Failed to get CA Metadata for endpoint: {config.endpoint}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
-            )
-            self.ca = None
+        self._ca_datamodel = None
+        self._configurable_models = None
+        self.ca = None
 
         # Let the timezone fall-back to configuration in the OutboundIntegration.
         try:
@@ -163,6 +123,54 @@ class SMARTTransformer:
         )
         self.cloud_storage = get_cloud_storage()
 
+    async def get_ca(self, config):
+        if not self.ca:
+            try:
+                self.ca = await self.smartconnect_client.get_conservation_area(
+                    ca_uuid=self.ca_uuid
+                )
+            except Exception as ex:
+                self.logger.warning(
+                    f"Failed to get CA Metadata for endpoint: {self.config.base_url}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
+                )
+                self.ca = None
+        return self.ca
+
+    async def get_configurable_models(self):
+        if not self._configurable_models:
+            try:
+                self._configurable_models = list(
+                    [
+                        await self.smartconnect_client.get_configurable_data_model(
+                            cm_uuid=cm_uuid
+                        )
+                        for cm_uuid in self.cm_uuids
+                    ]
+                )
+            except Exception as e:
+                self._ca_config_datamodel = []
+                logger.exception(
+                    f"Error getting config data model for SMART CA: {self.ca_uuid}",
+                    extra={ExtraKeys.Error: e},
+                )
+        return self._configurable_models
+
+    async def get_ca_datamodel(self):
+        if not self._ca_datamodel:
+            try:
+                self._ca_datamodel = await self.smartconnect_client.get_data_model(
+                    ca_uuid=self.ca_uuid
+                )
+            except Exception as e:
+                logger.exception(
+                    f"Error getting data model for SMART CA: {self.ca_uuid}",
+                    extra={ExtraKeys.Error: e},
+                )
+                raise ReferenceDataError(
+                    f"Error getting data model for SMART CA: {self.ca_uuid}"
+                )
+        return self._ca_datamodel
+
     def guess_location_timezone(
         self, *, longitude: Union[float, int] = None, latitude: Union[float, int] = None
     ):
@@ -178,7 +186,7 @@ class SMARTTransformer:
         except:
             return self._default_timezone
 
-    def resolve_category_path_for_event(
+    async def resolve_category_path_for_event(
         self, *, event: [schemas.GeoEvent, schemas.EREvent] = None
     ) -> str:
         """
@@ -186,18 +194,20 @@ class SMARTTransformer:
         """
 
         search_for = event.event_type.replace("_", ".")
-        for cm in self._configurable_models:
+        configurable_models = await self.get_configurable_models()
+        for cm in configurable_models:
             # favor config datamodel match if present
             # convert ER event type to CA path syntax
             if matched_category := cm.get_category(path=search_for):
                 return matched_category["hkeyPath"]
 
         # direct data model match
-        if matched_category := self._ca_datamodel.get_category(path=event.event_type):
+        ca_datamodel = await self.get_ca_datamodel()
+        if matched_category := ca_datamodel.get_category(path=event.event_type):
             return matched_category["path"]
 
         # convert ER event type to CA path syntax
-        if matched_category := self._ca_datamodel.get_category(
+        if matched_category := ca_datamodel.get_category(
             path=str.replace(event.event_type, "_", ".")
         ):
             return matched_category["path"]
@@ -207,16 +217,18 @@ class SMARTTransformer:
             if t.event_type == event.event_type:
                 return t.category_path
 
-    def _resolve_attribute(self, key, value) -> Tuple[str]:
+    async def _resolve_attribute(self, key, value) -> Tuple[str]:
         attr = None
 
         # Favor a match in configurable model.
-        for cm in self._configurable_models:
+        configurable_models = await self.get_configurable_models()
+        for cm in configurable_models:
             attr = cm.get_attribute(key=key)
             if attr:
                 break
         else:
-            attr = self._ca_datamodel.get_attribute(key=key)
+            ca_datamodel = await self.get_ca_datamodel()
+            attr = ca_datamodel.get_attribute(key=key)
 
         # Favor a match in the CA DataModel attributes dictionary.
         if attr:
@@ -256,7 +268,7 @@ class SMARTTransformer:
                 attributes[k] = v
         return attributes
 
-    def event_to_smart_request(
+    async def event_to_smart_request(
         self,
         *,
         event: Union[schemas.EREvent, schemas.GeoEvent] = None,
@@ -286,7 +298,7 @@ class SMARTTransformer:
 
         # Apply Transformation Rules
 
-        category_path = self.resolve_category_path_for_event(event=event)
+        category_path = await self.resolve_category_path_for_event(event=event)
 
         if not category_path:
             logger.error(f"No category found for event_type: {event.event_type}")
@@ -317,11 +329,11 @@ class SMARTTransformer:
             for event_file in event.files:
                 file_extension = pathlib.Path(event_file.get("filename")).suffix
                 download_file_name = event_file.get("id") + file_extension
+                # ToDo: make this async
                 downloaded_file = self.cloud_storage.download(download_file_name)
                 downloaded_file_base64 = base64.b64encode(
                     downloaded_file.getvalue()
                 ).decode()
-
                 file = File(
                     filename=event_file.get("filename"),
                     data=f"gundi:storage:{download_file_name}",  # downloaded_file_base64
@@ -380,7 +392,7 @@ class SMARTTransformer:
         )
         return smart_request
 
-    def event_to_observation(
+    async def event_to_observation(
         self, *, event: Union[schemas.EREvent, schemas.GeoEvent] = None
     ) -> SMARTRequest:
         """
@@ -389,13 +401,13 @@ class SMARTTransformer:
         Creates an observation update request. New observations are created through event_to_incident
         """
 
-        observation_update_request = self.event_to_smart_request(
+        observation_update_request = await self.event_to_smart_request(
             event=event, smart_feature_type="waypoint/observation"
         )
 
         return observation_update_request
 
-    def event_to_incident(
+    async def event_to_incident(
         self,
         *,
         event: Union[schemas.EREvent, schemas.GeoEvent] = None,
@@ -405,7 +417,7 @@ class SMARTTransformer:
         Handle both geo events and er events for version > 7.5 of smart connect
         """
 
-        incident_request = self.event_to_smart_request(
+        incident_request = await self.event_to_smart_request(
             event=event, smart_feature_type=smart_feature_type
         )
 
@@ -426,25 +438,25 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
     async def transform(self, item) -> dict:
         waypoint_requests = []
         if self._version and version.parse(self._version) >= version.parse("7.5"):
-            smart_response = self.smartconnect_client.get_incident(
+            smart_response = await self.smartconnect_client.get_incident(
                 incident_uuid=item.id
             )
             if not smart_response:
-                incident = self.event_to_incident(
+                incident = await self.event_to_incident(
                     event=item, smart_feature_type="waypoint/new"
                 )
                 waypoint_requests.append(incident)
             else:
                 # Update Incident
-                incident = self.event_to_incident(
+                incident = await self.event_to_incident(
                     event=item, smart_feature_type="waypoint"
                 )
                 waypoint_requests.append(incident)
                 # Update Observation
-                observation = self.event_to_observation(event=item)
+                observation = await self.event_to_observation(event=item)
                 waypoint_requests.append(observation)
         else:
-            incident = self.geoevent_to_incident(geoevent=item)
+            incident = await self.geoevent_to_incident(geoevent=item)
             waypoint_requests.append(incident)
         smart_request = SMARTCompositeRequest(
             waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
@@ -453,7 +465,7 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
         return json.loads(smart_request.json()) if smart_request else None
 
     # TODO: Depreciated use event_to_incident, remove when all integrations on smart connect version > 7.5.x
-    def geoevent_to_incident(
+    async def geoevent_to_incident(
         self, *, geoevent: schemas.GeoEvent = None
     ) -> SMARTRequest:
         # Sanitize coordinates
@@ -463,7 +475,7 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
 
         # Apply Transformation Rules
 
-        category_path = self.resolve_category_path_for_event(event=geoevent)
+        category_path = await self.resolve_category_path_for_event(event=geoevent)
 
         if not category_path:
             logger.error(f"No category found for event_type: {geoevent.event_type}")
@@ -523,17 +535,17 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
         super().__init__(config=config, ca_uuid=ca_uuid)
 
     async def transform(self, item) -> dict:
-        smart_request = self.er_patrol_to_smart_patrol(patrol=item)
+        smart_request = await self.er_patrol_to_smart_patrol(patrol=item)
 
         return json.loads(smart_request.json()) if smart_request else None
 
-    def get_incident_requests_from_er_patrol_leg(
+    async def get_incident_requests_from_er_patrol_leg(
         self, *, patrol_id, patrol_leg: ERPatrolSegment
     ):
         incident_requests = []
         incident_request: SMARTRequest
         for event in patrol_leg.event_details:
-            incident_request = self.event_to_patrol_waypoint(
+            incident_request = await self.event_to_patrol_waypoint(
                 patrol_id=patrol_id,
                 patrol_leg_id=patrol_leg.id,
                 event=event,
@@ -571,10 +583,10 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             track_point_requests.append(track_point_request)
         return track_point_requests
 
-    def event_to_patrol_waypoint(
+    async def event_to_patrol_waypoint(
         self, *, patrol_id, patrol_leg_id, event, smart_feature_type
     ):
-        incident_request = self.event_to_incident(
+        incident_request = await self.event_to_incident(
             event=event, smart_feature_type=smart_feature_type
         )
         # Associate the incident to this patrol leg
@@ -646,8 +658,10 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
         )
         return patrol_request
 
-    def er_patrol_to_smart_patrol(self, patrol: ERPatrol):
-        existing_smart_patrol = self.smartconnect_client.get_patrol(patrol_id=patrol.id)
+    async def er_patrol_to_smart_patrol(self, patrol: ERPatrol):
+        existing_smart_patrol = await self.smartconnect_client.get_patrol(
+            patrol_id=patrol.id
+        )
 
         if existing_smart_patrol:
             patrol_leg = patrol.patrol_segments[0]
@@ -660,7 +674,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             patrol_requests.append(patrol_request)
 
             # Get waypoints for patrol
-            patrol_waypoints = self.smartconnect_client.get_patrol_waypoints(
+            patrol_waypoints = await self.smartconnect_client.get_patrol_waypoints(
                 patrol_id=patrol.id
             )
 
@@ -676,7 +690,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                 if str(event.er_uuid).replace("-", "") not in existing_waypoint_uuids:
                     if version.parse(self._version) < version.parse("7.5.3"):
                         # check that the event wasn't already created as independent incident and then linked to patrol
-                        smart_response = self.smartconnect_client.get_incident(
+                        smart_response = await self.smartconnect_client.get_incident(
                             incident_uuid=event.id
                         )
                         if smart_response:
@@ -685,7 +699,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                             )
                             # version ^7.5.3 will allow us to create waypoint on patrol with same uuid as existing ind inc
                             continue
-                    incident_request = self.event_to_patrol_waypoint(
+                    incident_request = await self.event_to_patrol_waypoint(
                         patrol_id=patrol.id,
                         patrol_leg_id=patrol_leg.id,
                         event=event,
@@ -693,7 +707,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                     )
                     incident_requests.append(incident_request)
                 else:
-                    incident_request = self.event_to_patrol_waypoint(
+                    incident_request = await self.event_to_patrol_waypoint(
                         patrol_id=patrol.id,
                         patrol_leg_id=patrol_leg.id,
                         event=event,
@@ -702,7 +716,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                     incident_requests.append(incident_request)
 
                     # Update Observation
-                    observation = self.event_to_observation(event=event)
+                    observation = await self.event_to_observation(event=event)
                     incident_requests.append(observation)
 
             track_point_requests = self.get_track_point_requests_from_er_patrol_leg(
@@ -727,7 +741,7 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
                 patrol=patrol, patrol_leg=patrol_leg, smart_feature_type="patrol/new"
             )
 
-            incident_requests = self.get_incident_requests_from_er_patrol_leg(
+            incident_requests = await self.get_incident_requests_from_er_patrol_leg(
                 patrol_id=patrol.id, patrol_leg=patrol_leg
             )
 
@@ -989,7 +1003,6 @@ class SMARTTransformerV2(Transformer, ABC):
             )
 
         # Apply SMART Transformation Rules
-
         category_path = await self.resolve_category_path_for_event(event=event)
         if not category_path:
             logger.error(f"No category found for event_type: {event.event_type}")
