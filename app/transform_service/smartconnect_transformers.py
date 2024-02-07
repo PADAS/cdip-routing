@@ -103,6 +103,7 @@ class SMARTTransformer:
         self._ca_datamodel = None
         self._configurable_models = None
         self.ca = None
+        self.cm_uuids = config.additional.get("configurable_models_enabled", [])
 
         # Let the timezone fall-back to configuration in the OutboundIntegration.
         try:
