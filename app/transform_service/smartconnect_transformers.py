@@ -218,7 +218,9 @@ class SMARTTransformer:
             if t.event_type == event.event_type:
                 return t.category_path
 
-    async def _resolve_attribute(self, key, value) -> Tuple[str]:
+    async def _resolve_attribute(
+        self, key, value
+    ) -> Tuple[Union[str, None], Union[str, None]]:
         attr = None
 
         # Favor a match in configurable model.
@@ -255,7 +257,7 @@ class SMARTTransformer:
 
         return return_key, value
 
-    def _resolve_attributes_for_event(
+    async def _resolve_attributes_for_event(
         self, *, event: [schemas.GeoEvent, schemas.EREvent] = None
     ) -> dict:
         attributes = {}
@@ -263,7 +265,7 @@ class SMARTTransformer:
             # some event details are lists like updates
             v = v[0] if isinstance(v, list) and len(v) > 0 else v
 
-            k, v = self._resolve_attribute(k, v)
+            k, v = await self._resolve_attribute(k, v)
 
             if k:
                 attributes[k] = v
@@ -484,7 +486,7 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
                 f"No category found for event_type: {geoevent.event_type}"
             )
 
-        attributes = self._resolve_attributes_for_event(event=geoevent)
+        attributes = await self._resolve_attributes_for_event(event=geoevent)
 
         location_timezone = self.guess_location_timezone(
             longitude=geoevent.location.x, latitude=geoevent.location.y
