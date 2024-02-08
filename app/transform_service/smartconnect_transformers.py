@@ -309,7 +309,7 @@ class SMARTTransformer:
                 f"No category found for event_type: {event.event_type}"
             )
 
-        attributes = self._resolve_attributes_for_event(event=event)
+        attributes = await self._resolve_attributes_for_event(event=event)
 
         present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
         event_localtime = (
@@ -363,6 +363,9 @@ class SMARTTransformer:
         if observation_uuid == "None":
             observation_uuid = str(uuid.uuid4())  # Provide a UUID as str
 
+        logger.info(
+            f"Building SmartObservation with UUID: {observation_uuid}, category: {category_path}, attributes: {attributes}"
+        )
         smart_observation = SmartObservation(
             observationUuid=observation_uuid,
             category=category_path,
