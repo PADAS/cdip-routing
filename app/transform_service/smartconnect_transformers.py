@@ -92,7 +92,6 @@ class SMARTTransformer:
         self._version = self._config.additional.get("version", "7.5")
         logger.info(f"Using SMART Integration version {self._version}")
 
-        # This requires refactoring to move any network calls out of __init__
         self.smartconnect_client = AsyncSmartClient(
             api=config.endpoint,
             username=config.login,
