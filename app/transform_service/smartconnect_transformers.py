@@ -18,12 +18,11 @@ from gundi_core.schemas.v2 import (
     SMARTAuthActionConfig,
 )
 from pydantic import BaseModel
-from smartconnect import SmartClient, AsyncSmartClient
+from smartconnect import AsyncSmartClient
 from smartconnect.models import (
     SMARTCONNECT_DATFORMAT,
     SMARTRequest,
     SMARTCompositeRequest,
-    SMARTResponse,
     SmartObservation,
     Geometry,
     Properties,
@@ -194,23 +193,29 @@ class SMARTTransformer:
         Favor finding a match in the Config CA Datamodel, then CA Datamodel.
         """
 
-        search_for = event.event_type.replace("_", ".")
+        # Remove the uuid prefix from the event type if present
+        event_type = event.event_type
+        event_type_parts = event.event_type.split("_")
+        if event_type_parts and is_uuid(id_str=event_type_parts[0]):
+            event_type = "_".join(event_type_parts[1:])
+
+        # Convert ER event type to CA path syntax
+        event_type = event_type.replace("_", ".")
+        ca_datamodel = await self.get_ca_datamodel()
+        # Look in the CA DataModel
+        if matched_category := ca_datamodel.get_category(path=event_type):
+            return matched_category["path"]
+
+        # Look in configurable models
         configurable_models = await self.get_configurable_models()
         for cm in configurable_models:
             # favor config datamodel match if present
             # convert ER event type to CA path syntax
-            if matched_category := cm.get_category(path=search_for):
+            if matched_category := cm.get_category(path=event_type):
                 return matched_category["hkeyPath"]
 
-        # direct data model match
-        ca_datamodel = await self.get_ca_datamodel()
+        # Try a direct data model match
         if matched_category := ca_datamodel.get_category(path=event.event_type):
-            return matched_category["path"]
-
-        # convert ER event type to CA path syntax
-        if matched_category := ca_datamodel.get_category(
-            path=str.replace(event.event_type, "_", ".")
-        ):
             return matched_category["path"]
 
         # Last option is a match in translation rules.
