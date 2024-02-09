@@ -108,3 +108,46 @@ async def test_smart_transformer_with_er_event(
     observation = observations[0]
     assert observation.get("category") == "animals.sign"
     assert observation.get("observationUuid") == str(event.id)
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_with_er_patrol(
+    mocker,
+    mock_gundi_client,
+    mock_smart_async_client_class,
+    smart_outbound_configuration_kafka,
+    unprocessed_observation_er_patrol,
+):
+    mocker.patch(
+        "app.transform_service.smartconnect_transformers.AsyncSmartClient",
+        mock_smart_async_client_class,
+    )
+
+    # Mock external dependencies
+    mock_gundi_client.get_outbound_integration_list.return_value = async_return(
+        [smart_outbound_configuration_kafka]
+    )
+
+    raw_observation, _ = extract_fields_from_message(unprocessed_observation_er_patrol)
+    assert raw_observation
+
+    patrol = convert_observation_to_cdip_schema(raw_observation, gundi_version="v1")
+    assert patrol
+
+    transformed_observation = await transform_observation(
+        stream_type=patrol.observation_type,
+        config=smart_outbound_configuration_kafka,
+        observation=patrol,
+    )
+    assert transformed_observation
+    assert isinstance(transformed_observation, dict)
+    assert "patrol_requests" in transformed_observation
+    assert len(transformed_observation["patrol_requests"]) == 1
+    patrol_request = transformed_observation["patrol_requests"][0]
+    assert patrol_request.get("type") == "Feature"
+    patrol_properties = patrol_request.get("properties")
+    assert patrol_properties.get("smartDataType") == "patrol"
+    assert patrol_properties.get("smartFeatureType") == "patrol/new"
+    smart_attributes = patrol_properties.get("smartAttributes")
+    assert smart_attributes.get("patrolId") == f"ER-{patrol.serial_number}"
+    assert smart_attributes.get("patrolUuid") == str(patrol.id)
