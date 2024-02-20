@@ -1,4 +1,4 @@
-from app.settings import DEFAULT_REQUESTS_TIMEOUT
+from app.core.settings import DEFAULT_REQUESTS_TIMEOUT
 import json
 import logging
 import aiohttp

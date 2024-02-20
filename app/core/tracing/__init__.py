@@ -10,12 +10,11 @@ from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from . import config
-from . import faust_instrumentation
 from . import pubsub_instrumentation
 
 # Using the X-Cloud-Trace-Context header
 set_global_textmap(CloudTraceFormatPropagator())
-tracer = config.configure_tracer(name="cdip-routing", version="1.0.8")
+tracer = config.configure_tracer(name="cdip-routing", version="2.0.0")
 
 # Capture requests (sync and async)
 RequestsInstrumentor().instrument()

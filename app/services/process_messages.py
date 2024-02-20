@@ -27,7 +27,7 @@ from app.services.transform_utils import (
     transform_observation_to_destination_schema,
     build_transformed_message_attributes,
 )
-import app.settings as routing_settings
+from app.core import settings
 from gcloud.aio import pubsub
 
 
@@ -60,10 +60,10 @@ async def send_message_to_gcp_pubsub_dispatcher(
             # Get the topic name from config or use a default naming convention
             topic_name = broker_config.get(
                 "topic",
-                f"destination-{destination_id_str}-{routing_settings.GCP_ENVIRONMENT}",
+                f"destination-{destination_id_str}-{settings.GCP_ENVIRONMENT}",
             ).strip()
             current_span.set_attribute("topic", topic_name)
-            topic = client.topic_path(routing_settings.GCP_PROJECT_ID, topic_name)
+            topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
             messages = [pubsub.PubsubMessage(message, **attributes)]
             logger.info(f"Sending observation to PubSub topic {topic_name}..")
             try:
@@ -89,8 +89,7 @@ def get_provider_key(provider):
     return f"gundi_{provider.type.value}_{str(provider.id)}"
 
 
-# ToDo: Refactor this to process PubSub messages
-async def process_observation(message, attributes):
+async def process_observation(raw_observation, attributes):
     """
     Handle one message that has not yet been processed.
     This function transforms a message into an appropriate Model and
@@ -103,12 +102,11 @@ async def process_observation(message, attributes):
         "routing_service.process_observation", kind=SpanKind.CONSUMER
     ) as current_span:
         current_span.add_event(name="routing_service.observations_received_at_consumer")
-        current_span.set_attribute("message", str(message))
-        current_span.set_attribute("environment", routing_settings.TRACE_ENVIRONMENT)
+        current_span.set_attribute("message", str(raw_observation))
+        current_span.set_attribute("environment", settings.TRACE_ENVIRONMENT)
         current_span.set_attribute("service", "cdip-routing")
         try:
-            logger.debug(f"message received: {message}")
-            raw_observation, attributes = extract_fields_from_message(message)
+            logger.debug(f"message received")
             logger.debug(f"observation: {raw_observation}")
             logger.debug(f"attributes: {attributes}")
             # Get the schema version to process it accordingly
@@ -137,7 +135,10 @@ async def process_observation(message, attributes):
         except Exception as e:
             logger.exception(
                 f"Exception occurred prior to processing observation",
-                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.Observation: message},
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.Observation: raw_observation,
+                },
             )
             raise e
 
@@ -369,9 +370,7 @@ def is_too_old(timestamp):
 async def process_request(request):
     # Extract the observation and attributes from the CloudEvent
     json_data = await request.json()
-    transformed_observation, attributes = extract_fields_from_message(
-        json_data["message"]
-    )
+    raw_observation, attributes = extract_fields_from_message(json_data["message"])
     # Load tracing context
     tracing.pubsub_instrumentation.load_context_from_attributes(attributes)
     with tracing.tracer.start_as_current_span(
@@ -381,9 +380,7 @@ async def process_request(request):
             logger.warning(
                 f"Message discarded. The message is too old or the retry time limit has been reached."
             )
-            await send_observation_to_dead_letter_topic(
-                transformed_observation, attributes
-            )
+            await send_observation_to_dead_letter_topic(raw_observation, attributes)
             return {
                 "status": "discarded",
                 "reason": "Message is too old or the retry time limit has been reach",
@@ -392,12 +389,10 @@ async def process_request(request):
             logger.warning(
                 f"Message discarded. Version '{version}' is not supported by this dispatcher."
             )
-            await send_observation_to_dead_letter_topic(
-                transformed_observation, attributes
-            )
+            await send_observation_to_dead_letter_topic(raw_observation, attributes)
             return {
                 "status": "discarded",
                 "reason": f"Gundi '{version}' messages are not supported",
             }
-        await process_observation(transformed_observation, attributes)
+        await process_observation(raw_observation, attributes)
         return {"status": "processed"}
