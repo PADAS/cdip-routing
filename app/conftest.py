@@ -6,10 +6,7 @@ import asyncio
 import gundi_core.schemas.v2 as schemas_v2
 import gundi_core.schemas.v1 as schemas_v1
 from aiohttp.client_reqrep import ConnectionKey
-from cdip_connector.core.schemas import OutboundConfiguration
-from cdip_connector.core.routing import TopicEnum
 from pydantic.types import UUID
-from smartconnect.async_client import SMARTClientException
 
 
 def async_return(result):
@@ -224,18 +221,10 @@ def new_kafka_topic(mocker, kafka_topic_send_response):
     return _make_topic
 
 
+# ToDo. Refactor tests for PubSub
 @pytest.fixture
 def mock_kafka_topics_dic(new_kafka_topic):
-    topics_dict = {
-        TopicEnum.observations_unprocessed.value: new_kafka_topic(),
-        TopicEnum.observations_unprocessed_retry_short: new_kafka_topic(),
-        TopicEnum.observations_unprocessed_retry_long: new_kafka_topic(),
-        TopicEnum.observations_unprocessed_deadletter: new_kafka_topic(),
-        TopicEnum.observations_transformed: new_kafka_topic(),
-        TopicEnum.observations_transformed_retry_short: new_kafka_topic(),
-        TopicEnum.observations_transformed_retry_long: new_kafka_topic(),
-        TopicEnum.observations_transformed_deadletter: new_kafka_topic(),
-    }
+    topics_dict = {}
     return topics_dict
 
 
@@ -399,7 +388,7 @@ def transformed_observation_kafka_message():
 
 @pytest.fixture
 def outbound_configuration_gcp_pubsub():
-    return OutboundConfiguration.parse_obj(
+    return schemas_v1.OutboundConfiguration.parse_obj(
         {
             "id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
             "type": "f61b0c60-c863-44d7-adc6-d9b49b389e69",
@@ -417,9 +406,10 @@ def outbound_configuration_gcp_pubsub():
     )
 
 
+# ToDo. Refactor tests for PubSub
 @pytest.fixture
 def outbound_configuration_kafka():
-    return OutboundConfiguration.parse_obj(
+    return schemas_v1.OutboundConfiguration.parse_obj(
         {
             "id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
             "type": "f61b0c60-c863-44d7-adc6-d9b49b389e69",
@@ -437,9 +427,10 @@ def outbound_configuration_kafka():
     )
 
 
+# ToDo. Refactor tests for PubSub
 @pytest.fixture
 def smart_outbound_configuration_kafka():
-    return OutboundConfiguration.parse_obj(
+    return schemas_v1.OutboundConfiguration.parse_obj(
         {
             "id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
             "type": "f61b0c60-c863-44d7-adc6-d9b49b389e69",
@@ -496,9 +487,10 @@ def smart_outbound_configuration_kafka():
     )
 
 
+# ToDo. Refactor tests for PubSub
 @pytest.fixture
 def outbound_configuration_default():
-    return OutboundConfiguration.parse_obj(
+    return schemas_v1.OutboundConfiguration.parse_obj(
         {
             "id": "1c19dc7e-73e2-4af3-93f5-a1cb322e5add",
             "type": "f61b0c60-c863-44d7-adc6-d9b49b389e69",

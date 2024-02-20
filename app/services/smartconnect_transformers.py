@@ -33,7 +33,7 @@ from smartconnect.utils import guess_ca_timezone
 
 from app.core.local_logging import ExtraKeys
 from app.core.utils import is_uuid, ReferenceDataError
-from app.transform_service.transformers import Transformer
+from app.services.transformers import Transformer
 from packaging import version
 
 logger = logging.getLogger(__name__)
@@ -1107,7 +1107,7 @@ class SmartEventTransformerV2(SMARTTransformerV2):
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
     ) -> dict:
-        from app.transform_service.services import get_ca_uuid_for_event
+        from app.services.transform_utils import get_ca_uuid_for_event
 
         message, message_ca_uuid = get_ca_uuid_for_event(event=message)
         if message_ca_uuid:

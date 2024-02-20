@@ -1,6 +1,6 @@
 import pytest
 from app.transform_service.services import get_all_outbound_configs_for_id
-from cdip_connector.core import schemas
+from gundi_core import schemas
 
 
 @pytest.mark.asyncio

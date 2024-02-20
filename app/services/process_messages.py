@@ -1,8 +1,10 @@
-import asyncio
 import json
 import logging
 import aiohttp
+import asyncio
 import backoff
+from datetime import datetime, timezone
+from app import settings
 from app.core import tracing
 from opentelemetry.trace import SpanKind
 from app.core.local_logging import ExtraKeys
@@ -11,21 +13,19 @@ from app.core.utils import (
     Broker,
     supported_brokers,
 )
-from app.subscribers.services import (
+from app.services.transform_utils import (
     extract_fields_from_message,
     convert_observation_to_cdip_schema,
     build_gcp_pubsub_message,
-)
-from app.transform_service.services import (
     get_source_id,
     get_data_provider_id,
     apply_source_configurations,
-    transform_observation_to_destination_schema,
-    get_all_outbound_configs_for_id,
-    build_transformed_message_attributes,
     get_connection,
     get_route,
+    get_all_outbound_configs_for_id,
     get_integration,
+    transform_observation_to_destination_schema,
+    build_transformed_message_attributes,
 )
 import app.settings as routing_settings
 from gcloud.aio import pubsub
@@ -90,7 +90,7 @@ def get_provider_key(provider):
 
 
 # ToDo: Refactor this to process PubSub messages
-async def process_observation(message):
+async def process_observation(message, attributes):
     """
     Handle one message that has not yet been processed.
     This function transforms a message into an appropriate Model and
@@ -313,33 +313,91 @@ async def process_observation(message):
             )
 
 
-# ToDo: refactor to use PubSub
-async def process_observations(streaming_data):
-    async for key, message in streaming_data.items():
-        try:
-            await process_observation(key, message)
-        except Exception as e:
-            error_msg = f"Unexpected error prior to processing observation"
-            logger.exception(
-                error_msg,
-                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
+async def send_observation_to_dead_letter_topic(transformed_observation, attributes):
+    with tracing.tracer.start_as_current_span(
+        "send_message_to_dead_letter_topic", kind=SpanKind.CLIENT
+    ) as current_span:
+        print(f"Forwarding observation to dead letter topic: {transformed_observation}")
+        # Publish to another PubSub topic
+        connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
+        timeout_settings = aiohttp.ClientTimeout(
+            sock_connect=connect_timeout, sock_read=read_timeout
+        )
+        async with aiohttp.ClientSession(
+            raise_for_status=True, timeout=timeout_settings
+        ) as session:
+            client = pubsub.PublisherClient(session=session)
+            # Get the topic
+            topic_name = settings.DEAD_LETTER_TOPIC
+            current_span.set_attribute("topic", topic_name)
+            topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
+            # Prepare the payload
+            binary_payload = json.dumps(transformed_observation, default=str).encode(
+                "utf-8"
             )
-            # When all else fails post to dead letter
-            with tracing.tracer.start_as_current_span(
-                "routing_service.process_observations", kind=SpanKind.PRODUCER
-            ) as current_span:
-                current_span.set_attribute("error", error_msg)
-                # ToDo: refactor to use PubSub
-                # await observations_unprocessed_deadletter.send(
-                #     value=message, headers=tracing_headers
-                # )
-                current_span.set_attribute("is_sent_to_dead_letter_queue", True)
-                current_span.add_event(
-                    name="routing_service.observation_sent_to_dead_letter_queue"
+            messages = [pubsub.PubsubMessage(binary_payload, **attributes)]
+            logger.info(f"Sending observation to PubSub topic {topic_name}..")
+            try:  # Send to pubsub
+                response = await client.publish(topic, messages)
+            except Exception as e:
+                logger.exception(
+                    f"Error sending observation to dead letter topic {topic_name}: {e}. Please check if the topic exists or review settings."
                 )
+                raise e
+            else:
+                logger.info(f"Observation sent to the dead letter topic successfully.")
+                logger.debug(f"GCP PubSub response: {response}")
+
+        current_span.set_attribute("is_sent_to_dead_letter_queue", True)
+        current_span.add_event(
+            name="routing_service.observation_sent_to_dead_letter_queue"
+        )
 
 
-if __name__ == "__main__":
-    # ToDo: refactor to use FastAPI
-    logger.info("Application getting started")
-    # app.main()
+def is_too_old(timestamp):
+    if not timestamp:
+        return False
+    try:  # The timestamp does not always include the microseconds part
+        event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
+    except ValueError:
+        event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+    event_time = event_time.replace(tzinfo=timezone.utc)
+    event_age_seconds = (datetime.now(timezone.utc) - event_time).seconds
+    return event_age_seconds > settings.MAX_EVENT_AGE_SECONDS
+
+
+async def process_request(request):
+    # Extract the observation and attributes from the CloudEvent
+    json_data = await request.json()
+    transformed_observation, attributes = extract_fields_from_message(
+        json_data["message"]
+    )
+    # Load tracing context
+    tracing.pubsub_instrumentation.load_context_from_attributes(attributes)
+    with tracing.tracer.start_as_current_span(
+        "routing_service.process_request", kind=SpanKind.CLIENT
+    ) as current_span:
+        if is_too_old(timestamp=request.headers.get("ce-time")):
+            logger.warning(
+                f"Message discarded. The message is too old or the retry time limit has been reached."
+            )
+            await send_observation_to_dead_letter_topic(
+                transformed_observation, attributes
+            )
+            return {
+                "status": "discarded",
+                "reason": "Message is too old or the retry time limit has been reach",
+            }
+        if (version := attributes.get("gundi_version", "v1")) not in ["v1", "v2"]:
+            logger.warning(
+                f"Message discarded. Version '{version}' is not supported by this dispatcher."
+            )
+            await send_observation_to_dead_letter_topic(
+                transformed_observation, attributes
+            )
+            return {
+                "status": "discarded",
+                "reason": f"Gundi '{version}' messages are not supported",
+            }
+        await process_observation(transformed_observation, attributes)
+        return {"status": "processed"}

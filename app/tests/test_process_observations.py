@@ -1,9 +1,7 @@
 import pytest
-from cdip_connector.core.routing import TopicEnum
 from app.conftest import async_return
 from app.subscribers.kafka_subscriber import (
     process_observation,
-    process_transformed_observation,
 )
 
 
@@ -169,6 +167,7 @@ async def test_retry_observations_sent_to_gcp_pubsub_on_client_error(
     )
 
 
+# ToDo. Refactro tests for PubSub
 async def _test_retry_unprocessed_observations_on_portal_error(
     mocker,
     mock_cache,

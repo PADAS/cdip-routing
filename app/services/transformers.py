@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from urllib.parse import urlparse
 from typing import Any
 from gundi_core import schemas
-from app.transform_service import helpers
+from app.core import gundi, utils
 from app import settings
 
 logger = logging.getLogger(__name__)
@@ -108,12 +108,10 @@ class MBPositionTransformer(Transformer):
         def build_tag_id():
             return f"{kwargs.get('integration_type')}.{position.device_id}.{str(position.integration_id)}"
 
-        if not helpers.is_valid_position(
-            kwargs.get("gundi_version"), position.location
-        ):
+        if not utils.is_valid_position(kwargs.get("gundi_version"), position.location):
             logger.warning(f"bad position?? {position}")
         tag_id = build_tag_id()
-        gundi_urn = helpers.build_gundi_urn(
+        gundi_urn = gundi.build_gundi_urn(
             gundi_version=kwargs.get("gundi_version"),
             integration_id=position.integration_id,
             device_id=position.device_id,
@@ -239,10 +237,10 @@ class MBObservationTransformer(Transformer):
         def build_tag_id():
             return f"{provider.type.value}.{message.external_source_id}.{str(message.data_provider_id)}"
 
-        if not helpers.is_valid_position(kwargs.get("gundi_version"), message.location):
+        if not utils.is_valid_position(kwargs.get("gundi_version"), message.location):
             logger.warning(f"bad position?? {message}")
         tag_id = build_tag_id()
-        gundi_urn = helpers.build_gundi_urn(
+        gundi_urn = gundi.build_gundi_urn(
             gundi_version=kwargs.get("gundi_version"),
             integration_id=message.data_provider_id,
             device_id=message.external_source_id,

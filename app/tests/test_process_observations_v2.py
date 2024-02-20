@@ -40,7 +40,7 @@ async def test_process_attachments_v2(
 
 @pytest.mark.asyncio
 async def test_default_provider_key(
-   connection_v2,
+    connection_v2,
 ):
     provider = connection_v2.provider
     provider_key = get_provider_key(provider)
