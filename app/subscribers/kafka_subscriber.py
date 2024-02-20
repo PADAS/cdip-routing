@@ -22,9 +22,7 @@ from app.subscribers.services import (
     extract_fields_from_message,
     convert_observation_to_cdip_schema,
     get_key_for_transformed_observation,
-    dispatch_transformed_observation,
     wait_until_retry_at,
-    update_attributes_for_transformed_retry,
     create_retry_message,
     update_attributes_for_unprocessed_retry,
     build_kafka_message,
@@ -135,8 +133,12 @@ async def send_message_to_kafka_dispatcher(key, message, destination):
         )
 
 
-@backoff.on_exception(backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_tries=20)
-async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination, broker_config):
+@backoff.on_exception(
+    backoff.expo, (aiohttp.ClientError, asyncio.TimeoutError), max_tries=20
+)
+async def send_message_to_gcp_pubsub_dispatcher(
+    message, attributes, destination, broker_config
+):
     with tracing.tracer.start_as_current_span(  # Trace observations with Open Telemetry
         "routing_service.send_message_to_gcp_pubsub_dispatcher",
         kind=SpanKind.PRODUCER,
@@ -164,9 +166,13 @@ async def send_message_to_gcp_pubsub_dispatcher(message, attributes, destination
             messages = [pubsub.PubsubMessage(message, **attributes)]
             logger.info(f"Sending observation to PubSub topic {topic_name}..")
             try:
-                response = await client.publish(topic, messages, timeout=int(timeout_settings.total))
+                response = await client.publish(
+                    topic, messages, timeout=int(timeout_settings.total)
+                )
             except Exception as e:
-                error_msg = f"Error sending observation to PubSub topic {topic_name}: {e}."
+                error_msg = (
+                    f"Error sending observation to PubSub topic {topic_name}: {e}."
+                )
                 logger.exception(error_msg)
                 current_span.set_attribute("error", error_msg)
                 raise e
@@ -206,14 +212,22 @@ async def process_observation(key, message):
             logger.debug(f"attributes: {attributes}")
             # Get the schema version to process it accordingly
             gundi_version = attributes.get("gundi_version", "v1")
-            observation = convert_observation_to_cdip_schema(raw_observation, gundi_version=gundi_version)
+            observation = convert_observation_to_cdip_schema(
+                raw_observation, gundi_version=gundi_version
+            )
             observation_logging_extra = {
                 ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
-                ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
+                ExtraKeys.InboundIntId: get_data_provider_id(
+                    observation, gundi_version
+                ),
                 ExtraKeys.StreamType: observation.observation_type,
                 ExtraKeys.GundiVersion: gundi_version,
-                ExtraKeys.GundiId: observation.gundi_id if gundi_version == "v2" else observation.id,
-                ExtraKeys.RelatedTo: observation.related_to if gundi_version == "v2" else ""
+                ExtraKeys.GundiId: observation.gundi_id
+                if gundi_version == "v2"
+                else observation.id,
+                ExtraKeys.RelatedTo: observation.related_to
+                if gundi_version == "v2"
+                else "",
             }
             logger.info(
                 "received unprocessed observation",
@@ -229,15 +243,23 @@ async def process_observation(key, message):
         try:
             if observation:
                 # Process the observation differently according to the Gundi Version
-                await apply_source_configurations(observation=observation, gundi_version=gundi_version)
+                await apply_source_configurations(
+                    observation=observation, gundi_version=gundi_version
+                )
                 if gundi_version == "v2":
                     # ToDo: Implement a destination resolution algorithm considering all the routes and filters
-                    connection = await get_connection(connection_id=observation.data_provider_id)
+                    connection = await get_connection(
+                        connection_id=observation.data_provider_id
+                    )
                     provider = connection.provider
                     destinations = connection.destinations
-                    default_route = await get_route(route_id=connection.default_route.id)
+                    default_route = await get_route(
+                        route_id=connection.default_route.id
+                    )
                     route_configuration = default_route.configuration
-                    provider_key = get_provider_key(provider)  # i.e. gundi_cellstop_abc1234..
+                    provider_key = get_provider_key(
+                        provider
+                    )  # i.e. gundi_cellstop_abc1234..
                 else:  # Default to v1
                     provider = None
                     route_configuration = None
@@ -256,11 +278,17 @@ async def process_observation(key, message):
                     logger.warning(
                         "Updating observation with Device info, but it has no Destinations. This is a configuration error.",
                         extra={
-                            ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
-                            ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
+                            ExtraKeys.DeviceId: get_source_id(
+                                observation, gundi_version
+                            ),
+                            ExtraKeys.InboundIntId: get_data_provider_id(
+                                observation, gundi_version
+                            ),
                             ExtraKeys.StreamType: observation.observation_type,
                             ExtraKeys.GundiVersion: gundi_version,
-                            ExtraKeys.GundiId: observation.gundi_id if gundi_version == "v2" else observation.id,
+                            ExtraKeys.GundiId: observation.gundi_id
+                            if gundi_version == "v2"
+                            else observation.id,
                             ExtraKeys.AttentionNeeded: True,
                         },
                     )
@@ -268,17 +296,23 @@ async def process_observation(key, message):
                 for destination in destinations:
                     # Get additional configuration for the destination
                     if gundi_version == "v2":
-                        destination_integration = await get_integration(integration_id=destination.id)
+                        destination_integration = await get_integration(
+                            integration_id=destination.id
+                        )
                         broker_config = destination_integration.additional
                     else:
                         broker_config = destination.additional
                     # Transform the observation for the destination
-                    transformed_observation = await transform_observation_to_destination_schema(
-                        observation=observation,
-                        destination=destination_integration if gundi_version == "v2" else destination,
-                        provider=provider,
-                        route_configuration=route_configuration,
-                        gundi_version=gundi_version
+                    transformed_observation = (
+                        await transform_observation_to_destination_schema(
+                            observation=observation,
+                            destination=destination_integration
+                            if gundi_version == "v2"
+                            else destination,
+                            provider=provider,
+                            route_configuration=route_configuration,
+                            gundi_version=gundi_version,
+                        )
                     )
                     if not transformed_observation:
                         continue
@@ -286,13 +320,15 @@ async def process_observation(key, message):
                         observation=observation,
                         destination=destination,
                         gundi_version=gundi_version,
-                        provider_key=provider_key
+                        provider_key=provider_key,
                     )
                     logger.debug(
                         f"Transformed observation: {transformed_observation}, attributes: {attributes}"
                     )
 
-                    broker_type = broker_config.get("broker", Broker.KAFKA.value).strip().lower()
+                    broker_type = (
+                        broker_config.get("broker", Broker.KAFKA.value).strip().lower()
+                    )
                     current_span.set_attribute("broker", broker_type)
                     if broker_type not in supported_brokers:
                         raise ReferenceDataError(
@@ -314,7 +350,7 @@ async def process_observation(key, message):
                             extra={
                                 **observation_logging_extra,
                                 **attributes,
-                                "destination_id": str(destination.id)
+                                "destination_id": str(destination.id),
                             },
                         )
                     elif broker_type == Broker.GCP_PUBSUB.value:
@@ -325,14 +361,14 @@ async def process_observation(key, message):
                             message=pubsub_message,
                             attributes=attributes,
                             destination=destination,
-                            broker_config=broker_config
+                            broker_config=broker_config,
                         )
                         logger.info(
                             "Observation transformed and sent to pubsub topic successfully.",
                             extra={
                                 **observation_logging_extra,
                                 **attributes,
-                                "destination_id": str(destination.id)
+                                "destination_id": str(destination.id),
                             },
                         )
             else:
@@ -340,7 +376,9 @@ async def process_observation(key, message):
                     "Logic error, expecting 'observation' to be not None.",
                     extra={
                         ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
-                        ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
+                        ExtraKeys.InboundIntId: get_data_provider_id(
+                            observation, gundi_version
+                        ),
                         ExtraKeys.StreamType: observation.observation_type,
                         ExtraKeys.AttentionNeeded: True,
                     },
@@ -351,7 +389,9 @@ async def process_observation(key, message):
                 extra={
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
-                    ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
+                    ExtraKeys.InboundIntId: get_data_provider_id(
+                        observation, gundi_version
+                    ),
                     ExtraKeys.StreamType: observation.observation_type,
                 },
             )
@@ -367,7 +407,9 @@ async def process_observation(key, message):
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.DeadLetter: True,
                     ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
-                    ExtraKeys.InboundIntId: get_data_provider_id(observation, gundi_version),
+                    ExtraKeys.InboundIntId: get_data_provider_id(
+                        observation, gundi_version
+                    ),
                     ExtraKeys.StreamType: observation.observation_type,
                 },
             )
@@ -376,187 +418,6 @@ async def process_observation(key, message):
             tracing_headers = tracing.faust_instrumentation.build_context_headers()
             await observations_unprocessed_deadletter.send(
                 value=message, headers=tracing_headers
-            )
-            current_span.set_attribute("is_sent_to_dead_letter_queue", True)
-            current_span.add_event(
-                name="routing_service.observation_sent_to_dead_letter_queue"
-            )
-
-
-@tracing.faust_instrumentation.load_context
-async def process_transformed_observation(key, transformed_message):
-    with tracing.tracer.start_as_current_span(
-        "routing_service.process_transformed_observation", kind=SpanKind.CONSUMER
-    ) as current_span:
-        current_span.add_event(
-            name="routing_service.transformed_observation_received_at_dispatcher"
-        )
-        current_span.set_attribute("transformed_message", str(transformed_message))
-        current_span.set_attribute("environment", routing_settings.TRACE_ENVIRONMENT)
-        current_span.set_attribute("service", "cdip-routing")
-        try:
-            transformed_observation, attributes = extract_fields_from_message(
-                transformed_message
-            )
-
-            observation_type = attributes.get("observation_type")
-            device_id = attributes.get("device_id")
-            integration_id = attributes.get("integration_id")
-            outbound_config_id = attributes.get("outbound_config_id")
-            retry_attempt: int = attributes.get("retry_attempt") or 0
-            logger.debug(f"transformed_observation: {transformed_observation}")
-            logger.info(
-                "received transformed observation",
-                extra={
-                    ExtraKeys.DeviceId: device_id,
-                    ExtraKeys.InboundIntId: integration_id,
-                    ExtraKeys.OutboundIntId: outbound_config_id,
-                    ExtraKeys.StreamType: observation_type,
-                    ExtraKeys.RetryAttempt: retry_attempt,
-                },
-            )
-
-        except Exception as e:
-            logger.exception(
-                f"Exception occurred prior to dispatching transformed observation",
-                extra={
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.Observation: transformed_message,
-                },
-            )
-            raise e
-        try:
-            logger.info(
-                "Dispatching for transformed observation.",
-                extra={
-                    ExtraKeys.InboundIntId: integration_id,
-                    ExtraKeys.OutboundIntId: outbound_config_id,
-                    ExtraKeys.StreamType: observation_type,
-                },
-            )
-            with tracing.tracer.start_as_current_span(
-                "routing_service.dispatch_transformed_observation", kind=SpanKind.CLIENT
-            ) as current_span:
-                await dispatch_transformed_observation(
-                    observation_type,
-                    outbound_config_id,
-                    integration_id,
-                    transformed_observation,
-                )
-                current_span.set_attribute("is_dispatched_successfully", True)
-                current_span.set_attribute("destination_id", str(outbound_config_id))
-                current_span.add_event(
-                    name="routing_service.observation_dispatched_successfully"
-                )
-        except (DispatcherException, ReferenceDataError):
-            logger.exception(
-                f"External error occurred processing transformed observation",
-                extra={
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.DeviceId: device_id,
-                    ExtraKeys.InboundIntId: integration_id,
-                    ExtraKeys.OutboundIntId: outbound_config_id,
-                    ExtraKeys.StreamType: observation_type,
-                },
-            )
-            await process_failed_transformed_observation(key, transformed_message)
-
-        except Exception:
-            error_msg = (
-                "Unexpected internal error occurred processing transformed observation"
-            )
-            logger.exception(
-                error_msg,
-                extra={
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.DeadLetter: True,
-                    ExtraKeys.DeviceId: device_id,
-                    ExtraKeys.InboundIntId: integration_id,
-                    ExtraKeys.OutboundIntId: outbound_config_id,
-                    ExtraKeys.StreamType: observation_type,
-                },
-            )
-            # Unexpected internal errors will be redirected straight to deadletter
-            current_span.set_attribute("error", error_msg)
-            tracing_headers = tracing.faust_instrumentation.build_context_headers()
-            await observations_transformed_deadletter.send(
-                value=transformed_message, headers=tracing_headers
-            )
-            current_span.set_attribute("is_sent_to_dead_letter_queue", True)
-            current_span.add_event(
-                name="routing_service.observation_sent_to_dead_letter_queue"
-            )
-
-
-@tracing.faust_instrumentation.load_context
-async def process_failed_transformed_observation(key, transformed_message):
-    with tracing.tracer.start_as_current_span(
-        "routing_service.process_failed_transformed_observation", kind=SpanKind.CONSUMER
-    ) as current_span:
-        try:
-            transformed_observation, attributes = extract_fields_from_message(
-                transformed_message
-            )
-            attributes = update_attributes_for_transformed_retry(attributes)
-            observation_type = attributes.get("observation_type")
-            device_id = attributes.get("device_id")
-            integration_id = attributes.get("integration_id")
-            outbound_config_id = attributes.get("outbound_config_id")
-            retry_topic_str = attributes.get("retry_topic")
-            retry_attempt = attributes.get("retry_attempt")
-            retry_transformed_message = create_retry_message(
-                transformed_observation, attributes
-            )
-            retry_topic: faust.Topic = topics_dict.get(retry_topic_str)
-            extra_dict = {
-                ExtraKeys.DeviceId: device_id,
-                ExtraKeys.InboundIntId: integration_id,
-                ExtraKeys.OutboundIntId: outbound_config_id,
-                ExtraKeys.StreamType: observation_type,
-                ExtraKeys.RetryTopic: retry_topic_str,
-                ExtraKeys.RetryAttempt: retry_attempt,
-                ExtraKeys.Observation: transformed_observation,
-            }
-            current_span.set_attribute("retries", retry_attempt)
-            current_span.set_attribute("retry_topic", retry_topic_str)
-            if retry_topic_str != TopicEnum.observations_transformed_deadletter.value:
-                logger.info(
-                    "Putting failed transformed observation back on queue",
-                    extra=extra_dict,
-                )
-                current_span.add_event(
-                    name="routing_service.send_observation_to_retry_topic"
-                )
-            else:
-                logger.exception(
-                    "Retry attempts exceeded for transformed observation, sending to dead letter",
-                    extra={
-                        **extra_dict,
-                        ExtraKeys.AttentionNeeded: True,
-                        ExtraKeys.DeadLetter: True,
-                    },
-                )
-                current_span.set_attribute("is_sent_to_dead_letter_queue", True)
-                current_span.add_event(
-                    name="routing_service.observation_sent_to_dead_letter_queue"
-                )
-
-            current_span.set_attribute("destination_id", str(outbound_config_id))
-            tracing_headers = tracing.faust_instrumentation.build_context_headers()
-            await retry_topic.send(
-                value=retry_transformed_message, headers=tracing_headers
-            )
-        except Exception as e:
-            error_msg = "Unexpected Error occurred while preparing failed transformed observation for reprocessing"
-            logger.exception(
-                error_msg,
-                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.DeadLetter: True},
-            )
-            # When all else fails post to dead letter
-            current_span.set_attribute("error", error_msg)
-            tracing_headers = tracing.faust_instrumentation.build_context_headers()
-            await observations_transformed_deadletter.send(
-                value=transformed_message, headers=tracing_headers
             )
             current_span.set_attribute("is_sent_to_dead_letter_queue", True)
             current_span.add_event(

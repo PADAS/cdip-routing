@@ -13,18 +13,8 @@ from app.core.local_logging import ExtraKeys
 from app.core.utils import (
     get_redis_db,
     ReferenceDataError,
-    DispatcherException,
 )
-from app.transform_service.dispatchers import (
-    ERPositionDispatcher,
-    ERGeoEventDispatcher,
-    ERCameraTrapDispatcher,
-    WPSWatchCameraTrapDispatcher,
-    SmartConnectDispatcher,
-)
-from app.transform_service.services import transform_observation
 from gundi_client import PortalApi
-from gundi_client_v2 import GundiClient
 from app.settings import DEFAULT_REQUESTS_TIMEOUT
 
 
@@ -198,85 +188,6 @@ async def get_inbound_integration_detail(
                 if config:  # don't cache empty response
                     await _cache_db.setex(cache_key, _cache_ttl, config.json())
                 return config
-
-
-async def dispatch_transformed_observation(
-    stream_type: str, outbound_config_id: str, inbound_int_id: str, observation
-):
-    extra_dict = {
-        ExtraKeys.OutboundIntId: outbound_config_id,
-        ExtraKeys.InboundIntId: inbound_int_id,
-        ExtraKeys.Observation: observation,
-        ExtraKeys.StreamType: stream_type,
-    }
-
-    if not outbound_config_id or not inbound_int_id:
-        logger.error(
-            "dispatch_transformed_observation - value error.",
-            extra=extra_dict,
-        )
-
-    config = await get_outbound_config_detail(outbound_config_id)
-    inbound_integration = await get_inbound_integration_detail(inbound_int_id)
-    provider = inbound_integration.provider
-
-    if config:
-        if stream_type == schemas.StreamPrefixEnum.position:
-            dispatcher = ERPositionDispatcher(config, provider)
-        elif (
-            stream_type == schemas.StreamPrefixEnum.earthranger_patrol
-            or stream_type == schemas.StreamPrefixEnum.earthranger_event
-            or stream_type == schemas.StreamPrefixEnum.geoevent
-        ) and config.type_slug == schemas.DestinationTypes.SmartConnect.value:
-            dispatcher = SmartConnectDispatcher(config)
-        elif (
-            stream_type == schemas.StreamPrefixEnum.geoevent
-            and config.type_slug == schemas.DestinationTypes.EarthRanger.value
-        ):
-            dispatcher = ERGeoEventDispatcher(config, provider)
-        elif (
-            stream_type == schemas.StreamPrefixEnum.camera_trap
-            and config.type_slug == schemas.DestinationTypes.EarthRanger.value
-        ):
-            dispatcher = ERCameraTrapDispatcher(config, provider)
-        elif (
-            stream_type == schemas.StreamPrefixEnum.camera_trap
-            and config.type_slug == schemas.DestinationTypes.WPSWatch.value
-        ):
-            dispatcher = WPSWatchCameraTrapDispatcher(config)
-
-        if dispatcher:
-            try:
-                await dispatcher.send(observation)
-            except Exception as e:
-                logger.exception(
-                    f"Exception occurred dispatching observation",
-                    extra={
-                        **extra_dict,
-                        ExtraKeys.Provider: config.type_slug,
-                        ExtraKeys.AttentionNeeded: True,
-                    },
-                )
-                raise DispatcherException(
-                    f"Exception occurred dispatching observation {e}"
-                )
-        else:
-            extra_dict[ExtraKeys.Provider] = config.type_slug
-            logger.error(
-                f"No dispatcher found",
-                extra={
-                    **extra_dict,
-                    ExtraKeys.Provider: config.type_slug,
-                    ExtraKeys.AttentionNeeded: True,
-                },
-            )
-            raise Exception("No dispatcher found")
-    else:
-        logger.error(
-            f"No outbound config detail found",
-            extra={**extra_dict, ExtraKeys.AttentionNeeded: True},
-        )
-        raise ReferenceDataError
 
 
 def convert_observation_to_cdip_schema(observation, gundi_version="v1"):
