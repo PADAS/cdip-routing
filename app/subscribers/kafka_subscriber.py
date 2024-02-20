@@ -336,7 +336,6 @@ async def process_observations(streaming_data):
                 "routing_service.process_observations", kind=SpanKind.PRODUCER
             ) as current_span:
                 current_span.set_attribute("error", error_msg)
-                tracing_headers = tracing.faust_instrumentation.build_context_headers()
                 # ToDo: refactor to use PubSub
                 # await observations_unprocessed_deadletter.send(
                 #     value=message, headers=tracing_headers
