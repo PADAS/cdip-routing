@@ -2,12 +2,10 @@ import asyncio
 import json
 import logging
 import aiohttp
-from datetime import datetime
 import backoff
-import certifi
 from app.core import tracing
 from opentelemetry.trace import SpanKind
-from app.core.local_logging import DEFAULT_LOGGING, ExtraKeys
+from app.core.local_logging import ExtraKeys
 from app.core.utils import (
     ReferenceDataError,
     Broker,
@@ -16,11 +14,6 @@ from app.core.utils import (
 from app.subscribers.services import (
     extract_fields_from_message,
     convert_observation_to_cdip_schema,
-    get_key_for_transformed_observation,
-    wait_until_retry_at,
-    create_retry_message,
-    update_attributes_for_unprocessed_retry,
-    build_kafka_message,
     build_gcp_pubsub_message,
 )
 from app.transform_service.services import (
@@ -349,4 +342,4 @@ async def process_observations(streaming_data):
 if __name__ == "__main__":
     # ToDo: refactor to use FastAPI
     logger.info("Application getting started")
-    app.main()
+    # app.main()

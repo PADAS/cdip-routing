@@ -1,10 +1,6 @@
-import asyncio
 import json
-from enum import Enum
-
 import aiohttp
 import logging
-from datetime import datetime, timedelta
 from uuid import UUID
 from gundi_core import schemas
 from app import settings
@@ -202,120 +198,9 @@ def create_message(attributes, observation):
     return message
 
 
-def build_kafka_message(*, payload, attributes):
-    message = create_message(attributes, payload)
-    jsonified_data = json.dumps(message, default=str)
-    return jsonified_data
-
-
 def build_gcp_pubsub_message(*, payload):
     binary_data = json.dumps(payload, default=str).encode("utf-8")
     return binary_data
-
-
-def create_retry_message(observation, attributes):
-    return build_kafka_message(payload=observation, attributes=attributes)
-
-
-def update_attributes_for_transformed_retry(attributes):
-    retry_topic = attributes.get("retry_topic")
-    retry_attempt = attributes.get("retry_attempt")
-    retry_at = None
-
-    if settings.RETRY_SHORT_ATTEMPTS == 0 and settings.RETRY_LONG_ATTEMPTS == 0:
-        # check if retry logic disabled
-        retry_topic = routing.TopicEnum.observations_transformed_deadletter.value
-    elif not retry_topic:
-        # first failure, initialize
-        retry_topic = routing.TopicEnum.observations_transformed_retry_short.value
-        retry_attempt = 1
-        retry_at = datetime.utcnow() + timedelta(
-            minutes=settings.RETRY_SHORT_DELAY_MINUTES
-        )
-    elif retry_topic == routing.TopicEnum.observations_transformed_retry_short.value:
-        if retry_attempt < settings.RETRY_SHORT_ATTEMPTS:
-            retry_attempt += 1
-            retry_at = datetime.utcnow() + timedelta(
-                minutes=settings.RETRY_SHORT_DELAY_MINUTES
-            )
-        else:
-            retry_topic = routing.TopicEnum.observations_transformed_retry_long.value
-            retry_attempt = 1
-            retry_at = datetime.utcnow() + timedelta(
-                minutes=settings.RETRY_LONG_DELAY_MINUTES
-            )
-    elif retry_topic == routing.TopicEnum.observations_transformed_retry_long.value:
-        if retry_attempt < settings.RETRY_LONG_ATTEMPTS:
-            retry_attempt += 1
-            retry_at = datetime.utcnow() + timedelta(
-                minutes=settings.RETRY_LONG_DELAY_MINUTES
-            )
-        else:
-            retry_topic = routing.TopicEnum.observations_transformed_deadletter.value
-
-    attributes["retry_topic"] = retry_topic
-    attributes["retry_attempt"] = retry_attempt
-    if retry_at:
-        attributes["retry_at"] = retry_at.isoformat()
-
-    return attributes
-
-
-def update_attributes_for_unprocessed_retry(attributes):
-    retry_topic = attributes.get("retry_topic")
-    retry_attempt = attributes.get("retry_attempt")
-    retry_at = None
-
-    if not retry_topic:
-        # first failure, initialize
-        retry_topic = routing.TopicEnum.observations_unprocessed_retry_short.value
-        retry_attempt = 1
-        retry_at = datetime.utcnow() + timedelta(
-            minutes=settings.RETRY_SHORT_DELAY_MINUTES
-        )
-    elif retry_topic == routing.TopicEnum.observations_unprocessed_retry_short.value:
-        if retry_attempt < settings.RETRY_SHORT_ATTEMPTS:
-            retry_attempt += 1
-            retry_at = datetime.utcnow() + timedelta(
-                minutes=settings.RETRY_SHORT_DELAY_MINUTES
-            )
-        else:
-            retry_topic = routing.TopicEnum.observations_unprocessed_retry_long.value
-            retry_attempt = 1
-            retry_at = datetime.utcnow() + timedelta(
-                minutes=settings.RETRY_LONG_DELAY_MINUTES
-            )
-    elif retry_topic == routing.TopicEnum.observations_unprocessed_retry_long.value:
-        if retry_attempt < settings.RETRY_LONG_ATTEMPTS:
-            retry_attempt += 1
-            retry_at = datetime.utcnow() + timedelta(
-                minutes=settings.RETRY_LONG_DELAY_MINUTES
-            )
-        else:
-            retry_topic = routing.TopicEnum.observations_unprocessed_deadletter.value
-
-    attributes["retry_topic"] = retry_topic
-    attributes["retry_attempt"] = retry_attempt
-    if retry_at:
-        attributes["retry_at"] = retry_at.isoformat()
-
-    return attributes
-
-
-async def wait_until_retry_at(retry_at: datetime):
-    now = datetime.utcnow()
-    wait_time_seconds = (retry_at - now).total_seconds()
-    if wait_time_seconds > 0:
-        logger.info(
-            f"Waiting to re process observation",
-            extra=dict(retry_at=retry_at, wait_time_seconds=wait_time_seconds),
-        )
-        await asyncio.sleep(wait_time_seconds)
-    else:
-        logger.info(
-            f"Sending retry immediately.",
-            extra=dict(retry_at=retry_at, actual_delay_seconds=wait_time_seconds),
-        )
 
 
 def extract_fields_from_message(message):

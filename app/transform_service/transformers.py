@@ -4,9 +4,9 @@ import pytz
 from abc import ABC, abstractmethod
 from urllib.parse import urlparse
 from typing import Any
-
 from gundi_core import schemas
 from app.transform_service import helpers
+from app import settings
 
 logger = logging.getLogger(__name__)
 

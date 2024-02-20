@@ -4,8 +4,8 @@ import logging
 import pathlib
 import uuid
 from abc import ABC
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Tuple, Union, Any
+from datetime import datetime
+from typing import Optional, Tuple, Union
 
 import pytz
 import timezonefinder
@@ -62,7 +62,7 @@ class SMARTTransformer:
     """
     Transform a single EarthRanger Event into an Independent Incident.
 
-    TODO: apply transformation rules from SIntegrate configuration.
+    TODO: apply transformation rules from Sintegrate configuration.
 
     """
 
