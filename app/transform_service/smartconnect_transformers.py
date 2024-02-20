@@ -10,7 +10,6 @@ from typing import List, Optional, Tuple, Union, Any
 import pytz
 import timezonefinder
 from gundi_core import schemas
-from cdip_connector.core.cloudstorage import get_cloud_storage
 from gundi_core.schemas import ERPatrol, ERPatrolSegment
 from gundi_core.schemas.v2 import (
     SMARTTransformationRules,
@@ -120,7 +119,6 @@ class SMARTTransformer:
         self._transformation_rules = SMARTTransformationRules.parse_obj(
             transformation_rules_dict
         )
-        self.cloud_storage = get_cloud_storage()
 
     async def get_ca(self, config):
         if not self.ca:
@@ -130,7 +128,7 @@ class SMARTTransformer:
                 )
             except Exception as ex:
                 self.logger.warning(
-                    f"Failed to get CA Metadata for endpoint: {self.config.base_url}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
+                    f"Failed to get CA Metadata for endpoint: {config.base_url}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
                 )
                 self.ca = None
         return self.ca

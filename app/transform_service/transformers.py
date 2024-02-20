@@ -6,12 +6,11 @@ from urllib.parse import urlparse
 from typing import Any
 
 from gundi_core import schemas
-from cdip_connector.core import cdip_settings
 from app.transform_service import helpers
 
 logger = logging.getLogger(__name__)
 
-ADMIN_PORTAL_HOST = urlparse(cdip_settings.PORTAL_API_ENDPOINT).hostname
+ADMIN_PORTAL_HOST = urlparse(settings.PORTAL_API_ENDPOINT).hostname
 
 
 class Transformer(ABC):
@@ -30,7 +29,9 @@ class ERPositionTransformer(Transformer):
     # stream_type: schemas.StreamPrefixEnum = schemas.StreamPrefixEnum.position
     # destination_type: str = schemas.DestinationTypes.EarthRanger
 
-    async def transform(self, position: schemas.Position, rules: list = None, **kwargs) -> dict:
+    async def transform(
+        self, position: schemas.Position, rules: list = None, **kwargs
+    ) -> dict:
         if not position.location or not position.location.y or not position.location.x:
             logger.warning(f"bad position?? {position}")
         transformed_position = dict(
@@ -50,8 +51,9 @@ class ERPositionTransformer(Transformer):
 
 
 class ERGeoEventTransformer(Transformer):
-
-    async def transform(self, geo_event: schemas.GeoEvent, rules: list = None, **kwargs) -> dict:
+    async def transform(
+        self, geo_event: schemas.GeoEvent, rules: list = None, **kwargs
+    ) -> dict:
         return dict(
             title=geo_event.title,
             event_type=geo_event.event_type,
@@ -64,8 +66,9 @@ class ERGeoEventTransformer(Transformer):
 
 
 class ERCameraTrapTransformer(Transformer):
-
-    async def transform(self, payload: schemas.CameraTrap, rules: list = None, **kwargs) -> dict:
+    async def transform(
+        self, payload: schemas.CameraTrap, rules: list = None, **kwargs
+    ) -> dict:
         return dict(
             file=payload.image_uri,
             camera_name=payload.camera_name,
@@ -78,8 +81,9 @@ class ERCameraTrapTransformer(Transformer):
 
 
 class WPSWatchCameraTrapTransformer(Transformer):
-
-    async def transform(self, payload: schemas.CameraTrap, rules: list = None, **kwargs) -> dict:
+    async def transform(
+        self, payload: schemas.CameraTrap, rules: list = None, **kwargs
+    ) -> dict:
         # From and To are currently needed for current WPS Watch API
         # camera_name or device_id preceeding @ in 'To' is all that is necessary, other parts just useful for logging
         from_domain_name = f"{payload.integration_id}@{ADMIN_PORTAL_HOST}"
@@ -92,34 +96,37 @@ class WPSWatchCameraTrapTransformer(Transformer):
 
 
 class MBPositionTransformer(Transformer):
+    async def transform(
+        self, position: schemas.Position, rules: list = None, **kwargs
+    ) -> dict:
+        """
+        kwargs:
+          - integration_type: manufacturer identifier (coming from inbound) needed for tag_id generation.
+          - gundi_version: Gundi version (v1 or v2) used to URN generation.
+        """
 
-    async def transform(self, position: schemas.Position, rules: list = None, **kwargs) -> dict:
-        """
-             kwargs:
-               - integration_type: manufacturer identifier (coming from inbound) needed for tag_id generation.
-               - gundi_version: Gundi version (v1 or v2) used to URN generation.
-        """
         def build_tag_id():
             return f"{kwargs.get('integration_type')}.{position.device_id}.{str(position.integration_id)}"
 
         if not helpers.is_valid_position(
-                kwargs.get("gundi_version"),
-                position.location
+            kwargs.get("gundi_version"), position.location
         ):
             logger.warning(f"bad position?? {position}")
         tag_id = build_tag_id()
         gundi_urn = helpers.build_gundi_urn(
             gundi_version=kwargs.get("gundi_version"),
             integration_id=position.integration_id,
-            device_id=position.device_id
+            device_id=position.device_id,
         )
         transformed_position = dict(
-            recorded_at=position.recorded_at.astimezone(tz=pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            recorded_at=position.recorded_at.astimezone(tz=pytz.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
             tag_id=tag_id,
             lon=position.location.x,
             lat=position.location.y,
             sensor_type="GPS",
-            tag_manufacturer_name=kwargs.get('integration_type'),
+            tag_manufacturer_name=kwargs.get("integration_type"),
             gundi_urn=gundi_urn,
         )
 
@@ -130,7 +137,6 @@ class MBPositionTransformer(Transformer):
 # GUNDI V2
 ########################################################################################################################
 class TransformationRule(ABC):
-
     @staticmethod
     @abstractmethod
     def apply(self, message: dict, **kwargs):
@@ -138,7 +144,6 @@ class TransformationRule(ABC):
 
 
 class FieldMappingRule(TransformationRule):
-
     def __init__(self, target: str, default: str, map: dict = None, source: str = None):
         self.map = map
         self.source = source
@@ -158,22 +163,18 @@ class FieldMappingRule(TransformationRule):
             message[self.target] = self.default
             return
 
-        source_value = self._extract_value(
-            message=message, source=self.source
-        )
+        source_value = self._extract_value(message=message, source=self.source)
         if not self.map:
             message[self.target] = source_value
             return
 
-        message[self.target] = self.map.get(
-            source_value,
-            self.default
-        )
+        message[self.target] = self.map.get(source_value, self.default)
 
 
 class EREventTransformer(Transformer):
-
-    async def transform(self, message: schemas.v2.Event, rules: list = None, **kwargs) -> dict:
+    async def transform(
+        self, message: schemas.v2.Event, rules: list = None, **kwargs
+    ) -> dict:
         transformed_message = dict(
             title=message.title,
             event_type=message.event_type,
@@ -191,18 +192,17 @@ class EREventTransformer(Transformer):
 
 
 class ERAttachmentTransformer(Transformer):
-
-    async def transform(self, message: schemas.v2.Attachment, rules: list = None, **kwargs) -> dict:
+    async def transform(
+        self, message: schemas.v2.Attachment, rules: list = None, **kwargs
+    ) -> dict:
         # ToDo. Implement transformation logic for attachments
-        return dict(
-            file_path=message.file_path
-        )
+        return dict(file_path=message.file_path)
 
 
 class ERObservationTransformer(Transformer):
-
-
-    async def transform(self, message: schemas.v2.Observation, rules: list = None, **kwargs) -> dict:
+    async def transform(
+        self, message: schemas.v2.Observation, rules: list = None, **kwargs
+    ) -> dict:
         if not message.location or not message.location.lat or not message.location.lon:
             logger.warning(f"bad position?? {message}")
         transformed_message = dict(
@@ -227,29 +227,30 @@ class ERObservationTransformer(Transformer):
 
 
 class MBObservationTransformer(Transformer):
+    async def transform(
+        self, message: schemas.v2.Observation, rules: list = None, **kwargs
+    ) -> dict:
+        """
+        kwargs:
+          - provider: manufacturer object (coming from provider config) needed for tag_id generation.
+        """
+        provider = kwargs.get("provider")
 
-    async def transform(self, message: schemas.v2.Observation, rules: list = None, **kwargs) -> dict:
-        """
-             kwargs:
-               - provider: manufacturer object (coming from provider config) needed for tag_id generation.
-        """
-        provider = kwargs.get('provider')
         def build_tag_id():
             return f"{provider.type.value}.{message.external_source_id}.{str(message.data_provider_id)}"
 
-        if not helpers.is_valid_position(
-                kwargs.get("gundi_version"),
-                message.location
-        ):
+        if not helpers.is_valid_position(kwargs.get("gundi_version"), message.location):
             logger.warning(f"bad position?? {message}")
         tag_id = build_tag_id()
         gundi_urn = helpers.build_gundi_urn(
             gundi_version=kwargs.get("gundi_version"),
             integration_id=message.data_provider_id,
-            device_id=message.external_source_id
+            device_id=message.external_source_id,
         )
         transformed_position = dict(
-            recorded_at=message.recorded_at.astimezone(tz=pytz.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            recorded_at=message.recorded_at.astimezone(tz=pytz.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
             tag_id=tag_id,
             lon=message.location.lon,
             lat=message.location.lat,

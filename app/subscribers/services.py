@@ -6,7 +6,6 @@ import aiohttp
 import logging
 from datetime import datetime, timedelta
 from uuid import UUID
-from cdip_connector.core import routing
 from gundi_core import schemas
 from app import settings
 from app.core.local_logging import ExtraKeys

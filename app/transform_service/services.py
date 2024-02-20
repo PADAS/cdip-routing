@@ -4,7 +4,6 @@ import aiohttp
 from typing import List, Union
 from uuid import UUID
 from gundi_core import schemas
-from cdip_connector.core import cdip_settings
 from gundi_core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel, parse_obj_as
 from redis import exceptions as redis_exceptions

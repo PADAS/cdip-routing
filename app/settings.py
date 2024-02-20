@@ -1,4 +1,3 @@
-from cdip_connector.core import cdip_settings
 from environs import Env
 
 env = Env()
@@ -9,10 +8,10 @@ LOGGING_LEVEL = env.str("LOGGING_LEVEL", "INFO")
 DEFAULT_REQUESTS_TIMEOUT = (10, 20)  # Connect, Read
 
 PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT = (
-    f"{cdip_settings.PORTAL_API_ENDPOINT}/integrations/outbound/configurations"
+    f"{PORTAL_API_ENDPOINT}/integrations/outbound/configurations"
 )
 PORTAL_INBOUND_INTEGRATIONS_ENDPOINT = (
-    f"{cdip_settings.PORTAL_API_ENDPOINT}/integrations/inbound/configurations"
+    f"{PORTAL_API_ENDPOINT}/integrations/inbound/configurations"
 )
 
 # Settings for caching admin portal request/responses
