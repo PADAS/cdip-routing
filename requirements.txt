@@ -4,15 +4,12 @@
 #
 #    pip-compile --output-file=requirements.txt requirements.in
 #
+aiofiles==23.2.1
+    # via gcloud-aio-storage
 aiohttp==3.8.5
     # via
-    #   aiohttp-cors
-    #   cdip-connector
-    #   faust
     #   gcloud-aio-auth
     #   gundi-client
-aiohttp-cors==0.7.0
-    # via faust
 aioredis==2.0.1
     # via -r requirements.in
 aiosignal==1.3.1
@@ -38,8 +35,6 @@ backports-zoneinfo==0.2.1
     # via tzlocal
 cachetools==5.3.1
     # via google-auth
-cdip-connector @ https://github.com/PADAS/smart-integrate-sdk/releases/download/v1.3.2/cdip_connector-1.3.2-py3-none-any.whl
-    # via -r requirements.in
 certifi==2023.7.22
     # via
     #   httpcore
@@ -54,17 +49,7 @@ charset-normalizer==2.1.1
     #   aiohttp
     #   requests
 click==7.1.2
-    # via
-    #   faust
-    #   uvicorn
-colorclass==2.2.2
-    # via faust
-colorlog==6.7.0
-    # via mode
-confluent-kafka==1.9.2
-    # via cdip-connector
-croniter==1.4.1
-    # via faust
+    # via uvicorn
 cryptography==41.0.2
     # via gcloud-aio-auth
 dateparser==1.1.8
@@ -80,7 +65,6 @@ earthranger-client @ https://github.com/PADAS/er-client/releases/download/v1.2.0
 environs==9.5.0
     # via
     #   -r requirements.in
-    #   cdip-connector
     #   gundi-client
     #   gundi-client-v2
     #   smartconnect-client
@@ -88,21 +72,22 @@ exceptiongroup==1.1.2
     # via
     #   anyio
     #   pytest
-fastapi==0.89.1
-    # via -r requirements.in
-faust==1.10.4
+fastapi==0.108.0
     # via -r requirements.in
 frozenlist==1.4.0
     # via
     #   aiohttp
     #   aiosignal
 gcloud-aio-auth==4.2.3
-    # via gcloud-aio-pubsub
-gcloud-aio-pubsub==5.2.0
+    # via
+    #   gcloud-aio-pubsub
+    #   gcloud-aio-storage
+gcloud-aio-pubsub==6.0.0
+    # via -r requirements.in
+gcloud-aio-storage==9.2.0
     # via -r requirements.in
 google-api-core[grpc]==2.11.1
     # via
-    #   google-api-core
     #   google-cloud-core
     #   google-cloud-pubsub
     #   google-cloud-storage
@@ -115,13 +100,9 @@ google-auth==2.22.0
 google-cloud-core==2.3.3
     # via google-cloud-storage
 google-cloud-pubsub==2.13.12
-    # via
-    #   -r requirements.in
-    #   cdip-connector
+    # via -r requirements.in
 google-cloud-storage==1.44.0
-    # via
-    #   -r requirements.in
-    #   cdip-connector
+    # via -r requirements.in
 google-cloud-trace==1.11.2
     # via opentelemetry-exporter-gcp-trace
 google-crc32c==1.5.0
@@ -153,7 +134,7 @@ gundi-client==0.2.2
     # via -r requirements.in
 gundi-client-v2==2.1.7
     # via -r requirements.in
-gundi-core==1.2.10
+gundi-core==1.3.0
     # via
     #   -r requirements.in
     #   gundi-client-v2
@@ -179,20 +160,12 @@ idna==3.4
     #   yarl
 iniconfig==2.0.0
     # via pytest
-kafka-python==1.4.7
-    # via robinhood-aiokafka
 marshmallow==3.20.1
     # via environs
-mode==4.3.2
-    # via faust
 multidict==6.0.4
     # via
     #   aiohttp
     #   yarl
-mypy-extensions==1.0.0
-    # via
-    #   faust
-    #   mode
 numpy==1.21.6
     # via
     #   shapely
@@ -201,53 +174,36 @@ numpy==1.21.6
 opentelemetry-api==1.14.0
     # via
     #   -r requirements.in
-    #   cdip-connector
     #   opentelemetry-exporter-gcp-trace
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-aiohttp-client
-    #   opentelemetry-instrumentation-confluent-kafka
     #   opentelemetry-instrumentation-httpx
     #   opentelemetry-instrumentation-requests
     #   opentelemetry-propagator-gcp
     #   opentelemetry-sdk
 opentelemetry-exporter-gcp-trace==1.3.0
-    # via
-    #   -r requirements.in
-    #   cdip-connector
+    # via -r requirements.in
 opentelemetry-exporter-otlp-proto-http==1.14.0
-    # via
-    #   -r requirements.in
-    #   cdip-connector
+    # via -r requirements.in
 opentelemetry-instrumentation==0.35b0
     # via
     #   opentelemetry-instrumentation-aiohttp-client
     #   opentelemetry-instrumentation-httpx
     #   opentelemetry-instrumentation-requests
 opentelemetry-instrumentation-aiohttp-client==0.35b0
-    # via
-    #   -r requirements.in
-    #   cdip-connector
-opentelemetry-instrumentation-confluent-kafka==0.35b0
-    # via
-    #   -r requirements.in
-    #   cdip-connector
+    # via -r requirements.in
 opentelemetry-instrumentation-httpx==0.35b0
     # via -r requirements.in
 opentelemetry-instrumentation-requests==0.35b0
-    # via
-    #   -r requirements.in
-    #   cdip-connector
+    # via -r requirements.in
 opentelemetry-propagator-gcp==1.3.0
-    # via
-    #   -r requirements.in
-    #   cdip-connector
+    # via -r requirements.in
 opentelemetry-proto==1.14.0
     # via opentelemetry-exporter-otlp-proto-http
 opentelemetry-sdk==1.14.0
     # via
     #   -r requirements.in
-    #   cdip-connector
     #   opentelemetry-exporter-gcp-trace
     #   opentelemetry-exporter-otlp-proto-http
 opentelemetry-semantic-conventions==0.35b0
@@ -260,17 +216,13 @@ opentelemetry-util-http==0.35b0
     # via
     #   opentelemetry-instrumentation-aiohttp-client
     #   opentelemetry-instrumentation-requests
-opentracing==1.3.0
-    # via faust
 packaging==23.0
     # via
     #   -r requirements.in
     #   marshmallow
     #   pytest
 pillow==9.4.0
-    # via
-    #   -r requirements.in
-    #   cdip-connector
+    # via -r requirements.in
 pluggy==1.2.0
     # via pytest
 prometheus-client==0.17.1
@@ -295,13 +247,14 @@ pyasn1==0.5.0
     #   pyasn1-modules
     #   rsa
 pyasn1-modules==0.3.0
-    # via google-auth
+    # via
+    #   gcloud-aio-storage
+    #   google-auth
 pycparser==2.21
     # via cffi
-pydantic==1.10.4
+pydantic==1.10.13
     # via
     #   -r requirements.in
-    #   cdip-connector
     #   earthranger-client
     #   fastapi
     #   gundi-client
@@ -320,16 +273,11 @@ pytest-asyncio==0.20.3
 pytest-mock==3.10.0
     # via -r requirements.in
 python-dateutil==2.8.2
-    # via
-    #   cdip-connector
-    #   croniter
-    #   dateparser
+    # via dateparser
 python-dotenv==1.0.0
     # via environs
 python-json-logger==2.0.7
-    # via
-    #   cdip-connector
-    #   smartconnect-client
+    # via smartconnect-client
 pytz==2021.3
     # via
     #   dateparser
@@ -343,8 +291,6 @@ regex==2023.6.3
     # via dateparser
 requests==2.28.1
     # via
-    #   -r requirements.in
-    #   cdip-connector
     #   earthranger-client
     #   google-api-core
     #   google-cloud-storage
@@ -352,10 +298,10 @@ requests==2.28.1
     #   smartconnect-client
 respx==0.20.2
     # via gundi-client-v2
-robinhood-aiokafka==1.1.6
-    # via faust
 rsa==4.9
-    # via google-auth
+    # via
+    #   gcloud-aio-storage
+    #   google-auth
 shapely==2.0.1
     # via smartconnect-client
 six==1.16.0
@@ -370,19 +316,16 @@ sniffio==1.3.0
     #   anyio
     #   httpcore
     #   httpx
-starlette==0.22.0
+starlette==0.32.0.post1
     # via fastapi
-statsd==3.3.0
-    # via cdip-connector
-terminaltables==3.1.10
-    # via faust
 timezonefinder==5.2.0
     # via smartconnect-client
 tomli==2.0.1
     # via pytest
-typing-extensions==4.7.1
+typing-extensions==4.9.0
     # via
     #   aioredis
+    #   fastapi
     #   opentelemetry-sdk
     #   pydantic
     #   starlette
@@ -397,8 +340,6 @@ urllib3==1.26.14
     #   requests
 uvicorn==0.20.0
     # via -r requirements.in
-venusian==1.2.0
-    # via faust
 walrus==0.9.2
     # via -r requirements.in
 wrapt==1.15.0
@@ -406,11 +347,8 @@ wrapt==1.15.0
     #   deprecated
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-aiohttp-client
-    #   opentelemetry-instrumentation-confluent-kafka
 yarl==1.9.2
-    # via
-    #   aiohttp
-    #   faust
+    # via aiohttp
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
