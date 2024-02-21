@@ -12,6 +12,6 @@ def load_context_from_attributes(attributes):
 
 
 def build_context_headers():
-    headers = []
+    headers = {}
     propagate.inject(headers)
     return headers
