@@ -1,3 +1,5 @@
+import base64
+
 from app.core.settings import DEFAULT_REQUESTS_TIMEOUT
 import json
 import logging
@@ -234,14 +236,14 @@ def build_gcp_pubsub_message(*, payload):
 
 
 def extract_fields_from_message(message):
-    decoded_message = json.loads(message.decode("utf-8"))
-    if decoded_message:
-        observation = decoded_message.get("data")
-        attributes = decoded_message.get("attributes")
+    if message:
+        data = base64.b64decode(message.get("data", "").encode("utf-8"))
+        observation = json.loads(data)
+        attributes = message.get("attributes")
         if not observation:
-            logger.warning(f"No observation was obtained from {decoded_message}")
+            logger.warning(f"No observation was obtained from {message}")
         if not attributes:
-            logger.debug(f"No attributes were obtained from {decoded_message}")
+            logger.debug(f"No attributes were obtained from {message}")
     else:
         logger.warning(f"message contained no payload", extra={"message": message})
         return None, None

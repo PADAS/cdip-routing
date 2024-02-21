@@ -60,7 +60,7 @@ async def send_message_to_gcp_pubsub_dispatcher(
             # Get the topic name from config or use a default naming convention
             topic_name = broker_config.get(
                 "topic",
-                f"destination-{destination_id_str}-{settings.GCP_ENVIRONMENT}",
+                f"destination-{destination_id_str}-{settings.GCP_ENVIRONMENT}",  # Try with a default name for older integrations
             ).strip()
             current_span.set_attribute("topic", topic_name)
             topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
