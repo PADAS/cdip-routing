@@ -1,5 +1,5 @@
 import pytest
-from app.services.transform_utils import (
+from app.core.gundi import (
     get_inbound_integration_detail,
     get_outbound_config_detail,
 )

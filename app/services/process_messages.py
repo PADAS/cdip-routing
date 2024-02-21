@@ -9,19 +9,21 @@ from opentelemetry.trace import SpanKind
 from app.core.local_logging import ExtraKeys
 from app.core.utils import Broker
 from app.core.errors import ReferenceDataError
-from app.services.transform_utils import (
+from app.services.transformers import (
     extract_fields_from_message,
     convert_observation_to_cdip_schema,
     build_gcp_pubsub_message,
     get_source_id,
     get_data_provider_id,
+    transform_observation_to_destination_schema,
+    build_transformed_message_attributes,
+)
+from app.core.gundi import (
     apply_source_configurations,
     get_connection,
     get_route,
     get_all_outbound_configs_for_id,
     get_integration,
-    transform_observation_to_destination_schema,
-    build_transformed_message_attributes,
 )
 from app.core import settings
 from gcloud.aio import pubsub

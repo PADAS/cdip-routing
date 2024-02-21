@@ -14,10 +14,11 @@ class Broker(str, Enum):
     def __str__(self):
         return str(self.value)
 
+    KAFKA = "kafka"
     GCP_PUBSUB = "gcp_pubsub"
 
 
-supported_brokers = set(b.value for b in Broker)
+supported_brokers = {Broker.GCP_PUBSUB.value}
 
 
 def get_redis_db():
