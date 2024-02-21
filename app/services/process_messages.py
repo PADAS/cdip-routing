@@ -230,9 +230,9 @@ async def process_observation(raw_observation, attributes):
                         broker_config.get("broker", Broker.KAFKA.value).strip().lower()
                     )
                     current_span.set_attribute("broker", broker_type)
-                    if broker_type != Broker.GCP_PUBSUB.value:  # Route to a kafka topic
+                    if broker_type != Broker.GCP_PUBSUB.value:
                         raise ReferenceDataError(
-                            f"Broker {broker_type} is no longer supported. Please use `{Broker.GCP_PUBSUB}` instead."
+                            f"Broker '{broker_type}' is no longer supported. Please use `{Broker.GCP_PUBSUB}` instead."
                         )
                     # Route to a GCP PubSub topic
                     pubsub_message = build_gcp_pubsub_message(

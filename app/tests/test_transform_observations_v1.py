@@ -12,9 +12,9 @@ from app.services.transformers import (
 
 @pytest.mark.asyncio
 async def test_movebank_transformer(
-    outbound_configuration_default, unprocessed_observation_position
+    outbound_configuration_default, raw_observation_position
 ):
-    raw_observation, _ = extract_fields_from_message(unprocessed_observation_position)
+    raw_observation, _ = extract_fields_from_message(raw_observation_position)
     observation = convert_observation_to_cdip_schema(
         raw_observation, gundi_version="v1"
     )
@@ -65,7 +65,7 @@ async def test_smart_transformer_with_er_event(
     unprocessed_observation_er_event,
 ):
     mocker.patch(
-        "app.transform_service.smartconnect_transformers.AsyncSmartClient",
+        "app.services.transformers.AsyncSmartClient",
         mock_smart_async_client_class,
     )
 
@@ -118,7 +118,7 @@ async def test_smart_transformer_with_er_patrol(
     unprocessed_observation_er_patrol,
 ):
     mocker.patch(
-        "app.transform_service.smartconnect_transformers.AsyncSmartClient",
+        "app.services.transformers.AsyncSmartClient",
         mock_smart_async_client_class,
     )
 
