@@ -1,0 +1,2 @@
+class ReferenceDataError(Exception):
+    pass

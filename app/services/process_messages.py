@@ -8,11 +8,7 @@ from app import settings
 from app.core import tracing
 from opentelemetry.trace import SpanKind
 from app.core.local_logging import ExtraKeys
-from app.core.utils import (
-    ReferenceDataError,
-    Broker,
-    supported_brokers,
-)
+from app.core.utils import Broker
 from app.services.transform_utils import (
     extract_fields_from_message,
     convert_observation_to_cdip_schema,
@@ -232,32 +228,28 @@ async def process_observation(raw_observation, attributes):
                         broker_config.get("broker", Broker.KAFKA.value).strip().lower()
                     )
                     current_span.set_attribute("broker", broker_type)
-                    if broker_type not in supported_brokers:
+                    if broker_type != Broker.GCP_PUBSUB.value:  # Route to a kafka topic
                         raise ReferenceDataError(
-                            f"Invalid broker type `{broker_type}` at outbound config. Supported brokers are: {supported_brokers}"
+                            f"Broker {broker_type} is no longer supported. Please use `{Broker.GCP_PUBSUB}` instead."
                         )
-                    if broker_type == Broker.KAFKA.value:  # Route to a kafka topic
-                        raise ReferenceDataError(
-                            f"Kafka is no longer supported. Please use `{Broker.GCP_PUBSUB}` instead."
-                        )
-                    elif broker_type == Broker.GCP_PUBSUB.value:
-                        pubsub_message = build_gcp_pubsub_message(
-                            payload=transformed_observation
-                        )
-                        await send_message_to_gcp_pubsub_dispatcher(
-                            message=pubsub_message,
-                            attributes=attributes,
-                            destination=destination,
-                            broker_config=broker_config,
-                        )
-                        logger.info(
-                            "Observation transformed and sent to pubsub topic successfully.",
-                            extra={
-                                **observation_logging_extra,
-                                **attributes,
-                                "destination_id": str(destination.id),
-                            },
-                        )
+                    # Route to a GCP PubSub topic
+                    pubsub_message = build_gcp_pubsub_message(
+                        payload=transformed_observation
+                    )
+                    await send_message_to_gcp_pubsub_dispatcher(
+                        message=pubsub_message,
+                        attributes=attributes,
+                        destination=destination,
+                        broker_config=broker_config,
+                    )
+                    logger.info(
+                        "Observation transformed and sent to pubsub topic successfully.",
+                        extra={
+                            **observation_logging_extra,
+                            **attributes,
+                            "destination_id": str(destination.id),
+                        },
+                    )
             else:
                 logger.error(
                     "Logic error, expecting 'observation' to be not None.",

@@ -32,7 +32,8 @@ from smartconnect.models import (
 from smartconnect.utils import guess_ca_timezone
 
 from app.core.local_logging import ExtraKeys
-from app.core.utils import is_uuid, ReferenceDataError
+from app.core.utils import is_uuid
+from app.core.errors import ReferenceDataError
 from app.services.transformers import Transformer
 from packaging import version
 

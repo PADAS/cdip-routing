@@ -14,19 +14,10 @@ class Broker(str, Enum):
     def __str__(self):
         return str(self.value)
 
-    KAFKA = "kafka"
     GCP_PUBSUB = "gcp_pubsub"
 
 
 supported_brokers = set(b.value for b in Broker)
-
-
-class ReferenceDataError(Exception):
-    pass
-
-
-class DispatcherException(Exception):
-    pass
 
 
 def get_redis_db():

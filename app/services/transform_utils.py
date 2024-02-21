@@ -14,9 +14,9 @@ from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import (
     get_redis_db,
-    ReferenceDataError,
     coalesce,
 )
+from app.core.errors import ReferenceDataError
 from app.services.smartconnect_transformers import (
     SmartEventTransformer,
     SmartERPatrolTransformer,
