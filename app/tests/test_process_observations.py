@@ -1,8 +1,6 @@
 import pytest
 from app.conftest import async_return
-from app.subscribers.kafka_subscriber import (
-    process_observation,
-)
+from app.services.process_messages import process_observation
 
 
 @pytest.mark.asyncio

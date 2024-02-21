@@ -1,5 +1,5 @@
 import pytest
-from app.subscribers.kafka_subscriber import process_observation, get_provider_key
+from app.services.process_messages import process_observation, get_provider_key
 
 
 @pytest.mark.asyncio

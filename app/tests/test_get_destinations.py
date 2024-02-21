@@ -1,5 +1,5 @@
 import pytest
-from app.transform_service.services import get_all_outbound_configs_for_id
+from app.services.transform_utils import get_all_outbound_configs_for_id
 from gundi_core import schemas
 
 

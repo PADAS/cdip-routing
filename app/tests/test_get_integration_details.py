@@ -1,5 +1,5 @@
 import pytest
-from app.subscribers.services import (
+from app.services.transform_utils import (
     get_inbound_integration_detail,
     get_outbound_config_detail,
 )

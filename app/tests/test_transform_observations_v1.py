@@ -1,11 +1,10 @@
 import pytest
 import pytz
 from datetime import datetime
-
 from app.conftest import async_return
-from app.transform_service.services import transform_observation
-from app.transform_service import helpers
-from app.subscribers.services import (
+from app.core.gundi import URN_GUNDI_PREFIX, URN_GUNDI_INTSRC_FORMAT
+from app.services.transform_utils import (
+    transform_observation,
     extract_fields_from_message,
     convert_observation_to_cdip_schema,
 )
@@ -53,7 +52,7 @@ async def test_movebank_transformer(
     )
     assert (
         transformed_observation["gundi_urn"]
-        == f"{helpers.URN_GUNDI_PREFIX}v1.{helpers.URN_GUNDI_INTSRC_FORMAT}.{observation.integration_id}.{observation.device_id}"
+        == f"{URN_GUNDI_PREFIX}v1.{URN_GUNDI_INTSRC_FORMAT}.{observation.integration_id}.{observation.device_id}"
     )
 
 
