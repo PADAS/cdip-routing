@@ -87,49 +87,24 @@ gcloud-aio-pubsub==6.0.0
 gcloud-aio-storage==9.2.0
     # via -r requirements.in
 google-api-core[grpc]==2.11.1
-    # via
-    #   google-cloud-core
-    #   google-cloud-pubsub
-    #   google-cloud-storage
-    #   google-cloud-trace
+    # via google-cloud-trace
 google-auth==2.22.0
-    # via
-    #   google-api-core
-    #   google-cloud-core
-    #   google-cloud-storage
-google-cloud-core==2.3.3
-    # via google-cloud-storage
-google-cloud-pubsub==2.13.12
-    # via -r requirements.in
-google-cloud-storage==1.44.0
-    # via -r requirements.in
+    # via google-api-core
 google-cloud-trace==1.11.2
     # via opentelemetry-exporter-gcp-trace
-google-crc32c==1.5.0
-    # via google-resumable-media
-google-resumable-media==2.5.0
-    # via google-cloud-storage
-googleapis-common-protos[grpc]==1.60.0
+googleapis-common-protos==1.60.0
     # via
     #   google-api-core
-    #   grpc-google-iam-v1
     #   grpcio-status
     #   opentelemetry-exporter-otlp-proto-http
 gpxpy==1.5.0
     # via earthranger-client
-grpc-google-iam-v1==0.12.6
-    # via google-cloud-pubsub
 grpcio==1.56.2
     # via
     #   google-api-core
-    #   google-cloud-pubsub
-    #   googleapis-common-protos
-    #   grpc-google-iam-v1
     #   grpcio-status
 grpcio-status==1.48.2
-    # via
-    #   google-api-core
-    #   google-cloud-pubsub
+    # via google-api-core
 gundi-client==0.2.2
     # via -r requirements.in
 gundi-client-v2==2.1.7
@@ -228,17 +203,12 @@ pluggy==1.2.0
 prometheus-client==0.17.1
     # via gcloud-aio-pubsub
 proto-plus==1.22.3
-    # via
-    #   google-cloud-pubsub
-    #   google-cloud-trace
+    # via google-cloud-trace
 protobuf==3.20.3
     # via
     #   google-api-core
-    #   google-cloud-pubsub
-    #   google-cloud-storage
     #   google-cloud-trace
     #   googleapis-common-protos
-    #   grpc-google-iam-v1
     #   grpcio-status
     #   opentelemetry-proto
     #   proto-plus
@@ -293,7 +263,6 @@ requests==2.28.1
     # via
     #   earthranger-client
     #   google-api-core
-    #   google-cloud-storage
     #   opentelemetry-exporter-otlp-proto-http
     #   smartconnect-client
 respx==0.20.2
@@ -307,7 +276,6 @@ shapely==2.0.1
 six==1.16.0
     # via
     #   google-auth
-    #   google-cloud-storage
     #   python-dateutil
 smartconnect-client @ https://github.com/PADAS/smartconnect-client/releases/download/v1.5.1/smartconnect_client-1.5.1-py3-none-any.whl
     # via -r requirements.in
