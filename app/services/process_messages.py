@@ -263,8 +263,11 @@ async def process_observation(raw_observation, attributes):
                     },
                 )
         except ReferenceDataError as e:
+            error_msg = (
+                f"External error occurred obtaining reference data for observation: {e}",
+            )
             logger.exception(
-                f"External error occurred obtaining reference data for observation",
+                error_msg,
                 extra={
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.DeviceId: get_source_id(observation, gundi_version),
@@ -274,10 +277,8 @@ async def process_observation(raw_observation, attributes):
                     ExtraKeys.StreamType: observation.observation_type,
                 },
             )
-            # ToDo: refactor to use PubSub retries
-            # await process_failed_unprocessed_observation(message)
-            raise e
-
+            current_span.set_attribute("error", error_msg)
+            raise e  # Raise the exception so the message is retried later by GCP
         except Exception as e:
             error_msg = (
                 f"Unexpected internal exception occurred processing observation: {e}"
@@ -294,16 +295,9 @@ async def process_observation(raw_observation, attributes):
                     ExtraKeys.StreamType: observation.observation_type,
                 },
             )
-            # Unexpected internal errors will be redirected straight to deadletter
+            # Unexpected internal errors
             current_span.set_attribute("error", error_msg)
-            # ToDo: refactor to use PubSub
-            # await observations_unprocessed_deadletter.send(
-            #     value=message, headers=tracing_headers
-            # )
-            current_span.set_attribute("is_sent_to_dead_letter_queue", True)
-            current_span.add_event(
-                name="routing_service.observation_sent_to_dead_letter_queue"
-            )
+            raise e  # Raise the exception so the message is retried later by GCP
 
 
 async def send_observation_to_dead_letter_topic(transformed_observation, attributes):
