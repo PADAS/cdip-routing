@@ -445,11 +445,10 @@ async def ensure_device_integration(integration_id, device_id: str):
                 extra={**extra_dict, "device_id": device_id},
             )
             # raise ReferenceDataError("Error when posting device to Portal.")
-
-        # TODO: This is a hack to aleviate load on the portal.
-        return create_blank_device(
-            integration_id=str(integration_id), external_id=device_id
-        )
+            # TODO: This is a hack to aleviate load on the portal.
+            return create_blank_device(
+                integration_id=str(integration_id), external_id=device_id
+            )
 
 
 class TransformerNotFound(Exception):

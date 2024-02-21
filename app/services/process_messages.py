@@ -4,11 +4,11 @@ import aiohttp
 import asyncio
 import backoff
 from datetime import datetime, timezone
-from app import settings
 from app.core import tracing
 from opentelemetry.trace import SpanKind
 from app.core.local_logging import ExtraKeys
 from app.core.utils import Broker
+from app.core.errors import ReferenceDataError
 from app.services.transform_utils import (
     extract_fields_from_message,
     convert_observation_to_cdip_schema,
