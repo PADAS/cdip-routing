@@ -9,6 +9,6 @@ RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
 COPY ./app /code/app
 
-RUN chmod +x /var/app/start_scripts/start_app.sh
+RUN chmod +x /code/app/start_scripts/start_app.sh
 
-CMD ["/var/app/start_scripts/start_app.sh"]
+CMD ["/code/app/start_scripts/start_app.sh"]
