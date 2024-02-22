@@ -395,13 +395,334 @@ def raw_observation_cameratrap_attributes():
 
 
 @pytest.fixture
-def unprocessed_observation_er_event():
-    return b'{"attributes": {}, "data": {"id": "d3109853-747e-4c39-b821-6c897a992744", "owner": "na", "integration_id": "1055c18c-ae2f-4609-aa2f-dde86419c701", "er_uuid": "d3109853-747e-4c39-b821-6c897a992744", "location": {"latitude": -41.145108, "longitude": -71.262104}, "time": "2024-02-08 06:08:00-06:00", "created_at": "2024-02-08 06:08:51.424788-06:00", "updated_at": "2024-02-08 06:08:51.424124-06:00", "serial_number": 49534, "event_type": "169361d0-62b8-411d-a8e6-019823805016_animals_sign", "priority": 0, "priority_label": "Gray", "title": null, "state": "active", "url": "https://gundi-er.pamdas.org/api/v1.0/activity/event/d3109853-747e-4c39-b821-6c897a992744", "event_details": {"comments": "Mm test", "updates": []}, "patrols": [], "files": [], "uri": "", "device_id": "d3109853-747e-4c39-b821-6c897a992744", "observation_type": "er_event"}}'
+def raw_observation_er_event():
+    return {
+        "id": "d3109853-747e-4c39-b821-6c897a992744",
+        "owner": "na",
+        "integration_id": "1055c18c-ae2f-4609-aa2f-dde86419c701",
+        "er_uuid": "d3109853-747e-4c39-b821-6c897a992744",
+        "location": {"latitude": -41.145108, "longitude": -71.262104},
+        "time": "2024-02-08 06:08:00-06:00",
+        "created_at": "2024-02-08 06:08:51.424788-06:00",
+        "updated_at": "2024-02-08 06:08:51.424124-06:00",
+        "serial_number": 49534,
+        "event_type": "169361d0-62b8-411d-a8e6-019823805016_animals_sign",
+        "priority": 0,
+        "priority_label": "Gray",
+        "title": None,
+        "state": "active",
+        "url": "https://gundi-er.pamdas.org/api/v1.0/activity/event/d3109853-747e-4c39-b821-6c897a992744",
+        "event_details": {"comments": "Mm test", "updates": []},
+        "patrols": [],
+        "files": [],
+        "uri": "",
+        "device_id": "d3109853-747e-4c39-b821-6c897a992744",
+        "observation_type": "er_event",
+    }
 
 
 @pytest.fixture
-def unprocessed_observation_er_patrol():
-    return b'{"attributes": {}, "data": {"id": "2ce0001b-f2a3-4a4d-a108-a051019fc27d", "owner": "na", "integration_id": "1055c18c-ae2f-4609-aa2f-dde86419c701", "files": [], "serial_number": 14, "title": "Routine Patrol", "device_id": "2ce0001b-f2a3-4a4d-a108-a051019fc27d", "notes": [], "objective": "Routine Patrol", "patrol_segments": [{"end_location": null, "events": [{"id": "c9ca269e-c873-423c-ab12-b72791b303b0", "event_type": "169361d0-62b8-411d-a8e6-019823805016_animals_sign", "updated_at": "2024-02-07 14:42:36.638888-06:00", "geojson": null}, {"id": "b8e589fb-baf2-476a-96a6-0c87cf2ed847", "event_type": "169361d0-62b8-411d-a8e6-019823805016_animals_sign", "updated_at": "2024-02-08 10:04:25.052375-06:00", "geojson": {"type": "Feature", "geometry": {"type": "Point", "coordinates": [-122.3589888, 47.6839936]}}}], "event_details": [{"id": "c9ca269e-c873-423c-ab12-b72791b303b0", "owner": "na", "integration_id": null, "er_uuid": "c9ca269e-c873-423c-ab12-b72791b303b0", "location": null, "time": "2024-02-07 14:42:09.709000-06:00", "created_at": "2024-02-07 14:42:36.638857-06:00", "updated_at": "2024-02-07 14:42:36.637713-06:00", "serial_number": 49532, "event_type": "169361d0-62b8-411d-a8e6-019823805016_animals_sign", "priority": 0, "priority_label": "Gray", "title": null, "state": "active", "url": "https://gundi-er.pamdas.org/api/v1.0/activity/event/c9ca269e-c873-423c-ab12-b72791b303b0", "event_details": {"animalpoached": "carcass", "targetspecies": "birds.greyheron", "actiontakenanimal": "conficated", "numberofanimalpoached": 4, "updates": []}, "patrols": ["2ce0001b-f2a3-4a4d-a108-a051019fc27d"], "files": [], "uri": "", "device_id": "none", "observation_type": "er_event"}, {"id": "b8e589fb-baf2-476a-96a6-0c87cf2ed847", "owner": "na", "integration_id": null, "er_uuid": "b8e589fb-baf2-476a-96a6-0c87cf2ed847", "location": {"latitude": 47.6839936, "longitude": -122.3589888}, "time": "2024-02-08 10:04:11.203000-06:00", "created_at": "2024-02-08 10:04:25.052343-06:00", "updated_at": "2024-02-08 10:04:25.051476-06:00", "serial_number": 49539, "event_type": "169361d0-62b8-411d-a8e6-019823805016_animals_sign", "priority": 0, "priority_label": "Gray", "title": null, "state": "active", "url": "https://gundi-er.pamdas.org/api/v1.0/activity/event/b8e589fb-baf2-476a-96a6-0c87cf2ed847", "event_details": {"affiliation_whn": "ranger_whn", "nameprotectedarea_whn": "phousithonesca_whn", "patrolleaderorfocalpoint_whn": "ronniemartinez_whn", "updates": []}, "patrols": ["2ce0001b-f2a3-4a4d-a108-a051019fc27d"], "files": [], "uri": "", "device_id": "none", "observation_type": "er_event"}], "id": "b575aeb0-4736-4df3-86ac-6a9ae47bcb4c", "leader": {"id": "10ce2200-6565-401a-837d-fc153fb9db41", "name": "Chris Doehring (Gundi)", "subject_subtype": "ranger", "additional": {"ca_uuid": "test1230-62b8-411d-a8e6-019823805016", "smart_member_id": "a99bbb3959d04ba7b02250b21b8a3d2b"}, "is_active": true}, "patrol_type": "routine_patrol", "scheduled_start": null, "scheduled_end": "2024-02-09 02:00:00-06:00", "start_location": {"latitude": 47.686076965642606, "longitude": -122.35928648394253}, "time_range": {"start_time": "2024-02-07T14:40:24-06:00", "end_time": null}, "updates": [{"message": "Updated fields: ", "time": "2024-02-08 16:04:27.683350+00:00", "user": {"username": "chrisd", "first_name": "Chris", "last_name": "Doehring", "id": "8ffee729-7ff5-490e-9206-6f33a4038926", "content_type": "accounts.user"}, "type": "update_segment"}, {"message": "Report Added", "time": "2024-02-08 16:04:25.087190+00:00", "user": {"username": "chrisd", "first_name": "Chris", "last_name": "Doehring", "id": "8ffee729-7ff5-490e-9206-6f33a4038926", "content_type": "accounts.user"}, "type": "add_event"}, {"message": "Updated fields: ", "time": "2024-02-08 16:03:33.073148+00:00", "user": {"username": "chrisd", "first_name": "Chris", "last_name": "Doehring", "id": "8ffee729-7ff5-490e-9206-6f33a4038926", "content_type": "accounts.user"}, "type": "update_segment"}, {"message": "Report Added", "time": "2024-02-07 20:42:36.667571+00:00", "user": {"username": "chrisd", "first_name": "Chris", "last_name": "Doehring", "id": "8ffee729-7ff5-490e-9206-6f33a4038926", "content_type": "accounts.user"}, "type": "add_event"}, {"message": "Updated fields: Scheduled End", "time": "2024-02-07 20:41:55.477668+00:00", "user": {"username": "chrisd", "first_name": "Chris", "last_name": "Doehring", "id": "8ffee729-7ff5-490e-9206-6f33a4038926", "content_type": "accounts.user"}, "type": "update_segment"}], "track_points": [{"id": "c37a9148-f061-439d-ac60-5e4e4a8f03c8", "location": {"latitude": 47.68607630950026, "longitude": -122.3592951927474}, "created_at": "2024-02-09 04:33:53+00:00", "recorded_at": "2024-02-09 04:33:52+00:00", "source": "cf72a238-b4d1-46c8-8b80-01f46c474e22", "observation_details": {"accuracy": 4.7}}, {"id": "091a74bb-014a-44cf-8713-56ed866205ef", "location": {"latitude": 47.68612342657477, "longitude": -122.3592770754273}, "created_at": "2024-02-09 04:43:53+00:00", "recorded_at": "2024-02-09 04:43:52+00:00", "source": "cf72a238-b4d1-46c8-8b80-01f46c474e22", "observation_details": {"accuracy": 4.7}}, {"id": "cf6fd52f-37d4-4411-a761-a1721b792deb", "location": {"latitude": 47.68612342657477, "longitude": -122.3592770754273}, "created_at": "2024-02-09 04:53:53+00:00", "recorded_at": "2024-02-09 04:53:52+00:00", "source": "cf72a238-b4d1-46c8-8b80-01f46c474e22", "observation_details": {"accuracy": 4.7}}]}], "observation_type": "er_patrol", "state": "open", "updates": [{"message": "Patrol Added", "time": "2024-02-07 20:40:24.507001+00:00", "user": {"username": "chrisd", "first_name": "Chris", "last_name": "Doehring", "id": "8ffee729-7ff5-490e-9206-6f33a4038926", "content_type": "accounts.user"}, "type": "add_patrol"}, {"message": "Updated fields: ", "time": "2024-02-08 16:04:27.683350+00:00", "user": {"username": "chrisd", "first_name": "Chris", "last_name": "Doehring", "id": "8ffee729-7ff5-490e-9206-6f33a4038926", "content_type": "accounts.user"}, "type": "update_segment"}, {"message": "Report Added", "time": "2024-02-08 16:04:25.087190+00:00", "user": {"username": "chrisd", "first_name": "Chris", "last_name": "Doehring", "id": "8ffee729-7ff5-490e-9206-6f33a4038926", "content_type": "accounts.user"}, "type": "add_event"}, {"message": "Updated fields: ", "time": "2024-02-08 16:03:33.073148+00:00", "user": {"username": "chrisd", "first_name": "Chris", "last_name": "Doehring", "id": "8ffee729-7ff5-490e-9206-6f33a4038926", "content_type": "accounts.user"}, "type": "update_segment"}, {"message": "Report Added", "time": "2024-02-07 20:42:36.667571+00:00", "user": {"username": "chrisd", "first_name": "Chris", "last_name": "Doehring", "id": "8ffee729-7ff5-490e-9206-6f33a4038926", "content_type": "accounts.user"}, "type": "add_event"}, {"message": "Updated fields: Scheduled End", "time": "2024-02-07 20:41:55.477668+00:00", "user": {"username": "chrisd", "first_name": "Chris", "last_name": "Doehring", "id": "8ffee729-7ff5-490e-9206-6f33a4038926", "content_type": "accounts.user"}, "type": "update_segment"}]}}'
+def raw_observation_er_event_attributes():
+    return {}
+
+
+@pytest.fixture
+def raw_observation_er_patrol():
+    return {
+        "id": "2ce0001b-f2a3-4a4d-a108-a051019fc27d",
+        "owner": "na",
+        "integration_id": "1055c18c-ae2f-4609-aa2f-dde86419c701",
+        "files": [],
+        "serial_number": 14,
+        "title": "Routine Patrol",
+        "device_id": "2ce0001b-f2a3-4a4d-a108-a051019fc27d",
+        "notes": [],
+        "objective": "Routine Patrol",
+        "patrol_segments": [
+            {
+                "end_location": None,
+                "events": [
+                    {
+                        "id": "c9ca269e-c873-423c-ab12-b72791b303b0",
+                        "event_type": "169361d0-62b8-411d-a8e6-019823805016_animals_sign",
+                        "updated_at": "2024-02-07 14:42:36.638888-06:00",
+                        "geojson": None,
+                    },
+                    {
+                        "id": "b8e589fb-baf2-476a-96a6-0c87cf2ed847",
+                        "event_type": "169361d0-62b8-411d-a8e6-019823805016_animals_sign",
+                        "updated_at": "2024-02-08 10:04:25.052375-06:00",
+                        "geojson": {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [-122.3589888, 47.6839936],
+                            },
+                        },
+                    },
+                ],
+                "event_details": [
+                    {
+                        "id": "c9ca269e-c873-423c-ab12-b72791b303b0",
+                        "owner": "na",
+                        "integration_id": None,
+                        "er_uuid": "c9ca269e-c873-423c-ab12-b72791b303b0",
+                        "location": None,
+                        "time": "2024-02-07 14:42:09.709000-06:00",
+                        "created_at": "2024-02-07 14:42:36.638857-06:00",
+                        "updated_at": "2024-02-07 14:42:36.637713-06:00",
+                        "serial_number": 49532,
+                        "event_type": "169361d0-62b8-411d-a8e6-019823805016_animals_sign",
+                        "priority": 0,
+                        "priority_label": "Gray",
+                        "title": None,
+                        "state": "active",
+                        "url": "https://gundi-er.pamdas.org/api/v1.0/activity/event/c9ca269e-c873-423c-ab12-b72791b303b0",
+                        "event_details": {
+                            "animalpoached": "carcass",
+                            "targetspecies": "birds.greyheron",
+                            "actiontakenanimal": "conficated",
+                            "numberofanimalpoached": 4,
+                            "updates": [],
+                        },
+                        "patrols": ["2ce0001b-f2a3-4a4d-a108-a051019fc27d"],
+                        "files": [],
+                        "uri": "",
+                        "device_id": "none",
+                        "observation_type": "er_event",
+                    },
+                    {
+                        "id": "b8e589fb-baf2-476a-96a6-0c87cf2ed847",
+                        "owner": "na",
+                        "integration_id": None,
+                        "er_uuid": "b8e589fb-baf2-476a-96a6-0c87cf2ed847",
+                        "location": {"latitude": 47.6839936, "longitude": -122.3589888},
+                        "time": "2024-02-08 10:04:11.203000-06:00",
+                        "created_at": "2024-02-08 10:04:25.052343-06:00",
+                        "updated_at": "2024-02-08 10:04:25.051476-06:00",
+                        "serial_number": 49539,
+                        "event_type": "169361d0-62b8-411d-a8e6-019823805016_animals_sign",
+                        "priority": 0,
+                        "priority_label": "Gray",
+                        "title": None,
+                        "state": "active",
+                        "url": "https://gundi-er.pamdas.org/api/v1.0/activity/event/b8e589fb-baf2-476a-96a6-0c87cf2ed847",
+                        "event_details": {
+                            "affiliation_whn": "ranger_whn",
+                            "nameprotectedarea_whn": "phousithonesca_whn",
+                            "patrolleaderorfocalpoint_whn": "ronniemartinez_whn",
+                            "updates": [],
+                        },
+                        "patrols": ["2ce0001b-f2a3-4a4d-a108-a051019fc27d"],
+                        "files": [],
+                        "uri": "",
+                        "device_id": "none",
+                        "observation_type": "er_event",
+                    },
+                ],
+                "id": "b575aeb0-4736-4df3-86ac-6a9ae47bcb4c",
+                "leader": {
+                    "id": "10ce2200-6565-401a-837d-fc153fb9db41",
+                    "name": "Chris Doehring (Gundi)",
+                    "subject_subtype": "ranger",
+                    "additional": {
+                        "ca_uuid": "test1230-62b8-411d-a8e6-019823805016",
+                        "smart_member_id": "a99bbb3959d04ba7b02250b21b8a3d2b",
+                    },
+                    "is_active": True,
+                },
+                "patrol_type": "routine_patrol",
+                "scheduled_start": None,
+                "scheduled_end": "2024-02-09 02:00:00-06:00",
+                "start_location": {
+                    "latitude": 47.686076965642606,
+                    "longitude": -122.35928648394253,
+                },
+                "time_range": {
+                    "start_time": "2024-02-07T14:40:24-06:00",
+                    "end_time": None,
+                },
+                "updates": [
+                    {
+                        "message": "Updated fields: ",
+                        "time": "2024-02-08 16:04:27.683350+00:00",
+                        "user": {
+                            "username": "chrisd",
+                            "first_name": "Chris",
+                            "last_name": "Doehring",
+                            "id": "8ffee729-7ff5-490e-9206-6f33a4038926",
+                            "content_type": "accounts.user",
+                        },
+                        "type": "update_segment",
+                    },
+                    {
+                        "message": "Report Added",
+                        "time": "2024-02-08 16:04:25.087190+00:00",
+                        "user": {
+                            "username": "chrisd",
+                            "first_name": "Chris",
+                            "last_name": "Doehring",
+                            "id": "8ffee729-7ff5-490e-9206-6f33a4038926",
+                            "content_type": "accounts.user",
+                        },
+                        "type": "add_event",
+                    },
+                    {
+                        "message": "Updated fields: ",
+                        "time": "2024-02-08 16:03:33.073148+00:00",
+                        "user": {
+                            "username": "chrisd",
+                            "first_name": "Chris",
+                            "last_name": "Doehring",
+                            "id": "8ffee729-7ff5-490e-9206-6f33a4038926",
+                            "content_type": "accounts.user",
+                        },
+                        "type": "update_segment",
+                    },
+                    {
+                        "message": "Report Added",
+                        "time": "2024-02-07 20:42:36.667571+00:00",
+                        "user": {
+                            "username": "chrisd",
+                            "first_name": "Chris",
+                            "last_name": "Doehring",
+                            "id": "8ffee729-7ff5-490e-9206-6f33a4038926",
+                            "content_type": "accounts.user",
+                        },
+                        "type": "add_event",
+                    },
+                    {
+                        "message": "Updated fields: Scheduled End",
+                        "time": "2024-02-07 20:41:55.477668+00:00",
+                        "user": {
+                            "username": "chrisd",
+                            "first_name": "Chris",
+                            "last_name": "Doehring",
+                            "id": "8ffee729-7ff5-490e-9206-6f33a4038926",
+                            "content_type": "accounts.user",
+                        },
+                        "type": "update_segment",
+                    },
+                ],
+                "track_points": [
+                    {
+                        "id": "c37a9148-f061-439d-ac60-5e4e4a8f03c8",
+                        "location": {
+                            "latitude": 47.68607630950026,
+                            "longitude": -122.3592951927474,
+                        },
+                        "created_at": "2024-02-09 04:33:53+00:00",
+                        "recorded_at": "2024-02-09 04:33:52+00:00",
+                        "source": "cf72a238-b4d1-46c8-8b80-01f46c474e22",
+                        "observation_details": {"accuracy": 4.7},
+                    },
+                    {
+                        "id": "091a74bb-014a-44cf-8713-56ed866205ef",
+                        "location": {
+                            "latitude": 47.68612342657477,
+                            "longitude": -122.3592770754273,
+                        },
+                        "created_at": "2024-02-09 04:43:53+00:00",
+                        "recorded_at": "2024-02-09 04:43:52+00:00",
+                        "source": "cf72a238-b4d1-46c8-8b80-01f46c474e22",
+                        "observation_details": {"accuracy": 4.7},
+                    },
+                    {
+                        "id": "cf6fd52f-37d4-4411-a761-a1721b792deb",
+                        "location": {
+                            "latitude": 47.68612342657477,
+                            "longitude": -122.3592770754273,
+                        },
+                        "created_at": "2024-02-09 04:53:53+00:00",
+                        "recorded_at": "2024-02-09 04:53:52+00:00",
+                        "source": "cf72a238-b4d1-46c8-8b80-01f46c474e22",
+                        "observation_details": {"accuracy": 4.7},
+                    },
+                ],
+            }
+        ],
+        "observation_type": "er_patrol",
+        "state": "open",
+        "updates": [
+            {
+                "message": "Patrol Added",
+                "time": "2024-02-07 20:40:24.507001+00:00",
+                "user": {
+                    "username": "chrisd",
+                    "first_name": "Chris",
+                    "last_name": "Doehring",
+                    "id": "8ffee729-7ff5-490e-9206-6f33a4038926",
+                    "content_type": "accounts.user",
+                },
+                "type": "add_patrol",
+            },
+            {
+                "message": "Updated fields: ",
+                "time": "2024-02-08 16:04:27.683350+00:00",
+                "user": {
+                    "username": "chrisd",
+                    "first_name": "Chris",
+                    "last_name": "Doehring",
+                    "id": "8ffee729-7ff5-490e-9206-6f33a4038926",
+                    "content_type": "accounts.user",
+                },
+                "type": "update_segment",
+            },
+            {
+                "message": "Report Added",
+                "time": "2024-02-08 16:04:25.087190+00:00",
+                "user": {
+                    "username": "chrisd",
+                    "first_name": "Chris",
+                    "last_name": "Doehring",
+                    "id": "8ffee729-7ff5-490e-9206-6f33a4038926",
+                    "content_type": "accounts.user",
+                },
+                "type": "add_event",
+            },
+            {
+                "message": "Updated fields: ",
+                "time": "2024-02-08 16:03:33.073148+00:00",
+                "user": {
+                    "username": "chrisd",
+                    "first_name": "Chris",
+                    "last_name": "Doehring",
+                    "id": "8ffee729-7ff5-490e-9206-6f33a4038926",
+                    "content_type": "accounts.user",
+                },
+                "type": "update_segment",
+            },
+            {
+                "message": "Report Added",
+                "time": "2024-02-07 20:42:36.667571+00:00",
+                "user": {
+                    "username": "chrisd",
+                    "first_name": "Chris",
+                    "last_name": "Doehring",
+                    "id": "8ffee729-7ff5-490e-9206-6f33a4038926",
+                    "content_type": "accounts.user",
+                },
+                "type": "add_event",
+            },
+            {
+                "message": "Updated fields: Scheduled End",
+                "time": "2024-02-07 20:41:55.477668+00:00",
+                "user": {
+                    "username": "chrisd",
+                    "first_name": "Chris",
+                    "last_name": "Doehring",
+                    "id": "8ffee729-7ff5-490e-9206-6f33a4038926",
+                    "content_type": "accounts.user",
+                },
+                "type": "update_segment",
+            },
+        ],
+    }
+
+
+@pytest.fixture
+def raw_observation_er_patrol_attributes():
+    return {}
 
 
 @pytest.fixture
@@ -454,6 +775,30 @@ def outbound_configuration_gcp_pubsub():
             "type_slug": "earth_ranger",
             "inbound_type_slug": "bidtrack",
             "additional": {"broker": "gcp_pubsub"},
+        }
+    )
+
+
+@pytest.fixture
+def smart_outbound_configuration_gcp_pubsub():
+    return schemas_v1.OutboundConfiguration.parse_obj(
+        {
+            "id": "38ebbae6-2535-43f9-be88-96f9daec83f3",
+            "type": "f61b0c60-c863-44d7-adc6-d9b49b389e69",
+            "owner": "1111191a-bcf3-471b-9e7d-6ba8bc71be9e",
+            "name": "[Internal] AI2 Test -  GFW to  SMART Connect",
+            "endpoint": "https://fakesmartconnectsite.smartconservationtools.org/server",
+            "state": {},
+            "login": "test",
+            "password": "test",  # pragma: allowlist secret
+            "token": "",  # pragma: allowlist secret
+            "type_slug": "smart_connect",
+            "inbound_type_slug": "gfw",
+            "additional": {
+                "broker": "gcp_pubsub",
+                "topic": "smart-dispatcher-xyz-topic",
+                "version": "7.5.7",
+            },
         }
     )
 

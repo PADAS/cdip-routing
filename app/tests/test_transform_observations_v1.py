@@ -12,11 +12,12 @@ from app.services.transformers import (
 
 @pytest.mark.asyncio
 async def test_movebank_transformer(
-    outbound_configuration_default, raw_observation_position
+    outbound_configuration_default,
+    raw_observation_position,
+    raw_observation_position_attributes,
 ):
-    raw_observation, _ = extract_fields_from_message(raw_observation_position)
     observation = convert_observation_to_cdip_schema(
-        raw_observation, gundi_version="v1"
+        raw_observation_position, gundi_version="v1"
     )
     # Set Movebank values
     outbound_configuration_default.type_slug = "movebank"
@@ -61,8 +62,8 @@ async def test_smart_transformer_with_er_event(
     mocker,
     mock_gundi_client,
     mock_smart_async_client_class,
-    smart_outbound_configuration_kafka,
-    unprocessed_observation_er_event,
+    smart_outbound_configuration_gcp_pubsub,
+    raw_observation_er_event,
 ):
     mocker.patch(
         "app.services.transformers.AsyncSmartClient",
@@ -71,18 +72,17 @@ async def test_smart_transformer_with_er_event(
 
     # Mock external dependencies
     mock_gundi_client.get_outbound_integration_list.return_value = async_return(
-        [smart_outbound_configuration_kafka]
+        [smart_outbound_configuration_gcp_pubsub]
     )
 
-    raw_observation, _ = extract_fields_from_message(unprocessed_observation_er_event)
-    assert raw_observation
-
-    event = convert_observation_to_cdip_schema(raw_observation, gundi_version="v1")
+    event = convert_observation_to_cdip_schema(
+        raw_observation_er_event, gundi_version="v1"
+    )
     assert event
 
     transformed_observation = await transform_observation(
         stream_type=event.observation_type,
-        config=smart_outbound_configuration_kafka,
+        config=smart_outbound_configuration_gcp_pubsub,
         observation=event,
     )
     assert transformed_observation
@@ -114,8 +114,8 @@ async def test_smart_transformer_with_er_patrol(
     mocker,
     mock_gundi_client,
     mock_smart_async_client_class,
-    smart_outbound_configuration_kafka,
-    unprocessed_observation_er_patrol,
+    smart_outbound_configuration_gcp_pubsub,
+    raw_observation_er_patrol,
 ):
     mocker.patch(
         "app.services.transformers.AsyncSmartClient",
@@ -124,18 +124,17 @@ async def test_smart_transformer_with_er_patrol(
 
     # Mock external dependencies
     mock_gundi_client.get_outbound_integration_list.return_value = async_return(
-        [smart_outbound_configuration_kafka]
+        [smart_outbound_configuration_gcp_pubsub]
     )
 
-    raw_observation, _ = extract_fields_from_message(unprocessed_observation_er_patrol)
-    assert raw_observation
-
-    patrol = convert_observation_to_cdip_schema(raw_observation, gundi_version="v1")
+    patrol = convert_observation_to_cdip_schema(
+        raw_observation_er_patrol, gundi_version="v1"
+    )
     assert patrol
 
     transformed_observation = await transform_observation(
         stream_type=patrol.observation_type,
-        config=smart_outbound_configuration_kafka,
+        config=smart_outbound_configuration_gcp_pubsub,
         observation=patrol,
     )
     assert transformed_observation
