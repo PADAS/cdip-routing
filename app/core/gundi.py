@@ -1,54 +1,211 @@
-import json
 import logging
 import aiohttp
-from typing import List, Union
+from typing import List
 from uuid import UUID
 from gundi_core import schemas
-from cdip_connector.core import cdip_settings
-from gundi_core.schemas import ERPatrol, ERPatrolSegment
 from pydantic import BaseModel, parse_obj_as
 from redis import exceptions as redis_exceptions
 from app import settings
 from app.core.local_logging import ExtraKeys
 from app.core.utils import (
     get_redis_db,
-    is_uuid,
-    ReferenceDataError,
     coalesce,
 )
-from app.transform_service.smartconnect_transformers import (
-    SmartEventTransformer,
-    SmartERPatrolTransformer,
-    CAConflictException,
-    IndeterminableCAException,
-    SmartEventTransformerV2,
-)
-from app.transform_service.transformers import (
-    ERPositionTransformer,
-    ERGeoEventTransformer,
-    ERCameraTrapTransformer,
-    WPSWatchCameraTrapTransformer,
-    EREventTransformer,
-    ERAttachmentTransformer,
-    ERObservationTransformer,
-    FieldMappingRule,
-    MBPositionTransformer,
-    MBObservationTransformer,
-)
+from app.core.errors import ReferenceDataError
 from gundi_client import PortalApi
 from gundi_client_v2 import GundiClient
 
 
 logger = logging.getLogger(__name__)
 
+
 DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
 GUNDI_V1 = "v1"
 GUNDI_V2 = "v2"
 
 _portal = PortalApi()
+portal_v2 = GundiClient()
+
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
-portal_v2 = GundiClient()  # ToDo: When do we close the client?
+
+URN_GUNDI_PREFIX = "urn:gundi:"
+URN_GUNDI_INTSRC_FORMAT = "intsrc"
+URN_GUNDI_FORMATS = {"integration_source": URN_GUNDI_INTSRC_FORMAT}
+
+
+def build_gundi_urn(
+    gundi_version: str,
+    integration_id: UUID,
+    device_id: str,
+    urn_format: str = "integration_source",
+):
+    format_id = URN_GUNDI_FORMATS.get(urn_format, URN_GUNDI_INTSRC_FORMAT)
+    return f"{URN_GUNDI_PREFIX}{gundi_version}.{format_id}.{str(integration_id)}.{device_id}"
+
+
+async def get_outbound_config_detail(
+    outbound_id: UUID,
+) -> schemas.OutboundConfiguration:
+    if not outbound_id:
+        raise ValueError("integration_id must not be None")
+
+    extra_dict = {
+        ExtraKeys.AttentionNeeded: True,
+        ExtraKeys.OutboundIntId: str(outbound_id),
+    }
+
+    cache_key = f"outbound_detail.{outbound_id}"
+    cached = await _cache_db.get(cache_key)
+
+    if cached:
+        config = schemas.OutboundConfiguration.parse_raw(cached)
+        logger.debug(
+            "Using cached outbound integration detail",
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: False,
+                "outbound_detail": config,
+            },
+        )
+        return config
+
+    logger.debug(f"Cache miss for outbound integration detail", extra={**extra_dict})
+
+    connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
+    timeout_settings = aiohttp.ClientTimeout(
+        sock_connect=connect_timeout, sock_read=read_timeout
+    )
+    async with aiohttp.ClientSession(
+        timeout=timeout_settings, raise_for_status=True
+    ) as s:
+        try:
+            response = await _portal.get_outbound_integration(
+                session=s, integration_id=str(outbound_id)
+            )
+        except aiohttp.ServerTimeoutError as e:
+            target_url = (
+                f"{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}"
+            )
+            logger.error(
+                "Read Timeout",
+                extra={**extra_dict, ExtraKeys.Url: target_url},
+            )
+            raise ReferenceDataError(f"Read Timeout for {target_url}")
+        except aiohttp.ClientConnectionError as e:
+            target_url = str(settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT)
+            logger.error(
+                "Connection Error",
+                extra={**extra_dict, ExtraKeys.Url: target_url},
+            )
+            raise ReferenceDataError(
+                f"Failed to connect to the portal at {target_url}, {e}"
+            )
+        except aiohttp.ClientResponseError as e:
+            target_url = str(e.request_info.url)
+            logger.exception(
+                "Portal returned bad response during request for outbound config detail",
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.OutboundIntId: outbound_id,
+                    ExtraKeys.Url: target_url,
+                    ExtraKeys.StatusCode: e.status,
+                },
+            )
+            raise ReferenceDataError(
+                f"Request for OutboundIntegration({outbound_id}) returned bad response"
+            )
+        else:
+            try:
+                config = schemas.OutboundConfiguration.parse_obj(response)
+            except Exception:
+                logger.error(
+                    f"Failed decoding response for Outbound Integration Detail",
+                    extra={**extra_dict, "resp_text": response},
+                )
+                raise ReferenceDataError(
+                    "Failed decoding response for Outbound Integration Detail"
+                )
+            else:
+                if config:  # don't cache empty response
+                    await _cache_db.setex(cache_key, _cache_ttl, config.json())
+                return config
+
+
+async def get_inbound_integration_detail(
+    integration_id: UUID,
+) -> schemas.IntegrationInformation:
+    if not integration_id:
+        raise ValueError("integration_id must not be None")
+
+    extra_dict = {
+        ExtraKeys.AttentionNeeded: True,
+        ExtraKeys.InboundIntId: str(integration_id),
+    }
+
+    cache_key = f"inbound_detail.{integration_id}"
+    cached = await _cache_db.get(cache_key)
+
+    if cached:
+        config = schemas.IntegrationInformation.parse_raw(cached)
+        logger.debug(
+            "Using cached inbound integration detail",
+            extra={**extra_dict, "integration_detail": config},
+        )
+        return config
+
+    logger.debug(f"Cache miss for inbound integration detai", extra={**extra_dict})
+
+    connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
+    timeout_settings = aiohttp.ClientTimeout(
+        sock_connect=connect_timeout, sock_read=read_timeout
+    )
+    async with aiohttp.ClientSession(
+        timeout=timeout_settings, raise_for_status=True
+    ) as s:
+        try:
+            response = await _portal.get_inbound_integration(
+                session=s, integration_id=str(integration_id)
+            )
+        except aiohttp.ServerTimeoutError as e:
+            # ToDo: Try to get the url from the exception or from somewhere else
+            target_url = (
+                f"{settings.PORTAL_INBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}"
+            )
+            logger.error(
+                "Read Timeout",
+                extra={**extra_dict, ExtraKeys.Url: target_url},
+            )
+            raise ReferenceDataError(f"Read Timeout for {target_url}")
+        except aiohttp.ClientResponseError as e:
+            target_url = str(e.request_info.url)
+            logger.exception(
+                "Portal returned bad response during request for inbound config detail",
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.InboundIntId: integration_id,
+                    ExtraKeys.Url: target_url,
+                    ExtraKeys.StatusCode: e.status,
+                },
+            )
+            raise ReferenceDataError(
+                f"Request for InboundIntegration({integration_id})"
+            )
+        else:
+            try:
+                config = schemas.IntegrationInformation.parse_obj(response)
+            except Exception:
+                logger.error(
+                    f"Failed decoding response for InboundIntegration Detail",
+                    extra={**extra_dict, "resp_text": response},
+                )
+                raise ReferenceDataError(
+                    "Failed decoding response for InboundIntegration Detail"
+                )
+            else:
+                if config:  # don't cache empty response
+                    await _cache_db.setex(cache_key, _cache_ttl, config.json())
+                return config
 
 
 class OutboundConfigurations(BaseModel):
@@ -209,7 +366,7 @@ async def ensure_device_integration(integration_id, device_id: str):
     # Rely on default (read:5m). This ought to be fine here, since a busy Portal means we
     # need to wait anyway.
     async with aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(ssl=cdip_settings.CDIP_ADMIN_SSL_VERIFY),
+        connector=aiohttp.TCPConnector(ssl=settings.CDIP_ADMIN_SSL_VERIFY),
     ) as sess:
         try:
             device_data = await _portal.ensure_device(
@@ -237,160 +394,10 @@ async def ensure_device_integration(integration_id, device_id: str):
                 extra={**extra_dict, "device_id": device_id},
             )
             # raise ReferenceDataError("Error when posting device to Portal.")
-
-        # TODO: This is a hack to aleviate load on the portal.
-        return create_blank_device(
-            integration_id=str(integration_id), external_id=device_id
-        )
-
-
-class TransformerNotFound(Exception):
-    pass
-
-
-async def transform_observation(
-    *, stream_type: str, config: schemas.OutboundConfiguration, observation
-) -> dict:
-    transformer = None
-    extra_dict = {
-        ExtraKeys.IntegrationType: config.inbound_type_slug,
-        ExtraKeys.InboundIntId: observation.integration_id,
-        ExtraKeys.OutboundIntId: config.id,
-        ExtraKeys.StreamType: stream_type,
-    }
-    additional_info = {}
-
-    # todo: need a better way than this to build the correct components.
-    if (
-        stream_type == schemas.StreamPrefixEnum.position
-        and config.type_slug == schemas.DestinationTypes.Movebank.value
-    ):
-        transformer = MBPositionTransformer()
-        additional_info["integration_type"] = config.inbound_type_slug
-        additional_info["gundi_version"] = GUNDI_V1
-    elif (
-        stream_type == schemas.StreamPrefixEnum.position
-        and config.type_slug == schemas.DestinationTypes.EarthRanger.value
-    ):
-        transformer = ERPositionTransformer()
-    elif (
-        stream_type == schemas.StreamPrefixEnum.geoevent
-        and config.type_slug == schemas.DestinationTypes.EarthRanger.value
-    ):
-        transformer = ERGeoEventTransformer()
-    elif (
-        stream_type == schemas.StreamPrefixEnum.camera_trap
-        and config.type_slug == schemas.DestinationTypes.EarthRanger.value
-    ):
-        transformer = ERCameraTrapTransformer()
-    elif (
-        stream_type == schemas.StreamPrefixEnum.camera_trap
-        and config.type_slug == schemas.DestinationTypes.WPSWatch.value
-    ):
-        transformer = WPSWatchCameraTrapTransformer()
-    elif (
-        stream_type == schemas.StreamPrefixEnum.geoevent
-        or stream_type == schemas.StreamPrefixEnum.earthranger_event
-    ) and config.type_slug == schemas.DestinationTypes.SmartConnect.value:
-        observation, ca_uuid = get_ca_uuid_for_event(event=observation)
-        transformer = SmartEventTransformer(config=config, ca_uuid=ca_uuid)
-    elif (
-        stream_type == schemas.StreamPrefixEnum.earthranger_patrol
-        and config.type_slug == schemas.DestinationTypes.SmartConnect.value
-    ):
-        observation, ca_uuid = get_ca_uuid_for_er_patrol(patrol=observation)
-        transformer = SmartERPatrolTransformer(config=config, ca_uuid=ca_uuid)
-    if transformer:
-        return await transformer.transform(observation, **additional_info)
-    else:
-        logger.error(
-            "No transformer found for stream type",
-            extra={**extra_dict, ExtraKeys.Provider: config.type_slug},
-        )
-        raise TransformerNotFound(
-            f"No transformer found for {stream_type} dest: {config.type_slug}"
-        )
-
-
-def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
-
-    # TODO: This includes critical assumptions, inferring the CA from the contained events.
-    segment: ERPatrolSegment
-    ca_uuids = set()
-    for segment in patrol.patrol_segments:
-        for event in segment.event_details:
-            event, event_ca_uuid = get_ca_uuid_for_event(event=event)
-            if event_ca_uuid:
-                ca_uuids.add(event_ca_uuid)
-
-    if len(ca_uuids) > 1:
-        raise CAConflictException(
-            f"Patrol events are mapped to more than one ca_uuid: {ca_uuids}"
-        )
-
-    # if no events are mapped to a ca_uuid, use the leader's ca_uuid
-    if not ca_uuids:
-        if not segment.leader:
-            logger.warning(
-                "Patrol has no reports or subject assigned to it",
-                extra=dict(patrol=patrol),
+            # TODO: This is a hack to aleviate load on the portal.
+            return create_blank_device(
+                integration_id=str(integration_id), external_id=device_id
             )
-            raise IndeterminableCAException("Unable to determine CA uuid for patrol")
-        leader_ca_uuid = segment.leader.additional.get("ca_uuid")
-        ca_uuids.add(leader_ca_uuid)
-
-    # TODO: this assumes only one ca_uuid is mapped to a patrol
-    ca_uuid = ca_uuids.pop()
-    return patrol, ca_uuid
-
-
-import re
-
-
-def get_ca_uuid_for_event(
-    *args, event: Union[schemas.EREvent, schemas.GeoEvent, schemas.v2.Event]
-):
-
-    assert not args, "get_ca_uuid_for_event takes only keyword args"
-
-    uuid_pattern = re.compile(
-        "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I
-    )
-
-    """get ca_uuid from prefix of event_type and strip it from event_type"""
-    elements = event.event_type.split("_")
-
-    id_list = []
-    nonid_list = []
-
-    for element in elements:
-        if m := uuid_pattern.match(element):
-            id_list.append(m.string)
-        else:
-            nonid_list.append(element)
-
-    # validation that uuid prefix exists
-    ca_uuid = id_list[0] if id_list else None
-    # remove ca_uuid prefix if it exists
-    event.event_type = "_".join(nonid_list)
-    return event, ca_uuid
-
-
-########################################################################################################################
-# GUNDI V2
-########################################################################################################################
-
-
-def get_source_id(observation, gundi_version="v1"):
-    return observation.source_id if gundi_version == "v2" else observation.device_id
-
-
-def get_data_provider_id(observation, gundi_version="v1"):
-    return (
-        observation.data_provider_id
-        if gundi_version == "v2"
-        else observation.integration_id
-    )
 
 
 async def apply_source_configurations(*, observation, gundi_version="v1"):
@@ -528,136 +535,3 @@ async def get_integration(*, integration_id):
         )
     finally:
         return integration
-
-
-# Map to get the right transformer for the observation type and destination
-transformers_map = {
-    schemas.v2.StreamPrefixEnum.event.value: {
-        schemas.DestinationTypes.EarthRanger.value: EREventTransformer,
-        schemas.DestinationTypes.SmartConnect.value: SmartEventTransformerV2,
-    },
-    schemas.v2.StreamPrefixEnum.attachment.value: {
-        schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer
-    },
-    schemas.v2.StreamPrefixEnum.observation.value: {
-        schemas.DestinationTypes.Movebank.value: MBObservationTransformer,
-        schemas.DestinationTypes.EarthRanger.value: ERObservationTransformer,
-    },
-    # ToDo. Support patrols in SMART v2?
-    # schemas.StreamPrefixEnum.earthranger_patrol : {
-    #     schemas.DestinationTypes.SmartConnect.value: SmartERPatrolTransformerV2
-    # }
-}
-
-
-# ToDo: receive configurations, optionally
-async def transform_observation_v2(
-    observation, destination, provider, route_configuration=None
-):
-    # Look for a proper transformer for this stream type and destination type
-    stream_type = observation.observation_type
-    destination_type = destination.type.value
-
-    Transformer = transformers_map.get(stream_type, {}).get(destination_type)
-
-    if not Transformer:
-        logger.error(
-            "No transformer found for stream type & destination type",
-            extra={
-                ExtraKeys.StreamType: stream_type,
-                ExtraKeys.DestinationType: destination_type,
-            },
-        )
-        raise TransformerNotFound(
-            f"No transformer found for {stream_type} dest: {destination_type}"
-        )
-
-    # Check for extra configurations to apply
-    rules = []
-    if route_configuration and (
-        field_mappings := route_configuration.data.get("field_mappings")
-    ):
-        configuration = (
-            field_mappings.get(
-                # First look for configurations for this data provider
-                str(observation.data_provider_id),
-                {},
-            )
-            .get(  # Then look for configurations for this stream type
-                str(stream_type), {}
-            )
-            .get(
-                # Then look for configurations for this destination
-                str(destination.id),
-                {},
-            )
-        )
-        if configuration:
-            destination_field = configuration.get("destination_field")
-            if not destination_field:
-                raise ReferenceDataError(
-                    f"No destination_field found in route configuration {route_configuration}"
-                )
-            field_mapping_rule = FieldMappingRule(
-                target=destination_field,
-                default=configuration.get("default"),
-                source=configuration.get("provider_field"),
-                map=configuration.get("map"),
-            )
-            rules.append(field_mapping_rule)
-
-    # Apply the transformer
-    transformer = Transformer(config=destination)
-    return await transformer.transform(
-        message=observation, rules=rules, provider=provider, gundi_version=GUNDI_V2
-    )
-
-
-async def transform_observation_to_destination_schema(
-    *,
-    observation,
-    destination,
-    provider=None,
-    gundi_version="v1",
-    route_configuration=None,
-) -> dict:
-    if gundi_version == "v2":
-        return await transform_observation_v2(
-            observation=observation,
-            destination=destination,
-            provider=provider,
-            route_configuration=route_configuration,
-        )
-    else:  # Default to v1
-        return await transform_observation(
-            observation=observation,
-            stream_type=observation.observation_type,
-            config=destination,
-        )
-
-
-def build_transformed_message_attributes(
-    observation, destination, gundi_version, provider_key=None
-):
-    if gundi_version == "v2":
-        return {
-            "gundi_version": gundi_version,
-            "provider_key": provider_key,
-            "gundi_id": str(observation.gundi_id),
-            "related_to": str(observation.related_to)
-            if observation.related_to
-            else None,
-            "stream_type": str(observation.observation_type),
-            "source_id": str(observation.source_id),
-            "external_source_id": str(observation.external_source_id),
-            "destination_id": str(destination.id),
-            "data_provider_id": str(get_data_provider_id(observation, gundi_version)),
-            "annotations": json.dumps(observation.annotations),
-        }
-    else:  # default to v1
-        return {
-            "observation_type": str(observation.observation_type),
-            "device_id": str(get_source_id(observation, gundi_version)),
-            "outbound_config_id": str(destination.id),
-            "integration_id": str(get_data_provider_id(observation, gundi_version)),
-        }

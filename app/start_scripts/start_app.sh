@@ -1,3 +1,2 @@
 #!/bin/bash
-
-faust -A app.subscribers.kafka_subscriber worker -l info --without-web
+uvicorn app.main:app  --host  0.0.0.0 --port 8080

@@ -1,5 +1,5 @@
 import pytest
-from app.transform_service.services import transform_observation_v2
+from app.services.transformers import transform_observation_v2
 
 
 @pytest.mark.asyncio
@@ -218,7 +218,7 @@ async def test_transform_events_for_smart(
     destination_integration_v2_smart,
 ):
     mocker.patch(
-        "app.transform_service.smartconnect_transformers.AsyncSmartClient",
+        "app.services.transformers.AsyncSmartClient",
         mock_smart_async_client_class,
     )
     transformed_observation = await transform_observation_v2(

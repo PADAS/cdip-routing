@@ -18,15 +18,7 @@ class Broker(str, Enum):
     GCP_PUBSUB = "gcp_pubsub"
 
 
-supported_brokers = set(b.value for b in Broker)
-
-
-class ReferenceDataError(Exception):
-    pass
-
-
-class DispatcherException(Exception):
-    pass
+supported_brokers = {Broker.GCP_PUBSUB.value}
 
 
 def get_redis_db():
@@ -55,3 +47,13 @@ def is_uuid(*, id_str: str):
 def coalesce(*values):
     """Return the first non-None value or None if all values are None"""
     return next((v for v in values if v is not None), None)
+
+
+def is_valid_position(gundi_version: str, location):
+    if not location:
+        return False
+    return (
+        all([location.y, location.x])
+        if gundi_version == "v1"
+        else all([location.lat, location.lon])
+    )

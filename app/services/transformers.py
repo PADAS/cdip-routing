@@ -1,16 +1,19 @@
-import base64
 import json
+import base64
 import logging
+import pytz
 import pathlib
 import uuid
-from abc import ABC
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Tuple, Union, Any
-
-import pytz
+from abc import ABC, abstractmethod
+from urllib.parse import urlparse
+from typing import Any, List, Union, Optional, Tuple
+from datetime import datetime
+from pydantic.types import UUID
+from app.core import gundi, utils
+from app import settings
 import timezonefinder
+from packaging import version
 from gundi_core import schemas
-from cdip_connector.core.cloudstorage import get_cloud_storage
 from gundi_core.schemas import ERPatrol, ERPatrolSegment
 from gundi_core.schemas.v2 import (
     SMARTTransformationRules,
@@ -31,39 +34,155 @@ from smartconnect.models import (
     File,
 )
 from smartconnect.utils import guess_ca_timezone
-
+from app.core.gundi import GUNDI_V1, GUNDI_V2
 from app.core.local_logging import ExtraKeys
-from app.core.utils import is_uuid, ReferenceDataError
-from app.transform_service.transformers import Transformer
-from packaging import version
+from app.core.utils import is_uuid
+from app.core.errors import (
+    ReferenceDataError,
+    ObservationUUIDValueException,
+    TransformerNotFound,
+    CAConflictException,
+    IndeterminableCAException,
+)
 
 logger = logging.getLogger(__name__)
 
+ADMIN_PORTAL_HOST = urlparse(settings.PORTAL_API_ENDPOINT).hostname
 
+
+class Transformer(ABC):
+    stream_type: schemas.StreamPrefixEnum
+    destination_type: schemas.DestinationTypes
+
+    def __init__(self, *, config=None, **kwargs):
+        self.config = config
+
+    @abstractmethod
+    async def transform(self, message, rules: list = None, **kwargs) -> Any:
+        ...
+
+
+class ERPositionTransformer(Transformer):
+    # stream_type: schemas.StreamPrefixEnum = schemas.StreamPrefixEnum.position
+    # destination_type: str = schemas.DestinationTypes.EarthRanger
+
+    async def transform(
+        self, position: schemas.Position, rules: list = None, **kwargs
+    ) -> dict:
+        if not position.location or not position.location.y or not position.location.x:
+            logger.warning(f"bad position?? {position}")
+        transformed_position = dict(
+            manufacturer_id=position.device_id,
+            source_type=position.type if position.type else "tracking-device",
+            subject_name=position.name if position.name else position.device_id,
+            recorded_at=position.recorded_at,
+            location={"lon": position.location.x, "lat": position.location.y},
+            additional=position.additional,
+        )
+
+        # ER does not except null subject_subtype so conditionally add to transformed position if set
+        if position.subject_type:
+            transformed_position["subject_subtype"] = position.subject_type
+
+        return transformed_position
+
+
+class ERGeoEventTransformer(Transformer):
+    async def transform(
+        self, geo_event: schemas.GeoEvent, rules: list = None, **kwargs
+    ) -> dict:
+        return dict(
+            title=geo_event.title,
+            event_type=geo_event.event_type,
+            event_details=geo_event.event_details,
+            time=geo_event.recorded_at,
+            location=dict(
+                longitude=geo_event.location.x, latitude=geo_event.location.y
+            ),
+        )
+
+
+class ERCameraTrapTransformer(Transformer):
+    async def transform(
+        self, payload: schemas.CameraTrap, rules: list = None, **kwargs
+    ) -> dict:
+        return dict(
+            file=payload.image_uri,
+            camera_name=payload.camera_name,
+            camera_description=payload.camera_description,
+            time=payload.recorded_at,
+            location=json.dumps(
+                dict(longitude=payload.location.x, latitude=payload.location.y)
+            ),
+        )
+
+
+class WPSWatchCameraTrapTransformer(Transformer):
+    async def transform(
+        self, payload: schemas.CameraTrap, rules: list = None, **kwargs
+    ) -> dict:
+        # From and To are currently needed for current WPS Watch API
+        # camera_name or device_id preceeding @ in 'To' is all that is necessary, other parts just useful for logging
+        from_domain_name = f"{payload.integration_id}@{ADMIN_PORTAL_HOST}"
+        return dict(
+            Attachment1=payload.image_uri,
+            Attachments="1",
+            From=from_domain_name,
+            To=f"{payload.camera_name}@upload.wpswatch.org",
+        )
+
+
+class MBPositionTransformer(Transformer):
+    async def transform(
+        self, position: schemas.Position, rules: list = None, **kwargs
+    ) -> dict:
+        """
+        kwargs:
+          - integration_type: manufacturer identifier (coming from inbound) needed for tag_id generation.
+          - gundi_version: Gundi version (v1 or v2) used to URN generation.
+        """
+
+        def build_tag_id():
+            return f"{kwargs.get('integration_type')}.{position.device_id}.{str(position.integration_id)}"
+
+        if not utils.is_valid_position(kwargs.get("gundi_version"), position.location):
+            logger.warning(f"bad position?? {position}")
+        tag_id = build_tag_id()
+        gundi_urn = gundi.build_gundi_urn(
+            gundi_version=kwargs.get("gundi_version"),
+            integration_id=position.integration_id,
+            device_id=position.device_id,
+        )
+        transformed_position = dict(
+            recorded_at=position.recorded_at.astimezone(tz=pytz.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
+            tag_id=tag_id,
+            lon=position.location.x,
+            lat=position.location.y,
+            sensor_type="GPS",
+            tag_manufacturer_name=kwargs.get("integration_type"),
+            gundi_urn=gundi_urn,
+        )
+
+        return transformed_position
+
+
+########################################################################################################################
+# SMART
+########################################################################################################################
 # Legacy config for Gundi v1 additional field
 class SmartConnectConfigurationAdditional(BaseModel):
-    ca_uuid: uuid.UUID
+    ca_uuid: UUID
     transformation_rules: Optional[SMARTTransformationRules]
     version: Optional[str]
-
-
-class CAConflictException(Exception):
-    pass
-
-
-class IndeterminableCAException(Exception):
-    pass
-
-
-class ObservationUUIDValueException(Exception):
-    pass
 
 
 class SMARTTransformer:
     """
     Transform a single EarthRanger Event into an Independent Incident.
 
-    TODO: apply transformation rules from SIntegrate configuration.
+    TODO: apply transformation rules from Sintegrate configuration.
 
     """
 
@@ -120,7 +239,6 @@ class SMARTTransformer:
         self._transformation_rules = SMARTTransformationRules.parse_obj(
             transformation_rules_dict
         )
-        self.cloud_storage = get_cloud_storage()
 
     async def get_ca(self, config):
         if not self.ca:
@@ -130,7 +248,7 @@ class SMARTTransformer:
                 )
             except Exception as ex:
                 self.logger.warning(
-                    f"Failed to get CA Metadata for endpoint: {self.config.base_url}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
+                    f"Failed to get CA Metadata for endpoint: {config.base_url}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
                 )
                 self.ca = None
         return self.ca
@@ -1109,8 +1227,6 @@ class SmartEventTransformerV2(SMARTTransformerV2):
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
     ) -> dict:
-        from app.transform_service.services import get_ca_uuid_for_event
-
         message, message_ca_uuid = get_ca_uuid_for_event(event=message)
         if message_ca_uuid:
             self.ca_uuid = str(message_ca_uuid)
@@ -1146,3 +1262,446 @@ class SmartEventTransformerV2(SMARTTransformerV2):
             for rule in rules:
                 rule.apply(message=transformed_message)
         return transformed_message
+
+
+########################################################################################################################
+# GUNDI V2
+########################################################################################################################
+class TransformationRule(ABC):
+    @staticmethod
+    @abstractmethod
+    def apply(self, message: dict, **kwargs):
+        ...
+
+
+class FieldMappingRule(TransformationRule):
+    def __init__(self, target: str, default: str, map: dict = None, source: str = None):
+        self.map = map
+        self.source = source
+        self.target = target
+        self.default = default
+
+    def _extract_value(self, message, source):
+        fields = source.lower().strip().split("__")
+        value = message
+        while fields:
+            field = fields.pop(0)
+            value = value.get(field)
+        return value
+
+    def apply(self, message: dict, **kwargs):
+        if not self.source:
+            message[self.target] = self.default
+            return
+
+        source_value = self._extract_value(message=message, source=self.source)
+        if not self.map:
+            message[self.target] = source_value
+            return
+
+        message[self.target] = self.map.get(source_value, self.default)
+
+
+class EREventTransformer(Transformer):
+    async def transform(
+        self, message: schemas.v2.Event, rules: list = None, **kwargs
+    ) -> dict:
+        transformed_message = dict(
+            title=message.title,
+            event_type=message.event_type,
+            event_details=message.event_details,
+            time=message.recorded_at,
+            location=dict(
+                longitude=message.location.lon, latitude=message.location.lat
+            ),
+        )
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_message)
+        return transformed_message
+
+
+class ERAttachmentTransformer(Transformer):
+    async def transform(
+        self, message: schemas.v2.Attachment, rules: list = None, **kwargs
+    ) -> dict:
+        # ToDo. Implement transformation logic for attachments
+        return dict(file_path=message.file_path)
+
+
+class ERObservationTransformer(Transformer):
+    async def transform(
+        self, message: schemas.v2.Observation, rules: list = None, **kwargs
+    ) -> dict:
+        if not message.location or not message.location.lat or not message.location.lon:
+            logger.warning(f"bad position?? {message}")
+        transformed_message = dict(
+            manufacturer_id=message.external_source_id,
+            source_type=message.type or "tracking-device",
+            subject_name=message.source_name or message.external_source_id,
+            recorded_at=message.recorded_at,
+            location={"lon": message.location.lon, "lat": message.location.lat},
+            additional=message.additional,
+        )
+
+        # ER does not accept null subject_subtype so conditionally add to transformed position if set
+        if subject_type := message.subject_type:
+            transformed_message["subject_subtype"] = subject_type
+
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_message)
+
+        return transformed_message
+
+
+class MBObservationTransformer(Transformer):
+    async def transform(
+        self, message: schemas.v2.Observation, rules: list = None, **kwargs
+    ) -> dict:
+        """
+        kwargs:
+          - provider: manufacturer object (coming from provider config) needed for tag_id generation.
+        """
+        provider = kwargs.get("provider")
+
+        def build_tag_id():
+            return f"{provider.type.value}.{message.external_source_id}.{str(message.data_provider_id)}"
+
+        if not utils.is_valid_position(kwargs.get("gundi_version"), message.location):
+            logger.warning(f"bad position?? {message}")
+        tag_id = build_tag_id()
+        gundi_urn = gundi.build_gundi_urn(
+            gundi_version=kwargs.get("gundi_version"),
+            integration_id=message.data_provider_id,
+            device_id=message.external_source_id,
+        )
+        transformed_position = dict(
+            recorded_at=message.recorded_at.astimezone(tz=pytz.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
+            tag_id=tag_id,
+            lon=message.location.lon,
+            lat=message.location.lat,
+            sensor_type="GPS",
+            tag_manufacturer_name=provider.type.name,
+            gundi_urn=gundi_urn,
+        )
+
+        return transformed_position
+
+
+async def transform_observation(
+    *, stream_type: str, config: schemas.OutboundConfiguration, observation
+) -> dict:
+    transformer = None
+    extra_dict = {
+        ExtraKeys.IntegrationType: config.inbound_type_slug,
+        ExtraKeys.InboundIntId: observation.integration_id,
+        ExtraKeys.OutboundIntId: config.id,
+        ExtraKeys.StreamType: stream_type,
+    }
+    additional_info = {}
+
+    # todo: need a better way than this to build the correct components.
+    if (
+        stream_type == schemas.StreamPrefixEnum.position
+        and config.type_slug == schemas.DestinationTypes.Movebank.value
+    ):
+        transformer = MBPositionTransformer()
+        additional_info["integration_type"] = config.inbound_type_slug
+        additional_info["gundi_version"] = GUNDI_V1
+    elif (
+        stream_type == schemas.StreamPrefixEnum.position
+        and config.type_slug == schemas.DestinationTypes.EarthRanger.value
+    ):
+        transformer = ERPositionTransformer()
+    elif (
+        stream_type == schemas.StreamPrefixEnum.geoevent
+        and config.type_slug == schemas.DestinationTypes.EarthRanger.value
+    ):
+        transformer = ERGeoEventTransformer()
+    elif (
+        stream_type == schemas.StreamPrefixEnum.camera_trap
+        and config.type_slug == schemas.DestinationTypes.EarthRanger.value
+    ):
+        transformer = ERCameraTrapTransformer()
+    elif (
+        stream_type == schemas.StreamPrefixEnum.camera_trap
+        and config.type_slug == schemas.DestinationTypes.WPSWatch.value
+    ):
+        transformer = WPSWatchCameraTrapTransformer()
+    elif (
+        stream_type == schemas.StreamPrefixEnum.geoevent
+        or stream_type == schemas.StreamPrefixEnum.earthranger_event
+    ) and config.type_slug == schemas.DestinationTypes.SmartConnect.value:
+        observation, ca_uuid = get_ca_uuid_for_event(event=observation)
+        transformer = SmartEventTransformer(config=config, ca_uuid=ca_uuid)
+    elif (
+        stream_type == schemas.StreamPrefixEnum.earthranger_patrol
+        and config.type_slug == schemas.DestinationTypes.SmartConnect.value
+    ):
+        observation, ca_uuid = get_ca_uuid_for_er_patrol(patrol=observation)
+        transformer = SmartERPatrolTransformer(config=config, ca_uuid=ca_uuid)
+    if transformer:
+        return await transformer.transform(observation, **additional_info)
+    else:
+        logger.error(
+            "No transformer found for stream type",
+            extra={**extra_dict, ExtraKeys.Provider: config.type_slug},
+        )
+        raise TransformerNotFound(
+            f"No transformer found for {stream_type} dest: {config.type_slug}"
+        )
+
+
+def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
+
+    # TODO: This includes critical assumptions, inferring the CA from the contained events.
+    segment: ERPatrolSegment
+    ca_uuids = set()
+    for segment in patrol.patrol_segments:
+        for event in segment.event_details:
+            event, event_ca_uuid = get_ca_uuid_for_event(event=event)
+            if event_ca_uuid:
+                ca_uuids.add(event_ca_uuid)
+
+    if len(ca_uuids) > 1:
+        raise CAConflictException(
+            f"Patrol events are mapped to more than one ca_uuid: {ca_uuids}"
+        )
+
+    # if no events are mapped to a ca_uuid, use the leader's ca_uuid
+    if not ca_uuids:
+        if not segment.leader:
+            logger.warning(
+                "Patrol has no reports or subject assigned to it",
+                extra=dict(patrol=patrol),
+            )
+            raise IndeterminableCAException("Unable to determine CA uuid for patrol")
+        leader_ca_uuid = segment.leader.additional.get("ca_uuid")
+        ca_uuids.add(leader_ca_uuid)
+
+    # TODO: this assumes only one ca_uuid is mapped to a patrol
+    ca_uuid = ca_uuids.pop()
+    return patrol, ca_uuid
+
+
+import re
+
+
+def get_ca_uuid_for_event(
+    *args, event: Union[schemas.EREvent, schemas.GeoEvent, schemas.v2.Event]
+):
+
+    assert not args, "get_ca_uuid_for_event takes only keyword args"
+
+    uuid_pattern = re.compile(
+        "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I
+    )
+
+    """get ca_uuid from prefix of event_type and strip it from event_type"""
+    elements = event.event_type.split("_")
+
+    id_list = []
+    nonid_list = []
+
+    for element in elements:
+        if m := uuid_pattern.match(element):
+            id_list.append(m.string)
+        else:
+            nonid_list.append(element)
+
+    # validation that uuid prefix exists
+    ca_uuid = id_list[0] if id_list else None
+    # remove ca_uuid prefix if it exists
+    event.event_type = "_".join(nonid_list)
+    return event, ca_uuid
+
+
+def get_source_id(observation, gundi_version="v1"):
+    return observation.source_id if gundi_version == "v2" else observation.device_id
+
+
+def get_data_provider_id(observation, gundi_version="v1"):
+    return (
+        observation.data_provider_id
+        if gundi_version == "v2"
+        else observation.integration_id
+    )
+
+
+async def transform_observation_to_destination_schema(
+    *,
+    observation,
+    destination,
+    provider=None,
+    gundi_version="v1",
+    route_configuration=None,
+) -> dict:
+    if gundi_version == "v2":
+        return await transform_observation_v2(
+            observation=observation,
+            destination=destination,
+            provider=provider,
+            route_configuration=route_configuration,
+        )
+    else:  # Default to v1
+        return await transform_observation(
+            observation=observation,
+            stream_type=observation.observation_type,
+            config=destination,
+        )
+
+
+def build_transformed_message_attributes(
+    observation, destination, gundi_version, provider_key=None
+):
+    if gundi_version == "v2":
+        return {
+            "gundi_version": gundi_version,
+            "provider_key": provider_key,
+            "gundi_id": str(observation.gundi_id),
+            "related_to": str(observation.related_to)
+            if observation.related_to
+            else None,
+            "stream_type": str(observation.observation_type),
+            "source_id": str(observation.source_id),
+            "external_source_id": str(observation.external_source_id),
+            "destination_id": str(destination.id),
+            "data_provider_id": str(get_data_provider_id(observation, gundi_version)),
+            "annotations": json.dumps(observation.annotations),
+        }
+    else:  # default to v1
+        return {
+            "observation_type": str(observation.observation_type),
+            "device_id": str(get_source_id(observation, gundi_version)),
+            "outbound_config_id": str(destination.id),
+            "integration_id": str(get_data_provider_id(observation, gundi_version)),
+        }
+
+
+def convert_observation_to_cdip_schema(observation, gundi_version="v1"):
+    if gundi_version == "v2":
+        schema = schemas.v2.models_by_stream_type[observation.get("observation_type")]
+    else:  # Default to v1
+        schema = schemas.models_by_stream_type[observation.get("observation_type")]
+    return schema.parse_obj(observation)
+
+
+def create_message(attributes, observation):
+    message = {"attributes": attributes, "data": observation}
+    return message
+
+
+def build_gcp_pubsub_message(*, payload):
+    binary_data = json.dumps(payload, default=str).encode("utf-8")
+    return binary_data
+
+
+def extract_fields_from_message(message):
+    if message:
+        data = base64.b64decode(message.get("data", "").encode("utf-8"))
+        observation = json.loads(data)
+        attributes = message.get("attributes")
+        if not observation:
+            logger.warning(f"No observation was obtained from {message}")
+        if not attributes:
+            logger.debug(f"No attributes were obtained from {message}")
+    else:
+        logger.warning(f"message contained no payload", extra={"message": message})
+        return None, None
+    return observation, attributes
+
+
+def get_key_for_transformed_observation(current_key: bytes, destination_id: UUID):
+    # caller must provide key and destination_id must be present in order to create for transformed observation
+    if current_key is None or destination_id is None:
+        return current_key
+    else:
+        new_key = f"{current_key.decode('utf-8')}.{str(destination_id)}"
+        return new_key.encode("utf-8")
+
+
+async def transform_observation_v2(
+    observation, destination, provider, route_configuration=None
+):
+    # Look for a proper transformer for this stream type and destination type
+    stream_type = observation.observation_type
+    destination_type = destination.type.value
+
+    Transformer = transformers_map.get(stream_type, {}).get(destination_type)
+
+    if not Transformer:
+        logger.error(
+            "No transformer found for stream type & destination type",
+            extra={
+                ExtraKeys.StreamType: stream_type,
+                ExtraKeys.DestinationType: destination_type,
+            },
+        )
+        raise TransformerNotFound(
+            f"No transformer found for {stream_type} dest: {destination_type}"
+        )
+
+    # Check for extra configurations to apply
+    rules = []
+    if route_configuration and (
+        field_mappings := route_configuration.data.get("field_mappings")
+    ):
+        configuration = (
+            field_mappings.get(
+                # First look for configurations for this data provider
+                str(observation.data_provider_id),
+                {},
+            )
+            .get(  # Then look for configurations for this stream type
+                str(stream_type), {}
+            )
+            .get(
+                # Then look for configurations for this destination
+                str(destination.id),
+                {},
+            )
+        )
+        if configuration:
+            destination_field = configuration.get("destination_field")
+            if not destination_field:
+                raise ReferenceDataError(
+                    f"No destination_field found in route configuration {route_configuration}"
+                )
+            field_mapping_rule = FieldMappingRule(
+                target=destination_field,
+                default=configuration.get("default"),
+                source=configuration.get("provider_field"),
+                map=configuration.get("map"),
+            )
+            rules.append(field_mapping_rule)
+
+    # Apply the transformer
+    transformer = Transformer(config=destination)
+    return await transformer.transform(
+        message=observation, rules=rules, provider=provider, gundi_version=GUNDI_V2
+    )
+
+
+# Map to get the right transformer for the observation type and destination
+transformers_map = {
+    schemas.v2.StreamPrefixEnum.event.value: {
+        schemas.DestinationTypes.EarthRanger.value: EREventTransformer,
+        schemas.DestinationTypes.SmartConnect.value: SmartEventTransformerV2,
+    },
+    schemas.v2.StreamPrefixEnum.attachment.value: {
+        schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer
+    },
+    schemas.v2.StreamPrefixEnum.observation.value: {
+        schemas.DestinationTypes.Movebank.value: MBObservationTransformer,
+        schemas.DestinationTypes.EarthRanger.value: ERObservationTransformer,
+    },
+    # ToDo. Support patrols in SMART v2?
+    # schemas.StreamPrefixEnum.earthranger_patrol : {
+    #     schemas.DestinationTypes.SmartConnect.value: SmartERPatrolTransformerV2
+    # }
+}
