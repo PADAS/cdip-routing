@@ -2,6 +2,7 @@ import logging
 import aiohttp
 from typing import List
 from uuid import UUID
+import httpx
 from gundi_core import schemas
 from pydantic import BaseModel, parse_obj_as
 from redis import exceptions as redis_exceptions
@@ -23,7 +24,8 @@ DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
 GUNDI_V1 = "v1"
 GUNDI_V2 = "v2"
 
-_portal = PortalApi()
+connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
+_portal = PortalApi(connect_timeout=connect_timeout, data_timeout=read_timeout)
 portal_v2 = GundiClient()
 
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
@@ -72,64 +74,57 @@ async def get_outbound_config_detail(
 
     logger.debug(f"Cache miss for outbound integration detail", extra={**extra_dict})
 
-    connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
-    timeout_settings = aiohttp.ClientTimeout(
-        sock_connect=connect_timeout, sock_read=read_timeout
-    )
-    async with aiohttp.ClientSession(
-        timeout=timeout_settings, raise_for_status=True
-    ) as s:
+    try:
+        response = await _portal.get_outbound_integration(
+            integration_id=str(outbound_id)
+        )
+    except httpx.HTTPStatusError as e:
+        error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
+        message = (
+            f"Failed to get outbound details for outbound_id {outbound_id}: {error}"
+        )
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    except httpx.HTTPError as e:
+        error = f"HTTPError: {e}"
+        message = (
+            f"Failed to get outbound details for outbound_id {outbound_id}: {error}"
+        )
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    else:
         try:
-            response = await _portal.get_outbound_integration(
-                session=s, integration_id=str(outbound_id)
-            )
-        except aiohttp.ServerTimeoutError as e:
-            target_url = (
-                f"{settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT}/{str(outbound_id)}"
-            )
+            config = schemas.OutboundConfiguration.parse_obj(response)
+        except Exception:
             logger.error(
-                "Read Timeout",
-                extra={**extra_dict, ExtraKeys.Url: target_url},
-            )
-            raise ReferenceDataError(f"Read Timeout for {target_url}")
-        except aiohttp.ClientConnectionError as e:
-            target_url = str(settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT)
-            logger.error(
-                "Connection Error",
-                extra={**extra_dict, ExtraKeys.Url: target_url},
+                f"Failed decoding response for Outbound Integration Detail",
+                extra={**extra_dict, "resp_text": response},
             )
             raise ReferenceDataError(
-                f"Failed to connect to the portal at {target_url}, {e}"
-            )
-        except aiohttp.ClientResponseError as e:
-            target_url = str(e.request_info.url)
-            logger.exception(
-                "Portal returned bad response during request for outbound config detail",
-                extra={
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.OutboundIntId: outbound_id,
-                    ExtraKeys.Url: target_url,
-                    ExtraKeys.StatusCode: e.status,
-                },
-            )
-            raise ReferenceDataError(
-                f"Request for OutboundIntegration({outbound_id}) returned bad response"
+                "Failed decoding response for Outbound Integration Detail"
             )
         else:
-            try:
-                config = schemas.OutboundConfiguration.parse_obj(response)
-            except Exception:
-                logger.error(
-                    f"Failed decoding response for Outbound Integration Detail",
-                    extra={**extra_dict, "resp_text": response},
-                )
-                raise ReferenceDataError(
-                    "Failed decoding response for Outbound Integration Detail"
-                )
-            else:
-                if config:  # don't cache empty response
-                    await _cache_db.setex(cache_key, _cache_ttl, config.json())
-                return config
+            if config:  # don't cache empty response
+                await _cache_db.setex(cache_key, _cache_ttl, config.json())
+            return config
 
 
 async def get_inbound_integration_detail(
@@ -156,56 +151,53 @@ async def get_inbound_integration_detail(
 
     logger.debug(f"Cache miss for inbound integration detai", extra={**extra_dict})
 
-    connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
-    timeout_settings = aiohttp.ClientTimeout(
-        sock_connect=connect_timeout, sock_read=read_timeout
-    )
-    async with aiohttp.ClientSession(
-        timeout=timeout_settings, raise_for_status=True
-    ) as s:
+    try:
+        response = await _portal.get_inbound_integration(
+            integration_id=str(integration_id)
+        )
+    except httpx.HTTPStatusError as e:
+        error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
+        message = f"Failed to get inbound details for integration_id {integration_id}: {error}"
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    except httpx.HTTPError as e:
+        error = f"HTTPError: {e}"
+        message = f"Failed to get inbound details for integration_id {integration_id}: {error}"
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    else:
         try:
-            response = await _portal.get_inbound_integration(
-                session=s, integration_id=str(integration_id)
-            )
-        except aiohttp.ServerTimeoutError as e:
-            # ToDo: Try to get the url from the exception or from somewhere else
-            target_url = (
-                f"{settings.PORTAL_INBOUND_INTEGRATIONS_ENDPOINT}/{str(integration_id)}"
-            )
+            config = schemas.IntegrationInformation.parse_obj(response)
+        except Exception:
             logger.error(
-                "Read Timeout",
-                extra={**extra_dict, ExtraKeys.Url: target_url},
-            )
-            raise ReferenceDataError(f"Read Timeout for {target_url}")
-        except aiohttp.ClientResponseError as e:
-            target_url = str(e.request_info.url)
-            logger.exception(
-                "Portal returned bad response during request for inbound config detail",
-                extra={
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.InboundIntId: integration_id,
-                    ExtraKeys.Url: target_url,
-                    ExtraKeys.StatusCode: e.status,
-                },
+                f"Failed decoding response for InboundIntegration Detail",
+                extra={**extra_dict, "resp_text": response},
             )
             raise ReferenceDataError(
-                f"Request for InboundIntegration({integration_id})"
+                "Failed decoding response for InboundIntegration Detail"
             )
         else:
-            try:
-                config = schemas.IntegrationInformation.parse_obj(response)
-            except Exception:
-                logger.error(
-                    f"Failed decoding response for InboundIntegration Detail",
-                    extra={**extra_dict, "resp_text": response},
-                )
-                raise ReferenceDataError(
-                    "Failed decoding response for InboundIntegration Detail"
-                )
-            else:
-                if config:  # don't cache empty response
-                    await _cache_db.setex(cache_key, _cache_ttl, config.json())
-                return config
+            if config:  # don't cache empty response
+                await _cache_db.setex(cache_key, _cache_ttl, config.json())
+            return config
 
 
 class OutboundConfigurations(BaseModel):
@@ -232,64 +224,59 @@ async def get_all_outbound_configs_for_id(
 
     logger.debug(f"Cache miss for device_destinations", extra={**extra_dict})
 
-    connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
-    timeout_settings = aiohttp.ClientTimeout(
-        sock_connect=connect_timeout, sock_read=read_timeout
-    )
-    async with aiohttp.ClientSession(
-        timeout=timeout_settings, raise_for_status=True
-    ) as s:
+    try:
+        resp = await _portal.get_outbound_integration_list(
+            inbound_id=str(inbound_id), device_id=str(device_id)
+        )
+    except httpx.HTTPStatusError as e:
+        error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
+        message = (
+            f"Failed to get outbound integrations for inbound_id {inbound_id}: {error}"
+        )
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    except httpx.HTTPError as e:
+        error = f"HTTPError: {e}"
+        message = (
+            f"Failed to get outbound integrations for inbound_id {inbound_id}: {error}"
+        )
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    else:
         try:
-            resp = await _portal.get_outbound_integration_list(
-                session=s, inbound_id=str(inbound_id), device_id=str(device_id)
+            resp_json = [resp] if isinstance(resp, dict) else resp
+            configurations = parse_obj_as(
+                List[schemas.OutboundConfiguration], resp_json
             )
-        except aiohttp.ServerTimeoutError as e:
-            target_url = str(settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT)
+        except Exception as e:
             logger.error(
-                "Read Timeout",
-                extra={**extra_dict, ExtraKeys.Url: target_url},
+                f"Failed decoding response for OutboundConfig",
+                extra={**extra_dict, "resp_text": resp},
             )
-            raise ReferenceDataError(f"Read Timeout for {target_url}")
-        except aiohttp.ClientConnectionError as e:
-            target_url = str(settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT)
-            logger.error(
-                "Connection Error",
-                extra={**extra_dict, ExtraKeys.Url: target_url},
-            )
-            raise ReferenceDataError(
-                f"Failed to connect to the portal at {target_url}, {e}"
-            )
-        except aiohttp.ClientResponseError as e:
-            target_url = str(e.request_info.url)
-            logger.exception(
-                "Failed to get outbound integrations for inbound_id",
-                extra={
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.InboundIntId: inbound_id,
-                    ExtraKeys.DeviceId: device_id,
-                    ExtraKeys.Url: target_url,
-                },
-            )
-            raise ReferenceDataError(
-                f"Failed to get outbound integrations for inbound_id {inbound_id}"
-            )
+            raise ReferenceDataError("Failed decoding response for OutboundConfig")
         else:
-            try:
-                resp_json = [resp] if isinstance(resp, dict) else resp
-                configurations = parse_obj_as(
-                    List[schemas.OutboundConfiguration], resp_json
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed decoding response for OutboundConfig",
-                    extra={**extra_dict, "resp_text": resp},
-                )
-                raise ReferenceDataError("Failed decoding response for OutboundConfig")
-            else:
-                configs = OutboundConfigurations(configurations=configurations)
-                if configurations:  # don't cache empty response
-                    await _cache_db.setex(cache_key, _cache_ttl, configs.json())
-                return configs.configurations
+            configs = OutboundConfigurations(configurations=configurations)
+            if configurations:  # don't cache empty response
+                await _cache_db.setex(cache_key, _cache_ttl, configs.json())
+            return configs.configurations
 
 
 async def update_observation_with_device_configuration(observation):
@@ -363,41 +350,33 @@ async def ensure_device_integration(integration_id, device_id: str):
         extra={"integration_id": integration_id, "device_id": device_id},
     )
 
-    # Rely on default (read:5m). This ought to be fine here, since a busy Portal means we
-    # need to wait anyway.
-    async with aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(ssl=settings.CDIP_ADMIN_SSL_VERIFY),
-    ) as sess:
-        try:
-            device_data = await _portal.ensure_device(
-                sess, str(integration_id), device_id
-            )
-
-            if device_data:
-                # temporary hack to refit response to Device schema.
-                device_data["inbound_configuration"] = device_data.get(
-                    "inbound_configuration", {}
-                ).get("id", None)
-                device = schemas.Device.parse_obj(device_data)
-            else:
-                device = create_blank_device(
-                    integration_id=str(integration_id), external_id=device_id
-                )
-
-            if device:  # don't cache empty response
-                await _cache_db.setex(cache_key, _cache_ttl, device.json())
-            return device
-
-        except Exception as e:
-            logger.exception(
-                "Error when posting device to Portal.",
-                extra={**extra_dict, "device_id": device_id},
-            )
-            # raise ReferenceDataError("Error when posting device to Portal.")
-            # TODO: This is a hack to aleviate load on the portal.
-            return create_blank_device(
+    try:
+        device_data = await _portal.ensure_device(str(integration_id), device_id)
+        if device_data:
+            # temporary hack to refit response to Device schema.
+            device_data["inbound_configuration"] = device_data.get(
+                "inbound_configuration", {}
+            ).get("id", None)
+            device = schemas.Device.parse_obj(device_data)
+        else:
+            device = create_blank_device(
                 integration_id=str(integration_id), external_id=device_id
             )
+
+        if device:  # don't cache empty response
+            await _cache_db.setex(cache_key, _cache_ttl, device.json())
+        return device
+
+    except Exception as e:
+        logger.exception(
+            "Error when posting device to Portal.",
+            extra={**extra_dict, "device_id": device_id},
+        )
+        # raise ReferenceDataError("Error when posting device to Portal.")
+        # TODO: This is a hack to aleviate load on the portal.
+        return create_blank_device(
+            integration_id=str(integration_id), external_id=device_id
+        )
 
 
 async def apply_source_configurations(*, observation, gundi_version="v1"):
