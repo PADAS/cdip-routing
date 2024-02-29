@@ -61,62 +61,57 @@ async def get_outbound_config_detail(
 
     logger.debug(f"Cache miss for outbound integration detail", extra={**extra_dict})
 
-    connect_timeout, read_timeout = DEFAULT_REQUESTS_TIMEOUT
-    timeout_settings = aiohttp.ClientTimeout(
-        sock_connect=connect_timeout, sock_read=read_timeout
-    )
-    async with _portal:
+    try:
+        response = await _portal.get_outbound_integration(
+            integration_id=str(outbound_id)
+        )
+    except httpx.HTTPStatusError as e:
+        error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
+        message = (
+            f"Failed to get outbound details for outbound_id {outbound_id}: {error}"
+        )
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    except httpx.HTTPError as e:
+        error = f"HTTPError: {e}"
+        message = (
+            f"Failed to get outbound details for outbound_id {outbound_id}: {error}"
+        )
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    else:
         try:
-            response = await _portal.get_outbound_integration(
-                integration_id=str(outbound_id)
+            config = schemas.OutboundConfiguration.parse_obj(response)
+        except Exception:
+            logger.error(
+                f"Failed decoding response for Outbound Integration Detail",
+                extra={**extra_dict, "resp_text": response},
             )
-        except httpx.HTTPStatusError as e:
-            error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
-            message = (
-                f"Failed to get outbound details for outbound_id {outbound_id}: {error}"
+            raise ReferenceDataError(
+                "Failed decoding response for Outbound Integration Detail"
             )
-            target_url = str(e.request.url)
-            logger.exception(
-                message,
-                extra={
-                    **extra_dict,
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.Url: target_url,
-                },
-            )
-            # Raise again so it's retried later
-            raise ReferenceDataError(message)
-        except httpx.HTTPError as e:
-            error = f"HTTPError: {e}"
-            message = (
-                f"Failed to get outbound details for outbound_id {outbound_id}: {error}"
-            )
-            target_url = str(e.request.url)
-            logger.exception(
-                message,
-                extra={
-                    **extra_dict,
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.Url: target_url,
-                },
-            )
-            # Raise again so it's retried later
-            raise ReferenceDataError(message)
         else:
-            try:
-                config = schemas.OutboundConfiguration.parse_obj(response)
-            except Exception:
-                logger.error(
-                    f"Failed decoding response for Outbound Integration Detail",
-                    extra={**extra_dict, "resp_text": response},
-                )
-                raise ReferenceDataError(
-                    "Failed decoding response for Outbound Integration Detail"
-                )
-            else:
-                if config:  # don't cache empty response
-                    await _cache_db.setex(cache_key, _cache_ttl, config.json())
-                return config
+            if config:  # don't cache empty response
+                await _cache_db.setex(cache_key, _cache_ttl, config.json())
+            return config
 
 
 async def get_inbound_integration_detail(
@@ -143,58 +138,53 @@ async def get_inbound_integration_detail(
 
     logger.debug(f"Cache miss for inbound integration detai", extra={**extra_dict})
 
-    connect_timeout, read_timeout = DEFAULT_REQUESTS_TIMEOUT
-    timeout_settings = aiohttp.ClientTimeout(
-        sock_connect=connect_timeout, sock_read=read_timeout
-    )
-    async with _portal:
+    try:
+        response = await _portal.get_inbound_integration(
+            integration_id=str(integration_id)
+        )
+    except httpx.HTTPStatusError as e:
+        error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
+        message = f"Failed to get inbound details for integration_id {integration_id}: {error}"
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    except httpx.HTTPError as e:
+        error = f"HTTPError: {e}"
+        message = f"Failed to get inbound details for integration_id {integration_id}: {error}"
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    else:
         try:
-            response = await _portal.get_inbound_integration(
-                integration_id=str(integration_id)
+            config = schemas.IntegrationInformation.parse_obj(response)
+        except Exception:
+            logger.error(
+                f"Failed decoding response for InboundIntegration Detail",
+                extra={**extra_dict, "resp_text": response},
             )
-        except httpx.HTTPStatusError as e:
-            error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
-            message = f"Failed to get inbound details for integration_id {integration_id}: {error}"
-            target_url = str(e.request.url)
-            logger.exception(
-                message,
-                extra={
-                    **extra_dict,
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.Url: target_url,
-                },
+            raise ReferenceDataError(
+                "Failed decoding response for InboundIntegration Detail"
             )
-            # Raise again so it's retried later
-            raise ReferenceDataError(message)
-        except httpx.HTTPError as e:
-            error = f"HTTPError: {e}"
-            message = f"Failed to get inbound details for integration_id {integration_id}: {error}"
-            target_url = str(e.request.url)
-            logger.exception(
-                message,
-                extra={
-                    **extra_dict,
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.Url: target_url,
-                },
-            )
-            # Raise again so it's retried later
-            raise ReferenceDataError(message)
         else:
-            try:
-                config = schemas.IntegrationInformation.parse_obj(response)
-            except Exception:
-                logger.error(
-                    f"Failed decoding response for InboundIntegration Detail",
-                    extra={**extra_dict, "resp_text": response},
-                )
-                raise ReferenceDataError(
-                    "Failed decoding response for InboundIntegration Detail"
-                )
-            else:
-                if config:  # don't cache empty response
-                    await _cache_db.setex(cache_key, _cache_ttl, config.json())
-                return config
+            if config:  # don't cache empty response
+                await _cache_db.setex(cache_key, _cache_ttl, config.json())
+            return config
 
 
 async def dispatch_transformed_observation(
