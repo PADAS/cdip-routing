@@ -10,7 +10,6 @@ aiohttp==3.8.5
     #   cdip-connector
     #   faust
     #   gcloud-aio-auth
-    #   gundi-client
 aiohttp-cors==0.7.0
     # via faust
 aioredis==2.0.1
@@ -102,7 +101,6 @@ gcloud-aio-pubsub==5.2.0
     # via -r requirements.in
 google-api-core[grpc]==2.11.1
     # via
-    #   google-api-core
     #   google-cloud-core
     #   google-cloud-pubsub
     #   google-cloud-storage
@@ -149,13 +147,14 @@ grpcio-status==1.48.2
     # via
     #   google-api-core
     #   google-cloud-pubsub
-gundi-client==0.2.2
+gundi-client==1.0.2
     # via -r requirements.in
 gundi-client-v2==2.1.7
     # via -r requirements.in
 gundi-core==1.2.10
     # via
     #   -r requirements.in
+    #   gundi-client
     #   gundi-client-v2
 h11==0.14.0
     # via
@@ -168,6 +167,7 @@ httpcore==0.17.3
 httpx==0.24.1
     # via
     #   earthranger-client
+    #   gundi-client
     #   gundi-client-v2
     #   respx
     #   smartconnect-client
@@ -351,7 +351,9 @@ requests==2.28.1
     #   opentelemetry-exporter-otlp-proto-http
     #   smartconnect-client
 respx==0.20.2
-    # via gundi-client-v2
+    # via
+    #   gundi-client
+    #   gundi-client-v2
 robinhood-aiokafka==1.1.6
     # via faust
 rsa==4.9

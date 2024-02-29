@@ -1,5 +1,6 @@
 import datetime
 import aiohttp
+import httpx
 import pytest
 import uuid
 import asyncio
@@ -117,17 +118,9 @@ def mock_gundi_client_with_client_connector_error_once(
 ):
     mock_client = mocker.MagicMock()
     # Simulate a connection error
-    client_connector_error = aiohttp.ClientConnectorError(
-        connection_key=ConnectionKey(
-            host="cdip-portal.pamdas.org",
-            port=443,
-            is_ssl=True,
-            ssl=True,
-            proxy=None,
-            proxy_auth=None,
-            proxy_headers_hash=None,
-        ),
-        os_error=ConnectionError(),
+    client_connector_error = httpx.ConnectError(
+        message="Connection error",
+        request=httpx.Request("GET", "https://cdip-portal.pamdas.org"),
     )
     _set_side_effect_error_on_gundi_client_once(
         mock_client=mock_client, error=client_connector_error
@@ -145,7 +138,10 @@ def mock_gundi_client_with_server_disconnected_error_once(
 ):
     mock_client = mocker.MagicMock()
     # Simulate a server disconnected error
-    server_disconnected_error = aiohttp.ServerDisconnectedError()
+    server_disconnected_error = httpx.NetworkError(
+        message="Server disconnected",
+        request=httpx.Request("GET", "https://cdip-portal.pamdas.org"),
+    )
     _set_side_effect_error_on_gundi_client_once(
         mock_client=mock_client, error=server_disconnected_error
     )
@@ -161,8 +157,11 @@ def mock_gundi_client_with_server_timeout_error_once(
     device,
 ):
     mock_client = mocker.MagicMock()
-    # Simulate a server disconnected error
-    server_timeout_error = aiohttp.ServerTimeoutError()
+    # Simulate a timeout error
+    server_timeout_error = httpx.TimeoutException(
+        message="Server timeout",
+        request=httpx.Request("GET", "https://cdip-portal.pamdas.org"),
+    )
     _set_side_effect_error_on_gundi_client_once(
         mock_client=mock_client, error=server_timeout_error
     )
