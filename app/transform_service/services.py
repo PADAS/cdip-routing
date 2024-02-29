@@ -81,56 +81,59 @@ async def get_all_outbound_configs_for_id(
 
     logger.debug(f"Cache miss for device_destinations", extra={**extra_dict})
 
-    async with _portal:
+    try:
+        resp = await _portal.get_outbound_integration_list(
+            inbound_id=str(inbound_id), device_id=str(device_id)
+        )
+    except httpx.HTTPStatusError as e:
+        error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
+        message = (
+            f"Failed to get outbound integrations for inbound_id {inbound_id}: {error}"
+        )
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    except httpx.HTTPError as e:
+        error = f"HTTPError: {e}"
+        message = (
+            f"Failed to get outbound integrations for inbound_id {inbound_id}: {error}"
+        )
+        target_url = str(e.request.url)
+        logger.exception(
+            message,
+            extra={
+                **extra_dict,
+                ExtraKeys.AttentionNeeded: True,
+                ExtraKeys.Url: target_url,
+            },
+        )
+        # Raise again so it's retried later
+        raise ReferenceDataError(message)
+    else:
         try:
-            resp = await _portal.get_outbound_integration_list(
-                inbound_id=str(inbound_id), device_id=str(device_id)
+            resp_json = [resp] if isinstance(resp, dict) else resp
+            configurations = parse_obj_as(
+                List[schemas.OutboundConfiguration], resp_json
             )
-        except httpx.HTTPStatusError as e:
-            error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
-            message = f"Failed to get outbound integrations for inbound_id {inbound_id}: {error}"
-            target_url = str(e.request.url)
-            logger.exception(
-                message,
-                extra={
-                    **extra_dict,
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.Url: target_url,
-                },
+        except Exception as e:
+            logger.error(
+                f"Failed decoding response for OutboundConfig",
+                extra={**extra_dict, "resp_text": resp},
             )
-            # Raise again so it's retried later
-            raise ReferenceDataError(message)
-        except httpx.HTTPError as e:
-            error = f"HTTPError: {e}"
-            message = f"Failed to get outbound integrations for inbound_id {inbound_id}: {error}"
-            target_url = str(e.request.url)
-            logger.exception(
-                message,
-                extra={
-                    **extra_dict,
-                    ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.Url: target_url,
-                },
-            )
-            # Raise again so it's retried later
-            raise ReferenceDataError(message)
+            raise ReferenceDataError("Failed decoding response for OutboundConfig")
         else:
-            try:
-                resp_json = [resp] if isinstance(resp, dict) else resp
-                configurations = parse_obj_as(
-                    List[schemas.OutboundConfiguration], resp_json
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed decoding response for OutboundConfig",
-                    extra={**extra_dict, "resp_text": resp},
-                )
-                raise ReferenceDataError("Failed decoding response for OutboundConfig")
-            else:
-                configs = OutboundConfigurations(configurations=configurations)
-                if configurations:  # don't cache empty response
-                    await _cache_db.setex(cache_key, _cache_ttl, configs.json())
-                return configs.configurations
+            configs = OutboundConfigurations(configurations=configurations)
+            if configurations:  # don't cache empty response
+                await _cache_db.setex(cache_key, _cache_ttl, configs.json())
+            return configs.configurations
 
 
 async def update_observation_with_device_configuration(observation):
@@ -204,35 +207,34 @@ async def ensure_device_integration(integration_id, device_id: str):
         extra={"integration_id": integration_id, "device_id": device_id},
     )
 
-    async with _portal:
-        try:
-            device_data = await _portal.ensure_device(str(integration_id), device_id)
+    try:
+        device_data = await _portal.ensure_device(str(integration_id), device_id)
 
-            if device_data:
-                # temporary hack to refit response to Device schema.
-                device_data["inbound_configuration"] = device_data.get(
-                    "inbound_configuration", {}
-                ).get("id", None)
-                device = schemas.Device.parse_obj(device_data)
-            else:
-                device = create_blank_device(
-                    integration_id=str(integration_id), external_id=device_id
-                )
-
-            if device:  # don't cache empty response
-                await _cache_db.setex(cache_key, _cache_ttl, device.json())
-            return device
-
-        except Exception as e:
-            logger.exception(
-                "Error when posting device to Portal.",
-                extra={**extra_dict, "device_id": device_id},
-            )
-            # raise ReferenceDataError("Error when posting device to Portal.")
-            # TODO: This is a hack to aleviate load on the portal.
-            return create_blank_device(
+        if device_data:
+            # temporary hack to refit response to Device schema.
+            device_data["inbound_configuration"] = device_data.get(
+                "inbound_configuration", {}
+            ).get("id", None)
+            device = schemas.Device.parse_obj(device_data)
+        else:
+            device = create_blank_device(
                 integration_id=str(integration_id), external_id=device_id
             )
+
+        if device:  # don't cache empty response
+            await _cache_db.setex(cache_key, _cache_ttl, device.json())
+        return device
+
+    except Exception as e:
+        logger.exception(
+            "Error when posting device to Portal.",
+            extra={**extra_dict, "device_id": device_id},
+        )
+        # raise ReferenceDataError("Error when posting device to Portal.")
+        # TODO: This is a hack to aleviate load on the portal.
+        return create_blank_device(
+            integration_id=str(integration_id), external_id=device_id
+        )
 
 
 class TransformerNotFound(Exception):
