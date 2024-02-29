@@ -3,6 +3,8 @@ import logging
 import aiohttp
 from typing import List, Union
 from uuid import UUID
+
+import httpx
 from gundi_core import schemas
 from cdip_connector.core import cdip_settings
 from gundi_core.schemas import ERPatrol, ERPatrolSegment
@@ -45,7 +47,11 @@ DEFAULT_LOCATION = schemas.Location(x=0.0, y=0.0)
 GUNDI_V1 = "v1"
 GUNDI_V2 = "v2"
 
-_portal = PortalApi()
+connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
+_portal = PortalApi(
+    connect_timeout=connect_timeout,
+    data_timeout=read_timeout,
+)
 _cache_ttl = settings.PORTAL_CONFIG_OBJECT_CACHE_TTL
 _cache_db = get_redis_db()
 portal_v2 = GundiClient()  # ToDo: When do we close the client?
@@ -60,7 +66,7 @@ async def get_all_outbound_configs_for_id(
 ) -> List[schemas.OutboundConfiguration]:
     extra_dict = {
         ExtraKeys.InboundIntId: str(inbound_id),
-        ExtraKeys.DeviceId: device_id,
+        ExtraKeys.DeviceId: str(device_id),
     }
 
     cache_key = f"device_destinations.{inbound_id}.{device_id}"
@@ -75,47 +81,39 @@ async def get_all_outbound_configs_for_id(
 
     logger.debug(f"Cache miss for device_destinations", extra={**extra_dict})
 
-    connect_timeout, read_timeout = settings.DEFAULT_REQUESTS_TIMEOUT
-    timeout_settings = aiohttp.ClientTimeout(
-        sock_connect=connect_timeout, sock_read=read_timeout
-    )
-    async with aiohttp.ClientSession(
-        timeout=timeout_settings, raise_for_status=True
-    ) as s:
+    async with _portal:
         try:
             resp = await _portal.get_outbound_integration_list(
-                session=s, inbound_id=str(inbound_id), device_id=str(device_id)
+                inbound_id=str(inbound_id), device_id=str(device_id)
             )
-        except aiohttp.ServerTimeoutError as e:
-            target_url = str(settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT)
-            logger.error(
-                "Read Timeout",
-                extra={**extra_dict, ExtraKeys.Url: target_url},
-            )
-            raise ReferenceDataError(f"Read Timeout for {target_url}")
-        except aiohttp.ClientConnectionError as e:
-            target_url = str(settings.PORTAL_OUTBOUND_INTEGRATIONS_ENDPOINT)
-            logger.error(
-                "Connection Error",
-                extra={**extra_dict, ExtraKeys.Url: target_url},
-            )
-            raise ReferenceDataError(
-                f"Failed to connect to the portal at {target_url}, {e}"
-            )
-        except aiohttp.ClientResponseError as e:
-            target_url = str(e.request_info.url)
+        except httpx.HTTPStatusError as e:
+            error = f"HTTPStatusError: {e.response.status_code}, {e.response.text}"
+            message = f"Failed to get outbound integrations for inbound_id {inbound_id}: {error}"
+            target_url = str(e.request.url)
             logger.exception(
-                "Failed to get outbound integrations for inbound_id",
+                message,
                 extra={
+                    **extra_dict,
                     ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.InboundIntId: inbound_id,
-                    ExtraKeys.DeviceId: device_id,
                     ExtraKeys.Url: target_url,
                 },
             )
-            raise ReferenceDataError(
-                f"Failed to get outbound integrations for inbound_id {inbound_id}"
+            # Raise again so it's retried later
+            raise ReferenceDataError(message)
+        except httpx.HTTPError as e:
+            error = f"HTTPError: {e}"
+            message = f"Failed to get outbound integrations for inbound_id {inbound_id}: {error}"
+            target_url = str(e.request.url)
+            logger.exception(
+                message,
+                extra={
+                    **extra_dict,
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.Url: target_url,
+                },
             )
+            # Raise again so it's retried later
+            raise ReferenceDataError(message)
         else:
             try:
                 resp_json = [resp] if isinstance(resp, dict) else resp
@@ -206,15 +204,9 @@ async def ensure_device_integration(integration_id, device_id: str):
         extra={"integration_id": integration_id, "device_id": device_id},
     )
 
-    # Rely on default (read:5m). This ought to be fine here, since a busy Portal means we
-    # need to wait anyway.
-    async with aiohttp.ClientSession(
-        connector=aiohttp.TCPConnector(ssl=cdip_settings.CDIP_ADMIN_SSL_VERIFY),
-    ) as sess:
+    async with _portal:
         try:
-            device_data = await _portal.ensure_device(
-                sess, str(integration_id), device_id
-            )
+            device_data = await _portal.ensure_device(str(integration_id), device_id)
 
             if device_data:
                 # temporary hack to refit response to Device schema.
@@ -237,11 +229,10 @@ async def ensure_device_integration(integration_id, device_id: str):
                 extra={**extra_dict, "device_id": device_id},
             )
             # raise ReferenceDataError("Error when posting device to Portal.")
-
-        # TODO: This is a hack to aleviate load on the portal.
-        return create_blank_device(
-            integration_id=str(integration_id), external_id=device_id
-        )
+            # TODO: This is a hack to aleviate load on the portal.
+            return create_blank_device(
+                integration_id=str(integration_id), external_id=device_id
+            )
 
 
 class TransformerNotFound(Exception):
