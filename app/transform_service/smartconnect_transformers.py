@@ -448,30 +448,40 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
     async def transform(self, item) -> dict:
         waypoint_requests = []
         if self._version and version.parse(self._version) >= version.parse("7.5"):
-            smart_response = await self.smartconnect_client.get_incident(
-                incident_uuid=item.id
-            )
-            if not smart_response:
+            # ToDo: This is a quick fix to avoid doing too many queries to SMART
+            if (
+                item.id
+            ):  # Events coming from ER will have an ID, events comming from API won't i.e. GFW
+                # Check if the event exists as an incident in SMART
+                smart_response = await self.smartconnect_client.get_incident(
+                    incident_uuid=item.id
+                )
+                if not smart_response:
+                    incident = await self.event_to_incident(
+                        event=item, smart_feature_type="waypoint/new"
+                    )
+                    waypoint_requests.append(incident)
+                else:
+                    # Update Incident
+                    incident = await self.event_to_incident(
+                        event=item, smart_feature_type="waypoint"
+                    )
+                    waypoint_requests.append(incident)
+                    # Update Observation
+                    observation = await self.event_to_observation(event=item)
+                    waypoint_requests.append(observation)
+            else:  # Events coming from API are new incidents
                 incident = await self.event_to_incident(
                     event=item, smart_feature_type="waypoint/new"
                 )
                 waypoint_requests.append(incident)
-            else:
-                # Update Incident
-                incident = await self.event_to_incident(
-                    event=item, smart_feature_type="waypoint"
-                )
-                waypoint_requests.append(incident)
-                # Update Observation
-                observation = await self.event_to_observation(event=item)
-                waypoint_requests.append(observation)
         else:
             incident = await self.geoevent_to_incident(geoevent=item)
             waypoint_requests.append(incident)
+
         smart_request = SMARTCompositeRequest(
             waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
         )
-
         return json.loads(smart_request.json()) if smart_request else None
 
     # TODO: Depreciated use event_to_incident, remove when all integrations on smart connect version > 7.5.x
