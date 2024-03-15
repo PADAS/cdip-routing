@@ -11,7 +11,7 @@ inputs = {
 
   project_id                        = "cdip-dev-78ca"
   env                               = "dev"
-  cdip_admin_endpoint               = "https://sensors.api.dev.gundiservice.org/v2/observations/"
+  cdip_admin_endpoint               = "https://api.dev.gundiservice.org"
   gundi_api_base_url                = "https://api.dev.gundiservice.org"
   keycloak_issuer                   = "https://cdip-auth.pamdas.org/auth/realms/cdip-dev"
   redis_host                        = "10.3.176.132"
