@@ -31,6 +31,4 @@ jobs:
     with:
       environment: dev
       working_dir: environments/dev
-      tg_command: run-all apply
-    env:
-      TF_VAR_image: "${{ needs.vars.outputs.repository }}:${{ needs.vars.outputs.tag }}"
+      tg_command: "run-all apply -var image=${{ needs.vars.outputs.repository }}:${{ needs.vars.outputs.tag }}"
