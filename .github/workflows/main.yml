@@ -32,5 +32,5 @@ jobs:
     needs: [vars, build]
     with:
       environment: dev
-      working_dir: environments/dev
+      working_dir: terraform/environments/dev
       tg_command: "run-all apply -var image=${{ needs.vars.outputs.repository }}:${{ needs.vars.outputs.tag }}"
