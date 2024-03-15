@@ -1,7 +1,6 @@
 locals {
   # VPC connector is created in a different project
   vpc_connector_id          = "projects/${var.project_id}/locations/${var.location}/connectors/${var.vpc_connector_name}"
-  keycloak_client_secret_id = "projects/${var.project_id}/secrets/${var.keycloak_client_secret_name}"
 }
 
 resource "google_cloud_run_v2_service" "default" {
@@ -119,7 +118,7 @@ resource "google_cloud_run_v2_service" "default" {
         name = "KEYCLOAK_CLIENT_SECRET"
         value_source {
           secret_key_ref {
-            secret  = local.keycloak_client_secret_id
+            secret  = google_secret_manager_secret.keycloak.id
             version = "latest"
           }
         }

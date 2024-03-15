@@ -103,12 +103,6 @@ variable "portal_auth_ttl" {
   default = "300"
 }
 
-variable "keycloak_client_secret_name" {
-  type        = string
-  description = "The name of the secret in Cloud Secret Manager"
-  default     = "keycloak_client_secret-integrations"
-}
-
 variable "vpc_connector_name" {
   type        = string
   description = "The name of the vpc serverless connector"
