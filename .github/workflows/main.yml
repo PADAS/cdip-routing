@@ -23,7 +23,7 @@ jobs:
     uses: PADAS/gundi-workflows/.github/workflows/build_docker.yml@v2
     needs: vars
     with:
-      environment: dev
+      environment: stage
       repository: ${{ needs.vars.outputs.repository }}
       tag: ${{ needs.vars.outputs.tag }}
 
