@@ -40,7 +40,6 @@ jobs:
 
   stage-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
-    if: startsWith(github.ref, 'refs/heads/release')
     needs: [vars, build]
     with:
       environment: stage
