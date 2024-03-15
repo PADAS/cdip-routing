@@ -28,6 +28,7 @@ jobs:
 
   dev-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
+    needs: [vars, build]
     with:
       environment: dev
       working_dir: environments/dev
