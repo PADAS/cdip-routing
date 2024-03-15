@@ -5,6 +5,9 @@ on:
       - main
       - 'release-**'
       - gundi-2937 # DELETE ME
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   vars:
@@ -41,7 +44,7 @@ jobs:
     needs: [vars, build]
     with:
       environment: stage
-      working_dir: terraform/environments/dyshr
+      working_dir: terraform/environments/stage
       tg_command: "run-all apply -var image=${{ needs.vars.outputs.repository }}:${{ needs.vars.outputs.tag }}"
 
   prod-deploy:
