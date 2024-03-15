@@ -21,6 +21,7 @@ resource "google_eventarc_trigger" "default" {
   destination {
     cloud_run_service {
       service = google_cloud_run_v2_service.default.name
+      region  = var.location
     }
   }
   transport {

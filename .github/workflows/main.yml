@@ -25,5 +25,12 @@ jobs:
     with:
       repository: ${{ needs.vars.outputs.repository }}
       tag: ${{ needs.vars.outputs.tag }}
-      workload_identity_provider: ${{ vars.GUNDI_INTEGRATIONS_WORKLOAD_IDENTITY_PROVIDER}}
-      service_account: ${{ vars.GUNDI_INTEGRATIONS_SERVICE_ACCOUNT }}
+
+  dev-deploy:
+    uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
+    with:
+      environment: dev
+      working_dir: environments/dev
+      tg_command: run-all apply
+    env:
+      TF_VAR_image: "${{ needs.vars.outputs.repository }}:${{ needs.vars.outputs.tag }}"
