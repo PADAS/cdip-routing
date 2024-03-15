@@ -20,3 +20,9 @@ resource "google_project_iam_member" "secretmanager" {
   role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${google_service_account.default.email}"
 }
+
+resource "google_project_iam_member" "cloudtrace-agent" {
+  project = var.project_id
+  role    = "roles/cloudtrace.agent"
+  member  = "serviceAccount:${google_service_account.default.email}"
+}
