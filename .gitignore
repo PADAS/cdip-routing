@@ -1,5 +1,7 @@
 # Additional
 .idea/
+.terragrunt-cache
+.terraform.lock.hcl
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

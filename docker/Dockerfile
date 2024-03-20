@@ -1,14 +1,9 @@
-FROM python:3.8
+FROM python:3.8-slim
 
 WORKDIR /code
 
-COPY ./requirements.txt /code/requirements.txt
+COPY requirements.txt .
+RUN pip install -r /code/requirements.txt
+COPY ./app app/
 
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
-
-COPY ./app /code/app
-
-RUN chmod +x /code/app/start_scripts/start_app.sh
-
-CMD ["/code/app/start_scripts/start_app.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

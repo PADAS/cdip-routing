@@ -1,9 +1,12 @@
-name: Build and deploy router-app
+name: Build pubsub routing transformer
 on:
   push:
     branches:
       - main
       - 'release-**'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   vars:
@@ -16,7 +19,7 @@ jobs:
       - id: vars
         run: |
           echo "tag=${{ github.head_ref || github.ref_name }}-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          echo "repository=us-central1-docker.pkg.dev/cdip-78ca/gundi/router-app" >> $GITHUB_OUTPUT
+          echo "repository=us-central1-docker.pkg.dev/cdip-78ca/gundi/cdip-routing" >> $GITHUB_OUTPUT
 
   build:
     uses: PADAS/gundi-workflows/.github/workflows/build_docker.yml@v2
@@ -26,38 +29,29 @@ jobs:
       repository: ${{ needs.vars.outputs.repository }}
       tag: ${{ needs.vars.outputs.tag }}
 
-  deploy_dev:
-    uses: PADAS/gundi-workflows/.github/workflows/deploy_k8s.yml@v2
+  dev-deploy:
+    uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
     if: startsWith(github.ref, 'refs/heads/main')
     needs: [vars, build]
     with:
       environment: dev
-      chart_name: router-app
-      chart_version: '0.6.1'
-      repository: ${{ needs.vars.outputs.repository }}
-      tag: ${{ needs.vars.outputs.tag }}
-    secrets: inherit
+      working_dir: terraform/environments/dev
+      tg_command: "run-all apply -var image=${{ needs.vars.outputs.repository }}:${{ needs.vars.outputs.tag }}"
 
-  deploy_stage:
-    uses: PADAS/gundi-workflows/.github/workflows/deploy_k8s.yml@v2
+  stage-deploy:
+    uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
     if: startsWith(github.ref, 'refs/heads/release')
     needs: [vars, build]
     with:
       environment: stage
-      chart_name: router-app
-      chart_version: '0.6.1'
-      repository: ${{ needs.vars.outputs.repository }}
-      tag: ${{ needs.vars.outputs.tag }}
-    secrets: inherit
+      working_dir: terraform/environments/stage
+      tg_command: "run-all apply -var image=${{ needs.vars.outputs.repository }}:${{ needs.vars.outputs.tag }}"
 
-  deploy_prod:
-    uses: PADAS/gundi-workflows/.github/workflows/deploy_k8s.yml@v2
+  prod-deploy:
+    uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
     if: startsWith(github.ref, 'refs/heads/release')
-    needs: [vars, build, deploy_stage]
+    needs: [vars, build, stage-deploy]
     with:
       environment: prod
-      chart_name: router-app
-      chart_version: '0.6.1'
-      repository: ${{ needs.vars.outputs.repository }}
-      tag: ${{ needs.vars.outputs.tag }}
-    secrets: inherit
+      working_dir: terraform/environments/prod
+      tg_command: "run-all apply -var image=${{ needs.vars.outputs.repository }}:${{ needs.vars.outputs.tag }}"
