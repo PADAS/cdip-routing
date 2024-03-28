@@ -296,7 +296,7 @@ def device():
             "owner": "088a191a-bcf3-471b-9e7d-6ba8bc71be9e",
             "endpoint": "https://logins.bidtrack.co.za/restintegration/",
             "login": "fakeusername",
-            "password": "F@keP@ssw0rd!",
+            "password": "something fancy",
             "token": "",
             "type_slug": "bidtrack",
             "provider": "bidtrack",
@@ -1523,7 +1523,7 @@ def destination_integration_v2_smart(integration_type_smart, smart_ca_uuid):
                 data={
                     "login": "fakeusername",
                     "endpoint": "https://integrationx.smartconservationtools.org/server",
-                    "password": "F@keP@ssw0rd!",
+                    "password": "something fancy",
                 },
             ),
         ],
