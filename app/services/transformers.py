@@ -454,14 +454,9 @@ class SMARTTransformer:
             for event_file in event.files:
                 file_extension = pathlib.Path(event_file.get("filename")).suffix
                 download_file_name = event_file.get("id") + file_extension
-                # ToDo: make this async
-                downloaded_file = self.cloud_storage.download(download_file_name)
-                downloaded_file_base64 = base64.b64encode(
-                    downloaded_file.getvalue()
-                ).decode()
                 file = File(
                     filename=event_file.get("filename"),
-                    data=f"gundi:storage:{download_file_name}",  # downloaded_file_base64
+                    data=f"gundi:storage:{download_file_name}",
                 )
                 attachments.append(file)
 
