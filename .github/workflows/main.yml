@@ -4,6 +4,8 @@ on:
     branches:
       - main
       - 'release-**'
+      - 'fix-er-smart-attachments'
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
