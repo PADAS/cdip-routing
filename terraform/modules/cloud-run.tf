@@ -1,6 +1,6 @@
 locals {
   # VPC connector is created in a different project
-  vpc_connector_id          = "projects/${var.project_id}/locations/${var.location}/connectors/${var.vpc_connector_name}"
+  vpc_connector_id = "projects/${var.project_id}/locations/${var.location}/connectors/${var.vpc_connector_name}"
 }
 
 resource "google_cloud_run_v2_service" "default" {
