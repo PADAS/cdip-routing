@@ -102,11 +102,6 @@ resource "google_cloud_run_v2_service" "default" {
       }
 
       env {
-        name  = "MAX_EVENT_AGE_SECONDS"
-        value = var.max_event_age_seconds
-      }
-
-      env {
         name  = "PORTAL_AUTH_TTL"
         value = var.portal_auth_ttl
       }
