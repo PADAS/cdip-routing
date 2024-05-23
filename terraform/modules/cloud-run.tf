@@ -26,8 +26,9 @@ resource "google_cloud_run_v2_service" "default" {
       image = var.image
 
       resources {
-        limits   = var.limits
-        cpu_idle = true
+        limits            = var.limits
+        cpu_idle          = true
+        startup_cpu_boost = true
       }
 
       env {
