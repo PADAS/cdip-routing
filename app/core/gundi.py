@@ -495,22 +495,28 @@ async def get_integration(*, integration_id):
                 "Cache Miss. Retrieving integration details from the portal..",
                 extra={**extra_dict, "cache_key": cache_key},
             )
-            integration = await portal_v2.get_integration_details(
-                integration_id=integration_id
-            )
+            try:
+                integration = await portal_v2.get_integration_details(
+                    integration_id=integration_id
+                )
+            except Exception as e:
+                logger.exception(
+                    f"Error while getting integration details from the portal: {e}",
+                    extra={**extra_dict},
+                )
+            else:
+                await write_to_cache_safe(
+                    key=cache_key, ttl=_cache_ttl, instance=integration, extra_dict=extra_dict
+                )
     except redis_exceptions.ConnectionError as e:
         logger.error(
             f"ConnectionError while reading integration details from Cache: {e}",
             extra={**extra_dict},
         )
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"Internal Error while getting integration details: {e}",
             extra={**extra_dict},
-        )
-    else:
-        await write_to_cache_safe(
-            key=cache_key, ttl=_cache_ttl, instance=integration, extra_dict=extra_dict
         )
     finally:
         return integration
