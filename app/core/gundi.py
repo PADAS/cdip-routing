@@ -113,9 +113,9 @@ async def get_outbound_config_detail(
     else:
         try:
             config = schemas.OutboundConfiguration.parse_obj(response)
-        except Exception:
-            logger.error(
-                f"Failed decoding response for Outbound Integration Detail",
+        except Exception as e:
+            logger.exception(
+                f"Failed decoding response for Outbound Integration Detail: {e}",
                 extra={**extra_dict, "resp_text": response},
             )
             raise ReferenceDataError(
@@ -186,9 +186,9 @@ async def get_inbound_integration_detail(
     else:
         try:
             config = schemas.IntegrationInformation.parse_obj(response)
-        except Exception:
-            logger.error(
-                f"Failed decoding response for InboundIntegration Detail",
+        except Exception as e:
+            logger.exception(
+                f"Failed decoding response for InboundIntegration Detail: {e}",
                 extra={**extra_dict, "resp_text": response},
             )
             raise ReferenceDataError(
@@ -267,8 +267,8 @@ async def get_all_outbound_configs_for_id(
                 List[schemas.OutboundConfiguration], resp_json
             )
         except Exception as e:
-            logger.error(
-                f"Failed decoding response for OutboundConfig",
+            logger.exception(
+                f"Failed decoding response for OutboundConfig: {e}",
                 extra={**extra_dict, "resp_text": resp},
             )
             raise ReferenceDataError("Failed decoding response for OutboundConfig")
@@ -421,23 +421,29 @@ async def get_connection(*, connection_id):
                 "Cache Miss. Retrieving connection details from the portal..",
                 extra={**extra_dict, "cache_key": cache_key},
             )
-            connection = await portal_v2.get_connection_details(
-                integration_id=connection_id
-            )
+            try:
+                connection = await portal_v2.get_connection_details(
+                    integration_id=connection_id
+                )
+            except Exception as e:
+                logger.exception(
+                    f"Error while getting connection from the portal: {e}",
+                    extra={**extra_dict},
+                )
+            else:
+                await write_to_cache_safe(
+                    key=cache_key, ttl=_cache_ttl, instance=connection, extra_dict=extra_dict
+                )
     except redis_exceptions.ConnectionError as e:
-        logger.error(
+        logger.exception(
             f"ConnectionError while reading connection details from Cache: {e}",
             extra={**extra_dict},
         )
         connection = None
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"Internal Error while getting connection details: {e}",
             extra={**extra_dict},
-        )
-    else:
-        await write_to_cache_safe(
-            key=cache_key, ttl=_cache_ttl, instance=connection, extra_dict=extra_dict
         )
     finally:
         return connection
@@ -460,19 +466,25 @@ async def get_route(*, route_id):
                 "Cache Miss. Retrieving route details from the portal..",
                 extra={**extra_dict, "cache_key": cache_key},
             )
-            route = await portal_v2.get_route_details(route_id=route_id)
+            try:
+                route = await portal_v2.get_route_details(route_id=route_id)
+            except Exception as e:
+                logger.exception(
+                    f"Error while getting route details from the portal: {e}",
+                    extra={**extra_dict},
+                )
+            else:
+                await write_to_cache_safe(
+                    key=cache_key, ttl=_cache_ttl, instance=route, extra_dict=extra_dict
+                )
     except redis_exceptions.ConnectionError as e:
-        logger.error(
+        logger.exception(
             f"ConnectionError while reading route details from Cache: {e}",
             extra={**extra_dict},
         )
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"Internal Error while getting route details: {e}", extra={**extra_dict}
-        )
-    else:
-        await write_to_cache_safe(
-            key=cache_key, ttl=_cache_ttl, instance=route, extra_dict=extra_dict
         )
     finally:
         return route
@@ -495,22 +507,28 @@ async def get_integration(*, integration_id):
                 "Cache Miss. Retrieving integration details from the portal..",
                 extra={**extra_dict, "cache_key": cache_key},
             )
-            integration = await portal_v2.get_integration_details(
-                integration_id=integration_id
-            )
+            try:
+                integration = await portal_v2.get_integration_details(
+                    integration_id=integration_id
+                )
+            except Exception as e:
+                logger.exception(
+                    f"Error while getting integration details from the portal: {e}",
+                    extra={**extra_dict},
+                )
+            else:
+                await write_to_cache_safe(
+                    key=cache_key, ttl=_cache_ttl, instance=integration, extra_dict=extra_dict
+                )
     except redis_exceptions.ConnectionError as e:
-        logger.error(
+        logger.exception(
             f"ConnectionError while reading integration details from Cache: {e}",
             extra={**extra_dict},
         )
     except Exception as e:
-        logger.error(
+        logger.exception(
             f"Internal Error while getting integration details: {e}",
             extra={**extra_dict},
-        )
-    else:
-        await write_to_cache_safe(
-            key=cache_key, ttl=_cache_ttl, instance=integration, extra_dict=extra_dict
         )
     finally:
         return integration
