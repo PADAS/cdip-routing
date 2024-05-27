@@ -421,9 +421,19 @@ async def get_connection(*, connection_id):
                 "Cache Miss. Retrieving connection details from the portal..",
                 extra={**extra_dict, "cache_key": cache_key},
             )
-            connection = await portal_v2.get_connection_details(
-                integration_id=connection_id
-            )
+            try:
+                connection = await portal_v2.get_connection_details(
+                    integration_id=connection_id
+                )
+            except Exception as e:
+                logger.exception(
+                    f"Error while getting connection from the portal: {e}",
+                    extra={**extra_dict},
+                )
+            else:
+                await write_to_cache_safe(
+                    key=cache_key, ttl=_cache_ttl, instance=connection, extra_dict=extra_dict
+                )
     except redis_exceptions.ConnectionError as e:
         logger.exception(
             f"ConnectionError while reading connection details from Cache: {e}",
@@ -434,10 +444,6 @@ async def get_connection(*, connection_id):
         logger.exception(
             f"Internal Error while getting connection details: {e}",
             extra={**extra_dict},
-        )
-    else:
-        await write_to_cache_safe(
-            key=cache_key, ttl=_cache_ttl, instance=connection, extra_dict=extra_dict
         )
     finally:
         return connection
@@ -460,7 +466,17 @@ async def get_route(*, route_id):
                 "Cache Miss. Retrieving route details from the portal..",
                 extra={**extra_dict, "cache_key": cache_key},
             )
-            route = await portal_v2.get_route_details(route_id=route_id)
+            try:
+                route = await portal_v2.get_route_details(route_id=route_id)
+            except Exception as e:
+                logger.exception(
+                    f"Error while getting route details from the portal: {e}",
+                    extra={**extra_dict},
+                )
+            else:
+                await write_to_cache_safe(
+                    key=cache_key, ttl=_cache_ttl, instance=route, extra_dict=extra_dict
+                )
     except redis_exceptions.ConnectionError as e:
         logger.exception(
             f"ConnectionError while reading route details from Cache: {e}",
@@ -469,10 +485,6 @@ async def get_route(*, route_id):
     except Exception as e:
         logger.exception(
             f"Internal Error while getting route details: {e}", extra={**extra_dict}
-        )
-    else:
-        await write_to_cache_safe(
-            key=cache_key, ttl=_cache_ttl, instance=route, extra_dict=extra_dict
         )
     finally:
         return route
