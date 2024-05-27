@@ -151,11 +151,19 @@ async def process_observation(raw_observation, attributes):
                     connection = await get_connection(
                         connection_id=observation.data_provider_id
                     )
+                    if not connection:
+                        error = f"Connection '{observation.data_provider_id}' not found."
+                        current_span.set_attribute("error", error)
+                        raise ReferenceDataError(error)
                     provider = connection.provider
                     destinations = connection.destinations
                     default_route = await get_route(
                         route_id=connection.default_route.id
                     )
+                    if not default_route:
+                        error = f"Default route '{connection.default_route.id}', for provider '{observation.data_provider_id}' not found."
+                        current_span.set_attribute("error", error)
+                        raise ReferenceDataError(error)
                     route_configuration = default_route.configuration
                     provider_key = get_provider_key(
                         provider
