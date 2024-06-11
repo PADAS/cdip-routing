@@ -105,9 +105,9 @@ grpcio-status==1.48.2
     # via google-api-core
 gundi-client==1.0.2
     # via -r requirements.in
-gundi-client-v2==2.2.0
+gundi-client-v2==2.3.0
     # via -r requirements.in
-gundi-core==1.3.0
+gundi-core==1.4.0
     # via
     #   -r requirements.in
     #   gundi-client
@@ -279,7 +279,7 @@ six==1.16.0
     # via
     #   google-auth
     #   python-dateutil
-smartconnect-client @ https://github.com/PADAS/smartconnect-client/releases/download/v1.5.1/smartconnect_client-1.5.1-py3-none-any.whl
+smartconnect-client @ https://github.com/PADAS/smartconnect-client/releases/download/v1.5.3/smartconnect_client-1.5.3-py3-none-any.whl
     # via -r requirements.in
 sniffio==1.3.0
     # via

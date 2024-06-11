@@ -1499,7 +1499,7 @@ def destination_integration_v2_smart(integration_type_smart, smart_ca_uuid):
             schemas_v2.IntegrationActionConfiguration(
                 id=UUID("55760315-3d68-4925-bf2d-c4d39de433c9"),
                 integration=UUID("b42c9205-5228-49e0-a75b-ebe5b6a9f78e"),
-                action=schemas_v2.IntegrationActionSummery(
+                action=schemas_v2.IntegrationActionSummary(
                     id=UUID("ebe72917-c112-4064-9f38-707bbd14a50f"),
                     type="push",
                     name="Push Events",
@@ -1514,7 +1514,7 @@ def destination_integration_v2_smart(integration_type_smart, smart_ca_uuid):
             schemas_v2.IntegrationActionConfiguration(
                 id=UUID("abce8c67-a74c-46fd-b5c3-62a7b76f2b17"),
                 integration=UUID("b42c9205-5228-49e0-a75b-ebe5b6a9f78e"),
-                action=schemas_v2.IntegrationActionSummery(
+                action=schemas_v2.IntegrationActionSummary(
                     id=UUID("b0a0e7ed-d668-41b5-96d2-397f026c4ecb"),
                     type="auth",
                     name="Authenticate",
