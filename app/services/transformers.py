@@ -939,9 +939,20 @@ class SMARTTransformerV2(Transformer, ABC):
 
         self._version = self.auth_config.version or "7.5"
         logger.info(f"Using SMART Integration version {self._version}")
-
+        url_parse = urlparse(self.config.base_url)
+        domain = (
+            f"{url_parse.hostname}:{url_parse.port}"
+            if url_parse.port
+            else url_parse.hostname
+        )
+        path = url_parse.path or "/server"
+        path = path.replace("//", "/")
+        api_url = (
+                getattr(auth_config, "endpoint", None)
+                or f"{url_parse.scheme}://{domain}{path}"
+        )
         self.smartconnect_client = AsyncSmartClient(
-            api=f"{self.config.base_url}/server",
+            api=api_url,
             username=self.auth_config.login,
             password=self.auth_config.password,
             version=self._version,
