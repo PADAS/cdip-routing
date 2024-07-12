@@ -39,7 +39,7 @@ resource "google_monitoring_dashboard" "dashboard" {
             {
               "label": "",
               "targetAxis": "Y1",
-              "value": 100
+              "value": 1000
             }
           ],
           "timeshiftDuration": "0s",
@@ -157,7 +157,7 @@ resource "google_monitoring_dashboard" "dashboard" {
             {
               "label": "",
               "targetAxis": "Y1",
-              "value": 15000
+              "value": 30000
             }
           ],
           "yAxis": {
@@ -201,7 +201,7 @@ resource "google_monitoring_alert_policy" "unacked_messages" {
       filter          = "resource.type = \"pubsub_topic\" AND resource.labels.topic_id = \"raw-observations-${var.env}\" AND metric.type = \"pubsub.googleapis.com/topic/num_unacked_messages_by_region\""
       duration        = "0s"
       comparison      = "COMPARISON_GT"
-      threshold_value = 100
+      threshold_value = 1000
       aggregations {
         alignment_period   = "900s"
         per_series_aligner = "ALIGN_MEAN"
@@ -243,7 +243,7 @@ resource "google_monitoring_alert_policy" "run_request_latency" {
       filter          = "resource.type = \"cloud_run_revision\" AND resource.labels.service_name = \"routing-transformer-service-${var.env}\" AND metric.type = \"run.googleapis.com/request_latencies\""
       duration        = "0s"
       comparison      = "COMPARISON_GT"
-      threshold_value = 15000
+      threshold_value = 30000
       aggregations {
         alignment_period     = "900s"
         cross_series_reducer = "REDUCE_PERCENTILE_95"
