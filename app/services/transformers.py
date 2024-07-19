@@ -18,7 +18,7 @@ from gundi_core.schemas import ERPatrol, ERPatrolSegment
 from gundi_core.schemas.v2 import (
     SMARTTransformationRules,
     SMARTPushEventActionConfig,
-    SMARTAuthActionConfig,
+    SMARTAuthActionConfig, EREventUpdate,
 )
 from pydantic import BaseModel
 from smartconnect import AsyncSmartClient
@@ -1309,10 +1309,11 @@ class FieldMappingRule(TransformationRule):
 
 
 class EREventTransformer(Transformer):
+
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
-    ) -> dict:
-        transformed_message = dict(
+    ) -> schemas.v1.EREvent:
+        transformed_event_fields = dict(
             title=message.title,
             event_type=message.event_type,
             event_details=message.event_details,
@@ -1324,22 +1325,68 @@ class EREventTransformer(Transformer):
         # Apply extra transformation rules as needed
         if rules:
             for rule in rules:
-                rule.apply(message=transformed_message)
-        return transformed_message
+                rule.apply(message=transformed_event_fields)
+        er_event = schemas.v1.EREvent(
+            **transformed_event_fields
+        )
+        return er_event
+
+
+class EREventUpdateTransformer(Transformer):
+
+    def __init__(self, *, config=None, **kwargs):
+        super().__init__(config=config, **kwargs)
+        self.field_map = {
+            "title": "title",
+            "event_type": "event_type",
+            "event_details": "event_details",
+            "time": "recorded_at",
+            "location": "location",
+        }
+
+    async def transform(
+        self, message: schemas.v2.EventUpdate, rules: list = None, **kwargs
+    ) -> EREventUpdate:
+        er_changes = {
+            self.map_to_er_field(field): value
+            for field, value in message.changes.items()
+        }
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=er_changes)
+        er_event_update = schemas.v2.EREventUpdate(
+            gundi_id=str(message.gundi_id),
+            related_to=str(message.related_to),
+            owner=str(message.owner),
+            data_provider_id=str(message.data_provider_id),
+            annotations=message.annotations,
+            changes=er_changes
+        )
+        return er_event_update
+
+    def map_to_er_field(self, field):
+        return self.field_map.get(field, field)
 
 
 class ERAttachmentTransformer(Transformer):
     async def transform(
         self, message: schemas.v2.Attachment, rules: list = None, **kwargs
-    ) -> dict:
-        # ToDo. Implement transformation logic for attachments
-        return dict(file_path=message.file_path)
+    ) -> schemas.v2.ERAttachment:
+        return schemas.v2.ERAttachment(
+            gundi_id=str(message.gundi_id),
+            related_to=str(message.related_to),
+            owner=str(message.owner),
+            data_provider_id=str(message.data_provider_id),
+            annotations=message.annotations,
+            file_path=message.file_path
+        )
 
 
 class ERObservationTransformer(Transformer):
     async def transform(
         self, message: schemas.v2.Observation, rules: list = None, **kwargs
-    ) -> dict:
+    ) -> schemas.v1.ERObservation:
         if not message.location or not message.location.lat or not message.location.lon:
             logger.warning(f"bad position?? {message}")
         transformed_message = dict(
@@ -1347,7 +1394,10 @@ class ERObservationTransformer(Transformer):
             source_type=message.type or "tracking-device",
             subject_name=message.source_name or message.external_source_id,
             recorded_at=message.recorded_at,
-            location={"lon": message.location.lon, "lat": message.location.lat},
+            location=schemas.v1.ERLocation(
+                longitude=message.location.lon,
+                latitude=message.location.lat,
+            ),
             additional=message.additional,
         )
 
@@ -1359,8 +1409,10 @@ class ERObservationTransformer(Transformer):
         if rules:
             for rule in rules:
                 rule.apply(message=transformed_message)
-
-        return transformed_message
+        er_observation = schemas.v1.ERObservation(
+            **transformed_message
+        )
+        return er_observation
 
 
 class MBObservationTransformer(Transformer):
@@ -1589,14 +1641,6 @@ def build_transformed_message_attributes(
         }
 
 
-def convert_observation_to_cdip_schema(observation, gundi_version="v1"):
-    if gundi_version == "v2":
-        schema = schemas.v2.models_by_stream_type[observation.get("observation_type")]
-    else:  # Default to v1
-        schema = schemas.models_by_stream_type[observation.get("observation_type")]
-    return schema.parse_obj(observation)
-
-
 def create_message(attributes, observation):
     message = {"attributes": attributes, "data": observation}
     return message
@@ -1698,6 +1742,9 @@ transformers_map = {
     schemas.v2.StreamPrefixEnum.event.value: {
         schemas.DestinationTypes.EarthRanger.value: EREventTransformer,
         schemas.DestinationTypes.SmartConnect.value: SmartEventTransformerV2,
+    },
+    schemas.v2.StreamPrefixEnum.event_update.value: {
+        schemas.DestinationTypes.EarthRanger.value: EREventUpdateTransformer,
     },
     schemas.v2.StreamPrefixEnum.attachment.value: {
         schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer
