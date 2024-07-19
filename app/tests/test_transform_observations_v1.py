@@ -1,13 +1,10 @@
 import pytest
 import pytz
 from datetime import datetime
+from gundi_core import schemas
 from app.conftest import async_return
 from app.core.gundi import URN_GUNDI_PREFIX, URN_GUNDI_INTSRC_FORMAT
-from app.services.transformers import (
-    transform_observation,
-    extract_fields_from_message,
-    convert_observation_to_cdip_schema,
-)
+from app.services.transformers import transform_observation
 
 
 @pytest.mark.asyncio
@@ -16,9 +13,9 @@ async def test_movebank_transformer(
     raw_observation_position,
     raw_observation_position_attributes,
 ):
-    observation = convert_observation_to_cdip_schema(
-        raw_observation_position, gundi_version="v1"
-    )
+
+    schema = schemas.models_by_stream_type[raw_observation_position.get("observation_type")]
+    observation = schema.parse_obj(raw_observation_position)
     # Set Movebank values
     outbound_configuration_default.type_slug = "movebank"
     transformed_observation = await transform_observation(
@@ -74,10 +71,8 @@ async def test_smart_transformer_with_er_event(
     mock_gundi_client.get_outbound_integration_list.return_value = async_return(
         [smart_outbound_configuration_gcp_pubsub]
     )
-
-    event = convert_observation_to_cdip_schema(
-        raw_observation_er_event, gundi_version="v1"
-    )
+    schema = schemas.models_by_stream_type[raw_observation_er_event.get("observation_type")]
+    event = schema.parse_obj(raw_observation_er_event)
     assert event
 
     transformed_observation = await transform_observation(
@@ -127,9 +122,8 @@ async def test_smart_transformer_with_er_patrol(
         [smart_outbound_configuration_gcp_pubsub]
     )
 
-    patrol = convert_observation_to_cdip_schema(
-        raw_observation_er_patrol, gundi_version="v1"
-    )
+    schema = schemas.models_by_stream_type[raw_observation_er_patrol.get("observation_type")]
+    patrol = schema.parse_obj(raw_observation_er_patrol)
     assert patrol
 
     transformed_observation = await transform_observation(

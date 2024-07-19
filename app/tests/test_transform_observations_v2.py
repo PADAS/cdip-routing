@@ -7,18 +7,18 @@ async def test_event_type_mapping(
     mock_cache,
     mock_gundi_client_v2,
     mock_pubsub_client,
-    leopard_detected_event_v2,
+    leopard_detected_from_species_event_v2,
     destination_integration_v2_er,
     route_config_with_event_type_mappings,
     connection_v2,
 ):
     transformed_observation = await transform_observation_v2(
-        observation=leopard_detected_event_v2,
+        observation=leopard_detected_from_species_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
         route_configuration=route_config_with_event_type_mappings,
     )
-    assert transformed_observation["event_type"] == "leopard_sighting"
+    assert transformed_observation.event_type == "leopard_sighting"
 
 
 @pytest.mark.asyncio
@@ -39,7 +39,7 @@ async def test_event_type_mapping_default(
         route_configuration=route_config_with_event_type_mappings,
     )
     # Check that it's mapped to the default type
-    assert transformed_observation["event_type"] == "wildlife_sighting_rep"
+    assert transformed_observation.event_type == "wildlife_sighting_rep"
 
 
 @pytest.mark.asyncio
@@ -91,22 +91,13 @@ async def test_transform_observations_for_earthranger(
         route_configuration=route_config_with_no_mappings,
     )
     assert transformed_observation
-    assert (
-        transformed_observation.get("manufacturer_id")
-        == observation_object_v2.external_source_id
-    )
-    assert transformed_observation.get("source_type") == observation_object_v2.type
-    assert (
-        transformed_observation.get("subject_name") == observation_object_v2.source_name
-    )
-    assert (
-        transformed_observation.get("recorded_at") == observation_object_v2.recorded_at
-    )
-    assert transformed_observation.get("location") == {
-        "lon": observation_object_v2.location.lon,
-        "lat": observation_object_v2.location.lat,
-    }
-    assert transformed_observation.get("additional") == observation_object_v2.additional
+    assert transformed_observation.manufacturer_id == observation_object_v2.external_source_id
+    assert transformed_observation.source_type == observation_object_v2.type
+    assert transformed_observation.subject_name == observation_object_v2.source_name
+    assert transformed_observation.recorded_at == observation_object_v2.recorded_at
+    assert transformed_observation.location.longitude == observation_object_v2.location.lon
+    assert transformed_observation.location.latitude == observation_object_v2.location.lat
+    assert transformed_observation.additional == observation_object_v2.additional
 
 
 @pytest.mark.asyncio
@@ -132,12 +123,12 @@ async def test_transform_events_without_route_configuration(
     mock_cache,
     mock_gundi_client_v2,
     mock_pubsub_client,
-    unmapped_animal_detected_event_v2,
+    animals_sign_event_v2,
     destination_integration_v2_er,
     connection_v2,
 ):
     transformed_observation = await transform_observation_v2(
-        observation=unmapped_animal_detected_event_v2,
+        observation=animals_sign_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
         route_configuration=None,
@@ -150,20 +141,20 @@ async def test_provider_key_mapping_with_default(
     mock_cache,
     mock_gundi_client_v2,
     mock_pubsub_client,
-    unmapped_animal_detected_event_v2,
+    animals_sign_event_v2,
     destination_integration_v2_er,
     route_config_with_provider_key_mappings,
     connection_v2,
 ):
     # Test with a species that is not in the map
     transformed_observation = await transform_observation_v2(
-        observation=unmapped_animal_detected_event_v2,
+        observation=animals_sign_event_v2,
         destination=destination_integration_v2_er,
         provider=connection_v2.provider,
         route_configuration=route_config_with_provider_key_mappings,
     )
     # Check that it's mapped to the default type
-    assert transformed_observation.get("provider_key") == "mapipedia"
+    assert transformed_observation.provider_key == "mapipedia"
 
 
 @pytest.mark.asyncio
@@ -184,7 +175,7 @@ async def test_provider_key_mapping_in_observations_v2(
         route_configuration=route_config_with_provider_key_mappings,
     )
     # Check that it's mapped to the default type
-    assert transformed_observation.get("provider_key") == "mapipedia"
+    assert transformed_observation.provider_key == "mapipedia"
 
 
 @pytest.mark.asyncio
@@ -204,8 +195,8 @@ async def test_provider_key_mapping_in_events_v2(
         provider=connection_v2.provider,
         route_configuration=route_config_with_provider_key_mappings,
     )
-    # Check that it's mapped to the default type
-    assert transformed_observation.get("provider_key") == "mapipedia"
+    # Check that it's mapped to the provider key
+    assert transformed_observation.provider_key == "mapipedia"
 
 
 @pytest.mark.asyncio

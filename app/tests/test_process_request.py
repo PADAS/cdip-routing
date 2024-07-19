@@ -18,7 +18,7 @@ async def test_process_geoevent_v1_successfully(
     # Mock external dependencies
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
-    mocker.patch("app.services.process_messages.pubsub", mock_pubsub_client)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
     response = api_client.post(
         "/",
         headers=pubsub_cloud_event_headers,
