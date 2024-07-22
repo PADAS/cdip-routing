@@ -5,7 +5,6 @@ from app.main import app
 api_client = TestClient(app)
 
 
-# ToDo: Finish refactoring this test
 @pytest.mark.asyncio
 async def test_process_geoevent_v1_successfully(
     mocker,

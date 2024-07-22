@@ -236,3 +236,22 @@ async def test_transform_events_for_smart(
     observation = observation_group["observations"][0]
     assert observation.get("category") == "animals.sign"
     assert observation.get("attributes") == {"ageofsign": "days", "species": "lion"}
+
+
+@pytest.mark.asyncio
+async def test_transform_event_update_with_type_mapping_for_earthranger(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    event_update_species_wildcat,
+    destination_integration_v2_er,
+    route_config_with_event_type_mappings,
+    connection_v2,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=event_update_species_wildcat,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=route_config_with_event_type_mappings,
+    )
+    assert transformed_observation.changes.get("event_type") == "wild_cat_sighting"

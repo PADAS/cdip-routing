@@ -32,7 +32,9 @@ async def process_observation_event(raw_message, attributes):
         logger.debug(f"Message received: \npayload: {raw_message} \nattributes: {attributes}")
         current_span.add_event(name="routing_service.observations_received_at_consumer")
         event_type = raw_message.get("event_type")
-        # ToDo: Check event schema version
+        if schema_version := raw_message.get("schema_version") != "v1":
+            logger.warning(f"Schema version '{schema_version}' not supported. Message discarded.")
+            return
         # ToDo: Discard duplicate events
         current_span.set_attribute("system_event_type", event_type)
         current_span.set_attribute("observation_type", str(raw_message.get("observation_type")))
@@ -42,12 +44,12 @@ async def process_observation_event(raw_message, attributes):
         try:
             handler = event_handlers[event_type]
         except KeyError:
-            logger.warning(f"Event Type {event_type} not  supported. Message discarded.")
+            logger.warning(f"Event of type '{event_type}' unknown. Ignored.")
             return
         try:
             schema = event_schemas[event_type]
         except KeyError:
-            logger.warning(f"Event Schema for {event_type} not found. Message discarded.")
+            logger.warning(f"Event Schema for '{event_type}' not found. Message discarded.")
         parsed_event = schema.parse_obj(raw_message)
         return await handler(event=parsed_event)
 

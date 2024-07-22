@@ -1092,6 +1092,49 @@ def route_v2():
 
 
 @pytest.fixture
+def raw_observation_v2():
+    return {
+        "event_id": "d8523635-546e-4cd4-ad6a-d9fdf494698e",
+        "timestamp": "2024-07-22 11:51:12.684788+00:00",
+        "schema_version": "v1",
+        "payload": {
+            "gundi_id": "9573c2b0-3fd7-4502-884b-43d5628ce7a8",
+            "related_to": None,
+            "owner": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+            "data_provider_id": "f870e228-4a65-40f0-888c-41bdc1124c3c",
+            "annotations": {},
+            "source_id": "eb47e6ad-a677-4218-856b-59ad4d8d0e73",
+            "external_source_id": "test-device",
+            "source_name": "Mariano",
+            "type": "tracking-device",
+            "subject_type": "mm-tracker",
+            "recorded_at": "2024-07-22 11:51:05+00:00",
+            "location": {
+                "lat": -51.688246,
+                "lon": -72.704459,
+                "alt": 0,
+                "hdop": None,
+                "vdop": None
+            },
+            "additional": {
+                "speed_kmph": 30
+            },
+            "observation_type": "obv"
+        },
+        "event_type": "ObservationReceived"
+    }
+
+
+@pytest.fixture
+def raw_observation_v2_attributes():
+    return {
+        "observation_type": "obv",
+        "gundi_version": "v2",
+        "gundi_id": "9573c2b0-3fd7-4502-884b-43d5628ce7a8",
+    }
+
+
+@pytest.fixture
 def raw_event_v2():
     return {
         "event_type": "EventReceived",
@@ -1123,6 +1166,40 @@ def raw_event_v2_attributes():
         "observation_type": "ev",
         "gundi_version": "v2",
         "gundi_id": "5b793d17-cd79-49c8-abaa-712cb40f2b54",
+    }
+
+
+@pytest.fixture
+def raw_event_update():
+    return {
+        "event_id": "04532433-79d3-4265-a201-7b920582c7e7",
+        "timestamp": "2024-07-22 12:23:20.449844+00:00",
+        "schema_version": "v1",
+        "payload": {
+            "gundi_id": "b1fd63df-9337-40bf-8097-307d986d7e94",
+            "related_to": None,
+            "owner": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+            "data_provider_id": "f870e228-4a65-40f0-888c-41bdc1124c3c",
+            "annotations": None,
+            "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
+            "external_source_id": "camera123",
+            "changes": {
+                "event_details": {
+                    "species": "wildcat"
+                }
+            },
+            "observation_type": "evu"
+        },
+        "event_type": "EventUpdateReceived"
+    }
+
+
+@pytest.fixture
+def raw_event_update_attributes():
+    return {
+        "observation_type": "evu",
+        "gundi_version": "v2",
+        "gundi_id": "b1fd63df-9337-40bf-8097-307d986d7e94",
     }
 
 
@@ -1206,6 +1283,25 @@ def leopard_detected_from_species_event_v2():
         },
         geometry={},
         observation_type="ev",
+    )
+
+
+@pytest.fixture
+def event_update_species_wildcat():
+    return schemas_v2.EventUpdate(
+        gundi_id="78867a74-67f0-4b56-8e44-125ae66408ff",
+        related_to=None,
+        owner="a91b400b-482a-4546-8fcb-ee42b01deeb6",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations=None,
+        source_id="ac1b9cdc-a193-4515-b446-b177bcc5f342",
+        external_source_id="camera123",
+        changes={
+            "event_details": {
+                "species": "Wildcat"
+            }
+        },
+        observation_type="evu"
     )
 
 
@@ -1579,6 +1675,19 @@ def route_config_with_event_type_mappings():
                             "map": {
                                 "Leopard": "leopard_sighting",
                                 "Wilddog": "wild_dog_sighting",
+                                "Wildcat": "wild_cat_sighting",
+                            },
+                            "default": "wildlife_sighting_rep",
+                            "provider_field": "event_details__species",
+                            "destination_field": "event_type",
+                        }
+                    },
+                    "evu": {
+                        "338225f3-91f9-4fe1-b013-353a229ce504": {
+                            "map": {
+                                "Leopard": "leopard_sighting",
+                                "Wilddog": "wild_dog_sighting",
+                                "Wildcat": "wild_cat_sighting",
                             },
                             "default": "wildlife_sighting_rep",
                             "provider_field": "event_details__species",
