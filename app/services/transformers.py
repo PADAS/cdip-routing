@@ -99,6 +99,7 @@ class ERGeoEventTransformer(Transformer):
             location=dict(
                 longitude=geo_event.location.x, latitude=geo_event.location.y
             ),
+            # ToDo: is geometry missing in v1?
         )
 
 
@@ -1312,7 +1313,7 @@ class EREventTransformer(Transformer):
 
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
-    ) -> schemas.v1.EREvent:
+    ) -> schemas.v2.EREvent:
         transformed_event_fields = dict(
             title=message.title,
             event_type=message.event_type,
@@ -1321,12 +1322,13 @@ class EREventTransformer(Transformer):
             location=dict(
                 longitude=message.location.lon, latitude=message.location.lat
             ),
+            geometry=message.geometry
         )
         # Apply extra transformation rules as needed
         if rules:
             for rule in rules:
                 rule.apply(message=transformed_event_fields)
-        er_event = schemas.v1.EREvent(
+        er_event = schemas.v2.EREvent(
             **transformed_event_fields
         )
         return er_event
@@ -1340,7 +1342,7 @@ class EREventUpdateTransformer(Transformer):
             "title": "title",
             "event_type": "event_type",
             "event_details": "event_details",
-            "time": "recorded_at",
+            "recorded_at": "time",
             "location": "location",
         }
 
@@ -1376,17 +1378,18 @@ class ERAttachmentTransformer(Transformer):
 class ERObservationTransformer(Transformer):
     async def transform(
         self, message: schemas.v2.Observation, rules: list = None, **kwargs
-    ) -> schemas.v1.ERObservation:
+    ) -> schemas.v2.ERObservation:
         if not message.location or not message.location.lat or not message.location.lon:
             logger.warning(f"bad position?? {message}")
         transformed_message = dict(
             manufacturer_id=message.external_source_id,
             source_type=message.type or "tracking-device",
+            subject_type=message.subject_type,
             subject_name=message.source_name or message.external_source_id,
             recorded_at=message.recorded_at,
-            location=schemas.v1.ERLocation(
-                longitude=message.location.lon,
-                latitude=message.location.lat,
+            location=schemas.v2.ERObservationLocation(
+                lon=message.location.lon,
+                lat=message.location.lat,
             ),
             additional=message.additional,
         )
@@ -1399,7 +1402,7 @@ class ERObservationTransformer(Transformer):
         if rules:
             for rule in rules:
                 rule.apply(message=transformed_message)
-        er_observation = schemas.v1.ERObservation(
+        er_observation = schemas.v2.ERObservation(
             **transformed_message
         )
         return er_observation

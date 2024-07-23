@@ -95,8 +95,8 @@ async def test_transform_observations_for_earthranger(
     assert transformed_observation.source_type == observation_object_v2.type
     assert transformed_observation.subject_name == observation_object_v2.source_name
     assert transformed_observation.recorded_at == observation_object_v2.recorded_at
-    assert transformed_observation.location.longitude == observation_object_v2.location.lon
-    assert transformed_observation.location.latitude == observation_object_v2.location.lat
+    assert transformed_observation.location.lon == observation_object_v2.location.lon
+    assert transformed_observation.location.lat == observation_object_v2.location.lat
     assert transformed_observation.additional == observation_object_v2.additional
 
 
