@@ -1356,11 +1356,6 @@ class EREventUpdateTransformer(Transformer):
             for rule in rules:
                 rule.apply(message=er_changes)
         er_event_update = schemas.v2.EREventUpdate(
-            gundi_id=str(message.gundi_id),
-            related_to=str(message.related_to),
-            owner=str(message.owner),
-            data_provider_id=str(message.data_provider_id),
-            annotations=message.annotations,
             changes=er_changes
         )
         return er_event_update
@@ -1374,11 +1369,6 @@ class ERAttachmentTransformer(Transformer):
         self, message: schemas.v2.Attachment, rules: list = None, **kwargs
     ) -> schemas.v2.ERAttachment:
         return schemas.v2.ERAttachment(
-            gundi_id=str(message.gundi_id),
-            related_to=str(message.related_to),
-            owner=str(message.owner),
-            data_provider_id=str(message.data_provider_id),
-            annotations=message.annotations,
             file_path=message.file_path
         )
 

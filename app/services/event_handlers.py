@@ -97,6 +97,7 @@ async def transform_and_route_observation(observation):
                     )
                     continue
 
+                # Add metadata used to dispatch the observation
                 attributes = build_transformed_message_attributes(
                     observation=observation,
                     destination=destination,
@@ -128,10 +129,7 @@ async def transform_and_route_observation(observation):
                 )
                 logger.info(
                     f"Observation {observation.gundi_id} transformed and sent to pubsub topic successfully.",
-                    extra={
-                        **attributes,
-                        "destination_id": str(destination.id),
-                    },
+                    extra=attributes
                 )
         except ReferenceDataError as e:
             error_msg = (
@@ -156,7 +154,6 @@ async def transform_and_route_observation(observation):
                 error_msg,
                 extra={
                     ExtraKeys.AttentionNeeded: True,
-                    ExtraKeys.DeadLetter: True,
                     ExtraKeys.DeviceId: get_source_id(observation, "v2"),
                     ExtraKeys.InboundIntId: get_data_provider_id(observation, "v2"),
                     ExtraKeys.StreamType: observation.observation_type,
