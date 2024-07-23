@@ -42,10 +42,9 @@ async def send_message_to_gcp_pubsub_dispatcher(
             current_span.set_attribute("topic", topic_name)
             topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
             # Serialize UUIDs or other complex types to string
-            message_clean = json.loads(json.dumps(message, default=str))
             attributes_clean = json.loads(json.dumps(attributes, default=str))
             ordering_key_clean = str(ordering_key)
-            messages = [pubsub.PubsubMessage(message_clean, ordering_key=ordering_key_clean, **attributes_clean)]
+            messages = [pubsub.PubsubMessage(message, ordering_key=ordering_key_clean, **attributes_clean)]
             logger.info(f"Sending observation to PubSub topic {topic_name}..")
             try:
                 response = await client.publish(
