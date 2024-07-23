@@ -118,7 +118,7 @@ async def transform_and_route_observation(observation):
                 transformer_event = build_transformer_event(transformed_observation)
                 # Publish to a GCP PubSub topic
                 pubsub_message = build_gcp_pubsub_message(
-                    payload=transformer_event.dict()
+                    payload=transformer_event.dict(exclude_none=True)
                 )
                 await send_message_to_gcp_pubsub_dispatcher(
                     message=pubsub_message,
