@@ -57,3 +57,7 @@ def is_valid_position(gundi_version: str, location):
         if gundi_version == "v1"
         else all([location.lat, location.lon])
     )
+
+
+def get_provider_key(provider):
+    return f"gundi_{provider.type.value}_{str(provider.id)}"

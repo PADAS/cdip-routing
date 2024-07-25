@@ -1,5 +1,25 @@
 import pytest
-from app.services.process_messages import process_observation, get_provider_key
+from app.services.process_messages import process_observation_event
+from app.core.utils import get_provider_key
+
+
+@pytest.mark.asyncio
+async def test_process_observations_v2(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    raw_observation_v2,
+    raw_observation_v2_attributes,
+):
+    # Mock external dependencies
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
+    await process_observation_event(raw_observation_v2, raw_observation_v2_attributes)
+    # Check that the right methods, to publish to PuSub, were called
+    assert mock_pubsub_client.PublisherClient.called
+    assert mock_pubsub_client.PublisherClient.return_value.publish.called
 
 
 @pytest.mark.asyncio
@@ -14,8 +34,27 @@ async def test_process_events_v2(
     # Mock external dependencies
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
-    mocker.patch("app.services.process_messages.pubsub", mock_pubsub_client)
-    await process_observation(raw_event_v2, raw_event_v2_attributes)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
+    await process_observation_event(raw_event_v2, raw_event_v2_attributes)
+    # Check that the right methods, to publish to PuSub, were called
+    assert mock_pubsub_client.PublisherClient.called
+    assert mock_pubsub_client.PublisherClient.return_value.publish.called
+
+
+@pytest.mark.asyncio
+async def test_process_event_update(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    raw_event_update,
+    raw_event_update_attributes,
+):
+    # Mock external dependencies
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
+    await process_observation_event(raw_event_update, raw_event_update_attributes)
     # Check that the right methods, to publish to PuSub, were called
     assert mock_pubsub_client.PublisherClient.called
     assert mock_pubsub_client.PublisherClient.return_value.publish.called
@@ -33,8 +72,8 @@ async def test_process_attachments_v2(
     # Mock external dependencies
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
-    mocker.patch("app.services.process_messages.pubsub", mock_pubsub_client)
-    await process_observation(raw_attachment_v2, raw_attachment_v2_attributes)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
+    await process_observation_event(raw_attachment_v2, raw_attachment_v2_attributes)
     # Check that the right methods, to publish to PuSub, were called
     assert mock_pubsub_client.PublisherClient.called
     assert mock_pubsub_client.PublisherClient.return_value.publish.called

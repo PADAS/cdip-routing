@@ -34,11 +34,11 @@ def mock_cache(mocker):
 
 @pytest.fixture
 def mock_gundi_client(
-    mocker,
-    inbound_integration_config,
-    outbound_integration_config,
-    outbound_integration_config_list,
-    device,
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
 ):
     mock_client = mocker.MagicMock()
     mock_client.get_inbound_integration.return_value = async_return(
@@ -107,11 +107,11 @@ def _set_side_effect_error_on_gundi_client_once(mock_client, error):
 
 @pytest.fixture
 def mock_gundi_client_with_client_connector_error_once(
-    mocker,
-    inbound_integration_config,
-    outbound_integration_config,
-    outbound_integration_config_list,
-    device,
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
 ):
     mock_client = mocker.MagicMock()
     # Simulate a connection error
@@ -127,11 +127,11 @@ def mock_gundi_client_with_client_connector_error_once(
 
 @pytest.fixture
 def mock_gundi_client_with_server_disconnected_error_once(
-    mocker,
-    inbound_integration_config,
-    outbound_integration_config,
-    outbound_integration_config_list,
-    device,
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
 ):
     mock_client = mocker.MagicMock()
     # Simulate a server disconnected error
@@ -147,11 +147,11 @@ def mock_gundi_client_with_server_disconnected_error_once(
 
 @pytest.fixture
 def mock_gundi_client_with_server_timeout_error_once(
-    mocker,
-    inbound_integration_config,
-    outbound_integration_config,
-    outbound_integration_config_list,
-    device,
+        mocker,
+        inbound_integration_config,
+        outbound_integration_config,
+        outbound_integration_config_list,
+        device,
 ):
     mock_client = mocker.MagicMock()
     # Simulate a timeout error
@@ -825,10 +825,10 @@ def outbound_configuration_default():
 # ToDo: Find a common place for mocks and testing utilities that can be reused across services
 @pytest.fixture
 def mock_gundi_client_v2(
-    mocker,
-    connection_v2,
-    destination_integration_v2,
-    route_v2,
+        mocker,
+        connection_v2,
+        destination_integration_v2,
+        route_v2,
 ):
     mock_client = mocker.MagicMock()
     mock_client.get_connection_details.return_value = async_return(connection_v2)
@@ -1092,33 +1092,71 @@ def route_v2():
 
 
 @pytest.fixture
+def raw_observation_v2():
+    return {
+        "event_id": "d8523635-546e-4cd4-ad6a-d9fdf494698e",
+        "timestamp": "2024-07-22 11:51:12.684788+00:00",
+        "schema_version": "v1",
+        "payload": {
+            "gundi_id": "9573c2b0-3fd7-4502-884b-43d5628ce7a8",
+            "related_to": None,
+            "owner": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+            "data_provider_id": "f870e228-4a65-40f0-888c-41bdc1124c3c",
+            "annotations": {},
+            "source_id": "eb47e6ad-a677-4218-856b-59ad4d8d0e73",
+            "external_source_id": "test-device",
+            "source_name": "Mariano",
+            "type": "tracking-device",
+            "subject_type": "mm-tracker",
+            "recorded_at": "2024-07-22 11:51:05+00:00",
+            "location": {
+                "lat": -51.688246,
+                "lon": -72.704459,
+                "alt": 0,
+                "hdop": None,
+                "vdop": None
+            },
+            "additional": {
+                "speed_kmph": 30
+            },
+            "observation_type": "obv"
+        },
+        "event_type": "ObservationReceived"
+    }
+
+
+@pytest.fixture
+def raw_observation_v2_attributes():
+    return {
+        "observation_type": "obv",
+        "gundi_version": "v2",
+        "gundi_id": "9573c2b0-3fd7-4502-884b-43d5628ce7a8",
+    }
+
+
+@pytest.fixture
 def raw_event_v2():
     return {
-        "gundi_id": "5b793d17-cd79-49c8-abaa-712cb40f2b54",
-        "related_to": "None",
-        "owner": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
-        "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
-        "annotations": {},
-        "source_id": "afa0d606-c143-4705-955d-68133645db6d",
-        "external_source_id": "Xyz123",
-        "recorded_at": "2023-07-04T21:38:00+00:00",
-        "location": {
-            "lat": -51.667875,
-            "lon": -72.71195,
-            "alt": 1800.0,
-            "hdop": None,
-            "vdop": None,
-        },
-        "title": "Animal Detected",
-        "event_type": None,
-        "event_details": {
-            "site_name": "Camera2G",
-            "species": "Leopard",
-            "tags": ["female adult", "male child"],
-            "animal_count": 2,
-        },
-        "geometry": {},
-        "observation_type": "ev",
+        "event_type": "EventReceived",
+        "event_id": "21bda0d3-b2de-4285-9540-0b6a84881b52",
+        "timestamp": "2024-07-04 18:09:19.853663+00:00",
+        "schema_version": "v1",
+        "payload": {
+            "gundi_id": "27e9329e-82ab-44f9-8997-b09f123eccbb",
+            "related_to": None,
+            "owner": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+            "data_provider_id": "f870e228-4a65-40f0-888c-41bdc1124c3c",
+            "annotations": {},
+            "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
+            "external_source_id": "camera123",
+            "recorded_at": "2024-07-04 18:09:12+00:00",
+            "location": {"lat": 13.688635, "lon": 13.783064, "alt": 0.0, "hdop": None, "vdop": None},
+            "title": "Animal Detected Test Event",
+            "event_type": "wildlife_sighting_rep",
+            "event_details": {"species": "lion"},
+            "geometry": {},
+            "observation_type": "ev"
+        }
     }
 
 
@@ -1132,17 +1170,56 @@ def raw_event_v2_attributes():
 
 
 @pytest.fixture
+def raw_event_update():
+    return {
+        "event_id": "04532433-79d3-4265-a201-7b920582c7e7",
+        "timestamp": "2024-07-22 12:23:20.449844+00:00",
+        "schema_version": "v1",
+        "payload": {
+            "gundi_id": "b1fd63df-9337-40bf-8097-307d986d7e94",
+            "related_to": None,
+            "owner": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+            "data_provider_id": "f870e228-4a65-40f0-888c-41bdc1124c3c",
+            "annotations": None,
+            "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
+            "external_source_id": "camera123",
+            "changes": {
+                "event_details": {
+                    "species": "wildcat"
+                }
+            },
+            "observation_type": "evu"
+        },
+        "event_type": "EventUpdateReceived"
+    }
+
+
+@pytest.fixture
+def raw_event_update_attributes():
+    return {
+        "observation_type": "evu",
+        "gundi_version": "v2",
+        "gundi_id": "b1fd63df-9337-40bf-8097-307d986d7e94",
+    }
+
+
+@pytest.fixture
 def raw_attachment_v2():
     return {
-        "gundi_id": "8b62fdd5-2e70-40e1-b202-f80c6014d596",
-        "related_to": "5b793d17-cd79-49c8-abaa-712cb40f2b54",
-        "owner": "na",
-        "data_provider_id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
-        "annotations": None,
-        "source_id": "None",
-        "external_source_id": "None",
-        "file_path": "attachments/8b62fdd5-2e70-40e1-b202-f80c6014d596_2023-07-04-1851_leopard.jpg",
-        "observation_type": "att",
+        "event_type": "AttachmentReceived",
+        "event_id": "6fe6c88a-3b48-4294-8dbb-2dec5d911f71",
+        "timestamp": "2024-07-19T19:41:31.866487Z",
+        "schema_version": "v1",
+        "payload": {
+            "gundi_id": "7687a8d5-a89d-4ceb-be3b-5e1e3b7dc1a9",
+            "related_to": "5f0b33b0-cf0d-4280-990f-0096c357b6c5",
+            "owner": "na", "data_provider_id": "f870e228-4a65-40f0-888c-41bdc1124c3c",
+            "annotations": None,
+            "source_id": "None",
+            "external_source_id": "None",
+            "file_path": "attachments/7687a8d5-a89d-4ceb-be3b-5e1e3b7dc1a9_elephant-female.png",
+            "observation_type": "att"
+        }
     }
 
 
@@ -1170,6 +1247,33 @@ def leopard_detected_event_v2():
             lat=-51.667875, lon=-72.71195, alt=1800.0, hdop=None, vdop=None
         ),
         title="Leopard Detected",
+        event_type="leopard_sighting",
+        event_details={
+            "site_name": "Camera2G",
+            "species": "Leopard",
+            "tags": ["female adult", "male child"],
+            "animal_count": 2,
+        },
+        geometry={},
+        observation_type="ev",
+    )
+
+
+@pytest.fixture
+def leopard_detected_from_species_event_v2():
+    return schemas_v2.Event(
+        gundi_id="b9b46dc1-e033-447d-a99b-0fe373ca04c9",
+        related_to="None",
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        recorded_at=datetime.datetime(2023, 7, 4, 21, 38, tzinfo=datetime.timezone.utc),
+        location=schemas_v2.Location(
+            lat=-51.667875, lon=-72.71195, alt=1800.0, hdop=None, vdop=None
+        ),
+        title="Leopard Detected",
         event_type=None,
         event_details={
             "site_name": "Camera2G",
@@ -1179,6 +1283,25 @@ def leopard_detected_event_v2():
         },
         geometry={},
         observation_type="ev",
+    )
+
+
+@pytest.fixture
+def event_update_species_wildcat():
+    return schemas_v2.EventUpdate(
+        gundi_id="78867a74-67f0-4b56-8e44-125ae66408ff",
+        related_to=None,
+        owner="a91b400b-482a-4546-8fcb-ee42b01deeb6",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations=None,
+        source_id="ac1b9cdc-a193-4515-b446-b177bcc5f342",
+        external_source_id="camera123",
+        changes={
+            "event_details": {
+                "species": "Wildcat"
+            }
+        },
+        observation_type="evu"
     )
 
 
@@ -1552,6 +1675,19 @@ def route_config_with_event_type_mappings():
                             "map": {
                                 "Leopard": "leopard_sighting",
                                 "Wilddog": "wild_dog_sighting",
+                                "Wildcat": "wild_cat_sighting",
+                            },
+                            "default": "wildlife_sighting_rep",
+                            "provider_field": "event_details__species",
+                            "destination_field": "event_type",
+                        }
+                    },
+                    "evu": {
+                        "338225f3-91f9-4fe1-b013-353a229ce504": {
+                            "map": {
+                                "Leopard": "leopard_sighting",
+                                "Wilddog": "wild_dog_sighting",
+                                "Wildcat": "wild_cat_sighting",
                             },
                             "default": "wildlife_sighting_rep",
                             "provider_field": "event_details__species",
@@ -1612,7 +1748,8 @@ def geoevent_v1_cloud_event_payload():
                 "integration_id": "c25a53f6-e206-43dd-8f62-a3759565ae3d",
                 "tracing_context": "{}",
             },
-            "data": "eyJpZCI6IG51bGwsICJvd25lciI6ICJuYSIsICJpbnRlZ3JhdGlvbl9pZCI6ICJjMjVhNTNmNi1lMjA2LTQzZGQtOGY2Mi1hMzc1OTU2NWFlM2QiLCAiZGV2aWNlX2lkIjogIm5vbmUiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wMi0yMCAyMDozNDowOC0wMzowMCIsICJsb2NhdGlvbiI6IHsieCI6IC01MS42ODg2NzUsICJ5IjogLTcyLjcwNDQ2NSwgInoiOiAwLjAsICJoZG9wIjogbnVsbCwgInZkb3AiOiBudWxsfSwgImFkZGl0aW9uYWwiOiBudWxsLCAidGl0bGUiOiAiUG9hY2hlcnMgQWN0aXZpdHkiLCAiZXZlbnRfdHlwZSI6ICJodW1hbmFjdGl2aXR5X3BvYWNoaW5nIiwgImV2ZW50X2RldGFpbHMiOiB7fSwgImdlb21ldHJ5IjogbnVsbCwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZ2UifQ==",  # pragma: allowlist secret
+            "data": "eyJpZCI6IG51bGwsICJvd25lciI6ICJuYSIsICJpbnRlZ3JhdGlvbl9pZCI6ICJjMjVhNTNmNi1lMjA2LTQzZGQtOGY2Mi1hMzc1OTU2NWFlM2QiLCAiZGV2aWNlX2lkIjogIm5vbmUiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wMi0yMCAyMDozNDowOC0wMzowMCIsICJsb2NhdGlvbiI6IHsieCI6IC01MS42ODg2NzUsICJ5IjogLTcyLjcwNDQ2NSwgInoiOiAwLjAsICJoZG9wIjogbnVsbCwgInZkb3AiOiBudWxsfSwgImFkZGl0aW9uYWwiOiBudWxsLCAidGl0bGUiOiAiUG9hY2hlcnMgQWN0aXZpdHkiLCAiZXZlbnRfdHlwZSI6ICJodW1hbmFjdGl2aXR5X3BvYWNoaW5nIiwgImV2ZW50X2RldGFpbHMiOiB7fSwgImdlb21ldHJ5IjogbnVsbCwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZ2UifQ==",
+            # pragma: allowlist secret
             "messageId": "8255786613739820",
             "message_id": "8255786613739820",
             "publishTime": timestamp,
@@ -1641,7 +1778,8 @@ def geoevent_v2_cloud_event_payload():
                 "stream_type": "ev",
                 "tracing_context": "{}",
             },
-            "data": "eyJjYV91dWlkIjogIjRiMjMyNDJhLTExNjEtNDZjMy1hZjg0LTVlMzVkYzgwMWM0MyIsICJwYXRyb2xfcmVxdWVzdHMiOiBbXSwgIndheXBvaW50X3JlcXVlc3RzIjogW3sidHlwZSI6ICJGZWF0dXJlIiwgImdlb21ldHJ5IjogeyJjb29yZGluYXRlcyI6IFstNzIuNzA0NDI1LCAtNTEuNjg4NjQ1XX0sICJwcm9wZXJ0aWVzIjogeyJkYXRlVGltZSI6ICIyMDI0LTAxLTA4VDA5OjUxOjE0IiwgInNtYXJ0RGF0YVR5cGUiOiAiaW5jaWRlbnQiLCAic21hcnRGZWF0dXJlVHlwZSI6ICJ3YXlwb2ludC9uZXciLCAic21hcnRBdHRyaWJ1dGVzIjogeyJvYnNlcnZhdGlvbkdyb3VwcyI6IFt7Im9ic2VydmF0aW9ucyI6IFt7Im9ic2VydmF0aW9uVXVpZCI6ICI0NGVhZjc5OC1mYTg3LTQ4ZDktOWJhZi00MmRmZGI0YzYyMzEiLCAiY2F0ZWdvcnkiOiAiYW5pbWFscy5zaWduIiwgImF0dHJpYnV0ZXMiOiB7InNwZWNpZXMiOiAibGlvbiJ9fV19XSwgInBhdHJvbFV1aWQiOiBudWxsLCAicGF0cm9sTGVnVXVpZCI6IG51bGwsICJwYXRyb2xJZCI6IG51bGwsICJpbmNpZGVudElkIjogImd1bmRpX2V2XzQ0ZWFmNzk4LWZhODctNDhkOS05YmFmLTQyZGZkYjRjNjIzMSIsICJpbmNpZGVudFV1aWQiOiAiNDRlYWY3OTgtZmE4Ny00OGQ5LTliYWYtNDJkZmRiNGM2MjMxIiwgInRlYW0iOiBudWxsLCAib2JqZWN0aXZlIjogbnVsbCwgImNvbW1lbnQiOiAiUmVwb3J0OiBBbmltYWxzIFNpZ25cbkltcG9ydGVkOiAyMDI0LTAxLTA4VDEwOjQwOjU5LjU4MzE4MC0wMzowMCIsICJpc0FybWVkIjogbnVsbCwgInRyYW5zcG9ydFR5cGUiOiBudWxsLCAibWFuZGF0ZSI6IG51bGwsICJudW1iZXIiOiBudWxsLCAibWVtYmVycyI6IG51bGwsICJsZWFkZXIiOiBudWxsLCAiYXR0YWNobWVudHMiOiBudWxsfX19XSwgInRyYWNrX3BvaW50X3JlcXVlc3RzIjogW119",  # pragma: allowlist secret
+            "data": "eyJjYV91dWlkIjogIjRiMjMyNDJhLTExNjEtNDZjMy1hZjg0LTVlMzVkYzgwMWM0MyIsICJwYXRyb2xfcmVxdWVzdHMiOiBbXSwgIndheXBvaW50X3JlcXVlc3RzIjogW3sidHlwZSI6ICJGZWF0dXJlIiwgImdlb21ldHJ5IjogeyJjb29yZGluYXRlcyI6IFstNzIuNzA0NDI1LCAtNTEuNjg4NjQ1XX0sICJwcm9wZXJ0aWVzIjogeyJkYXRlVGltZSI6ICIyMDI0LTAxLTA4VDA5OjUxOjE0IiwgInNtYXJ0RGF0YVR5cGUiOiAiaW5jaWRlbnQiLCAic21hcnRGZWF0dXJlVHlwZSI6ICJ3YXlwb2ludC9uZXciLCAic21hcnRBdHRyaWJ1dGVzIjogeyJvYnNlcnZhdGlvbkdyb3VwcyI6IFt7Im9ic2VydmF0aW9ucyI6IFt7Im9ic2VydmF0aW9uVXVpZCI6ICI0NGVhZjc5OC1mYTg3LTQ4ZDktOWJhZi00MmRmZGI0YzYyMzEiLCAiY2F0ZWdvcnkiOiAiYW5pbWFscy5zaWduIiwgImF0dHJpYnV0ZXMiOiB7InNwZWNpZXMiOiAibGlvbiJ9fV19XSwgInBhdHJvbFV1aWQiOiBudWxsLCAicGF0cm9sTGVnVXVpZCI6IG51bGwsICJwYXRyb2xJZCI6IG51bGwsICJpbmNpZGVudElkIjogImd1bmRpX2V2XzQ0ZWFmNzk4LWZhODctNDhkOS05YmFmLTQyZGZkYjRjNjIzMSIsICJpbmNpZGVudFV1aWQiOiAiNDRlYWY3OTgtZmE4Ny00OGQ5LTliYWYtNDJkZmRiNGM2MjMxIiwgInRlYW0iOiBudWxsLCAib2JqZWN0aXZlIjogbnVsbCwgImNvbW1lbnQiOiAiUmVwb3J0OiBBbmltYWxzIFNpZ25cbkltcG9ydGVkOiAyMDI0LTAxLTA4VDEwOjQwOjU5LjU4MzE4MC0wMzowMCIsICJpc0FybWVkIjogbnVsbCwgInRyYW5zcG9ydFR5cGUiOiBudWxsLCAibWFuZGF0ZSI6IG51bGwsICJudW1iZXIiOiBudWxsLCAibWVtYmVycyI6IG51bGwsICJsZWFkZXIiOiBudWxsLCAiYXR0YWNobWVudHMiOiBudWxsfX19XSwgInRyYWNrX3BvaW50X3JlcXVlc3RzIjogW119",
+            # pragma: allowlist secret
             "messageId": "9155786613739819",
             "message_id": "9155786613739819",
             "publishTime": timestamp,

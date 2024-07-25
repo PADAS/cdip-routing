@@ -19,7 +19,7 @@ async def test_process_observation_and_route_to_gcp_pubsub_dispatcher(
     )
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
-    mocker.patch("app.services.process_messages.pubsub", mock_pubsub_client)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
     await process_observation(
         raw_observation_position, raw_observation_position_attributes
     )
@@ -46,7 +46,8 @@ async def test_retry_observations_sent_to_gcp_pubsub_on_timeout(
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
     # The mocked PubSub client raises an asyncio.TimeoutError in the first call, and returns success in a second call
     mocker.patch(
-        "app.services.process_messages.pubsub", mock_pubsub_client_with_timeout_once
+        "app.core.pubsub.pubsub"
+, mock_pubsub_client_with_timeout_once
     )
     await process_observation(
         raw_observation_position, raw_observation_position_attributes
@@ -81,7 +82,8 @@ async def test_retry_observations_sent_to_gcp_pubsub_on_client_error(
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
     # The mocked PubSub client raises an asyncio.TimeoutError in the first call, and returns success in a second call
     mocker.patch(
-        "app.services.process_messages.pubsub",
+        "app.core.pubsub.pubsub"
+,
         mock_pubsub_client_with_client_error_once,
     )
     await process_observation(
@@ -197,7 +199,7 @@ async def test_process_observation_geoevent_and_route_to_gcp_pubsub_dispatcher(
     )
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
-    mocker.patch("app.services.process_messages.pubsub", mock_pubsub_client)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
     await process_observation(
         raw_observation_geoevent, raw_observation_geoevent_attributes
     )
@@ -222,7 +224,7 @@ async def test_process_observation_cameratrap_and_route_to_gcp_pubsub_dispatcher
     )
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
-    mocker.patch("app.services.process_messages.pubsub", mock_pubsub_client)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
     await process_observation(
         raw_observation_cameratrap, raw_observation_cameratrap_attributes
     )
