@@ -255,3 +255,51 @@ async def test_transform_event_update_with_type_mapping_for_earthranger(
         route_configuration=route_config_with_event_type_mappings,
     )
     assert transformed_observation.changes.get("event_type") == "wild_cat_sighting"
+
+
+@pytest.mark.asyncio
+async def test_transform_event_update_partial_location_with_type_mapping_for_earthranger(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    event_update_location_lon,
+    destination_integration_v2_er,
+    route_config_with_event_type_mappings,
+    connection_v2,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=event_update_location_lon,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=route_config_with_event_type_mappings,
+    )
+    er_location_changes = {
+        "longitude": event_update_location_lon.changes["location"]["lon"]
+    }
+    assert transformed_observation.changes.get("location") == er_location_changes
+    # Field mapping must not be applied as species isn't changed
+    assert "event_type" not in transformed_observation.changes
+
+
+@pytest.mark.asyncio
+async def test_transform_event_update_full_location_with_type_mapping_for_earthranger(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    event_update_location_full,
+    destination_integration_v2_er,
+    route_config_with_event_type_mappings,
+    connection_v2,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=event_update_location_full,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=route_config_with_event_type_mappings,
+    )
+    er_location_changes = {
+        "longitude": event_update_location_full.changes["location"]["lon"],
+        "latitude": event_update_location_full.changes["location"]["lat"]
+    }
+    assert transformed_observation.changes.get("location") == er_location_changes
+    assert "event_type" not in transformed_observation.changes

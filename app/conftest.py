@@ -1305,6 +1305,45 @@ def event_update_species_wildcat():
     )
 
 
+@pytest.fixture
+def event_update_location_lon():
+    return schemas_v2.EventUpdate(
+        gundi_id="78867a74-67f0-4b56-8e44-125ae66408ff",
+        related_to=None,
+        owner="a91b400b-482a-4546-8fcb-ee42b01deeb6",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations=None,
+        source_id="ac1b9cdc-a193-4515-b446-b177bcc5f342",
+        external_source_id="camera123",
+        changes={
+            "location": {
+                "lon": 13.783061
+            }
+        },
+        observation_type="evu"
+    )
+
+
+@pytest.fixture
+def event_update_location_full():
+    return schemas_v2.EventUpdate(
+        gundi_id="78867a74-67f0-4b56-8e44-125ae66408ff",
+        related_to=None,
+        owner="a91b400b-482a-4546-8fcb-ee42b01deeb6",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations=None,
+        source_id="ac1b9cdc-a193-4515-b446-b177bcc5f342",
+        external_source_id="camera123",
+        changes={
+            "location": {
+                "lat": 13.688632,
+                "lon": 13.783061
+            }
+        },
+        observation_type="evu"
+    )
+
+
 from smartconnect.models import (
     SMARTRequest,
     SmartAttributes,
