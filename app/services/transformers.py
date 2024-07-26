@@ -1291,7 +1291,7 @@ class FieldMappingRule(TransformationRule):
     def _extract_value(self, message, source):
         fields = source.lower().strip().split("__")
         value = message
-        while fields:
+        while fields and value:
             field = fields.pop(0)
             value = value.get(field)
         return value
@@ -1302,6 +1302,9 @@ class FieldMappingRule(TransformationRule):
             return
 
         source_value = self._extract_value(message=message, source=self.source)
+        if source_value is None:
+            return
+
         if not self.map:
             message[self.target] = source_value
             return
@@ -1353,6 +1356,14 @@ class EREventUpdateTransformer(Transformer):
             self.map_to_er_field(field): value
             for field, value in message.changes.items()
         }
+        # Map lat/lon to ER's location format
+        if "location" in er_changes:
+            er_location = {}
+            if "lon" in message.changes["location"]:
+                er_location["longitude"] = er_changes["location"]["lon"]
+            if "lat" in message.changes["location"]:
+                er_location["latitude"] = er_changes["location"]["lat"]
+            er_changes["location"] = er_location
         # Apply extra transformation rules as needed
         if rules:
             for rule in rules:
@@ -1692,7 +1703,7 @@ async def transform_observation_v2(
     # Check for extra configurations to apply
     rules = []
     if route_configuration and (
-        field_mappings := route_configuration.data.get("field_mappings")
+        field_mappings := route_configuration.data.get("field_mappings", {})
     ):
         configuration = (
             field_mappings.get(
