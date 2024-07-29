@@ -409,7 +409,14 @@ async def get_connection(*, connection_id):
     extra_dict = {"connection_id": connection_id}
     try:
         cache_key = f"connection_detail.{connection_id}"
-        cached_data = await _cache_db.get(cache_key)
+        try:
+            cached_data = await _cache_db.get(cache_key)
+        except Exception as e:
+            logger.exception(
+                f"Error while reading connection details from Cache:\n{type(e)}: {e}",
+                extra={**extra_dict},
+            )
+            cached_data = None
         if cached_data:
             logger.debug(
                 "Connection details retrieved from cache.",
@@ -427,22 +434,16 @@ async def get_connection(*, connection_id):
                 )
             except Exception as e:
                 logger.exception(
-                    f"Error while getting connection from the portal: {e}",
+                    f"Error while getting connection from the portal:\n{type(e)}: {e}",
                     extra={**extra_dict},
                 )
             else:
                 await write_to_cache_safe(
                     key=cache_key, ttl=_cache_ttl, instance=connection, extra_dict=extra_dict
                 )
-    except redis_exceptions.ConnectionError as e:
-        logger.exception(
-            f"ConnectionError while reading connection details from Cache: {e}",
-            extra={**extra_dict},
-        )
-        connection = None
     except Exception as e:
         logger.exception(
-            f"Internal Error while getting connection details: {e}",
+            f"Internal Error while getting connection details:\n{type(e)}: {e}",
             extra={**extra_dict},
         )
     finally:

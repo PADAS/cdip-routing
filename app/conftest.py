@@ -6,8 +6,8 @@ import uuid
 import asyncio
 import gundi_core.schemas.v2 as schemas_v2
 import gundi_core.schemas.v1 as schemas_v1
-from aiohttp.client_reqrep import ConnectionKey
 from pydantic.types import UUID
+from redis import exceptions as redis_exceptions
 
 
 def async_return(result):
@@ -29,6 +29,23 @@ def mock_cache(mocker):
     mock_cache.__aenter__.return_value = mock_cache
     mock_cache.__aexit__.return_value = None
     mock_cache.pipeline.return_value = mock_cache
+    return mock_cache
+
+
+@pytest.fixture
+def mock_cache_with_cached_connection(mocker, connection_v2):
+    mock_cache = mocker.MagicMock()
+    cached_data = connection_v2.json()
+    mock_cache.get.return_value = async_return(cached_data)
+    return mock_cache
+
+
+@pytest.fixture
+def mock_cache_with_connection_error(mocker):
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.side_effect = redis_exceptions.ConnectionError(
+        "Error while reading from 172.22.161.3:6379 : (104, 'Connection reset by peer')"
+    )
     return mock_cache
 
 
