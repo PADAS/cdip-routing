@@ -212,16 +212,17 @@ async def test_transform_events_for_smart(
         "app.services.transformers.AsyncSmartClient",
         mock_smart_async_client_class,
     )
-    transformed_observation = await transform_observation_v2(
+    smart_request = await transform_observation_v2(
         observation=animals_sign_event_v2,
         destination=destination_integration_v2_smart,
         provider=connection_v2.provider,
         route_configuration=None,
     )
-    assert transformed_observation
-    assert transformed_observation.get("ca_uuid") == smart_ca_uuid
-    assert len(transformed_observation.get("waypoint_requests", [])) == 1
-    waypoint = transformed_observation.get("waypoint_requests")[0]
+    assert smart_request
+    transformed_data = smart_request.dict(exclude_none=True)
+    assert transformed_data.get("ca_uuid") == smart_ca_uuid
+    assert len(transformed_data.get("waypoint_requests", [])) == 1
+    waypoint = transformed_data.get("waypoint_requests")[0]
     assert waypoint.get("geometry", {}).get("coordinates", []) == [
         animals_sign_event_v2.location.lon,
         animals_sign_event_v2.location.lat,
