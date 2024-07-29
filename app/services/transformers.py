@@ -173,6 +173,7 @@ class MBPositionTransformer(Transformer):
 # SMART
 ########################################################################################################################
 # Legacy config for Gundi v1 additional field
+# ToDo: Replace SMART transformation rules by field mappings / transformations engine in the future?
 class SmartConnectConfigurationAdditional(BaseModel):
     ca_uuid: UUID
     transformation_rules: Optional[SMARTTransformationRules]
@@ -1233,42 +1234,58 @@ class SmartEventTransformerV2(SMARTTransformerV2):
 
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
-    ) -> dict:
+    ) -> SMARTCompositeRequest:
         message, message_ca_uuid = get_ca_uuid_for_event(event=message)
         if message_ca_uuid:
             self.ca_uuid = str(message_ca_uuid)
         waypoint_requests = []
         if self._version and version.parse(self._version) >= version.parse("7.5"):
-            # ToDo: Revisit the create/update logic once we support updates in Gundi v2
-            smart_response = await self.smartconnect_client.get_incident(
-                incident_uuid=message.gundi_id
+            incident = await self.event_to_incident(
+                event=message, smart_feature_type="waypoint/new"
             )
-            if not smart_response:  # Create Incident
-                incident = await self.event_to_incident(
-                    event=message, smart_feature_type="waypoint/new"
-                )
-                waypoint_requests.append(incident)
-            else:
-                # Update Incident
-                incident = await self.event_to_incident(
-                    event=message, smart_feature_type="waypoint"
-                )
-                waypoint_requests.append(incident)
-                # Update Observation
-                observation = await self.event_to_observation(event=message)
-                waypoint_requests.append(observation)
+            waypoint_requests.append(incident)
+            # ToDo. We could handle these as separate requests in Gundi v2, as we do with events and attachments.
+            smart_request = SMARTCompositeRequest(
+                waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
+            )
+            return smart_request
         else:
             raise ValueError("Smart version < 7.5 is not supported")
-        # ToDo. We could handle these as separate requests in Gundi v2, as we do with events and attachments.
-        smart_request = SMARTCompositeRequest(
-            waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
-        )
-        transformed_message = json.loads(smart_request.json())
-        # Apply extra transformation rules as needed (a.k.a Field mappings)
-        if rules:
-            for rule in rules:
-                rule.apply(message=transformed_message)
-        return transformed_message
+
+
+class SmartEventUpdateTransformerV2(SMARTTransformerV2):
+    """
+    Transform a single Event Update into an Incident Update.
+    """
+
+    def __init__(self, *, config: SMARTPushEventActionConfig, **kwargs):
+        super().__init__(config=config, **kwargs)
+
+    async def transform(
+        self, message: schemas.v2.EventUpdate, rules: list = None, **kwargs
+    ) -> SMARTCompositeRequest:
+        message = message.changes
+        message, message_ca_uuid = get_ca_uuid_for_event(event=message)
+        if message_ca_uuid:
+            self.ca_uuid = str(message_ca_uuid)
+        waypoint_requests = []
+        if self._version and version.parse(self._version) >= version.parse("7.5"):
+            # Update Incident
+            incident = await self.event_to_incident(
+                event=message, smart_feature_type="waypoint"  # "waypoint" without "/new" indicates an update
+            )
+            waypoint_requests.append(incident)
+            # Update Observation
+            observation = await self.event_to_observation(event=message)
+            waypoint_requests.append(observation)
+            # ToDo. We could handle these as separate requests in Gundi v2, as we do with events and attachments.
+            smart_request = SMARTCompositeRequest(
+                waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
+            )
+            return smart_request
+        else:
+            raise ValueError("Smart version < 7.5 is not supported")
+
 
 
 ########################################################################################################################
