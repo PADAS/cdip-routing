@@ -23,7 +23,7 @@ async def test_get_connection_from_gundi_on_cache_miss(
     mocker, mock_cache, connection_v2, mock_gundi_client_v2
 ):
     # Mock external dependencies
-    mocker.patch("app.core.gundi._cache_db", mock_cache)  # empty cache
+    mocker.patch("app.core.gundi._cache_db", mock_cache)  # faulty cache
     mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
     connection = await get_connection(
         connection_id=str(connection_v2.id)
