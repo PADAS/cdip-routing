@@ -1233,42 +1233,57 @@ class SmartEventTransformerV2(SMARTTransformerV2):
 
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
-    ) -> dict:
+    ) -> SMARTCompositeRequest:
+        if self._version and version.parse(self._version) < version.parse("7.5"):
+            raise ValueError("Smart version < 7.5 is not supported")
         message, message_ca_uuid = get_ca_uuid_for_event(event=message)
         if message_ca_uuid:
             self.ca_uuid = str(message_ca_uuid)
         waypoint_requests = []
-        if self._version and version.parse(self._version) >= version.parse("7.5"):
-            # ToDo: Revisit the create/update logic once we support updates in Gundi v2
-            smart_response = await self.smartconnect_client.get_incident(
-                incident_uuid=message.gundi_id
+        smart_response = await self.smartconnect_client.get_incident(
+            incident_uuid=message.gundi_id
+        )
+        if not smart_response:  # Create Incident
+            incident = await self.event_to_incident(
+                event=message, smart_feature_type="waypoint/new"
             )
-            if not smart_response:  # Create Incident
-                incident = await self.event_to_incident(
-                    event=message, smart_feature_type="waypoint/new"
-                )
-                waypoint_requests.append(incident)
-            else:
-                # Update Incident
-                incident = await self.event_to_incident(
-                    event=message, smart_feature_type="waypoint"
-                )
-                waypoint_requests.append(incident)
-                # Update Observation
-                observation = await self.event_to_observation(event=message)
-                waypoint_requests.append(observation)
-        else:
+            waypoint_requests.append(incident)
+            smart_request = SMARTCompositeRequest(
+                waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
+            )
+            return smart_request
+
+
+class SmartEventUpdateTransformerV2(SMARTTransformerV2):
+    """
+    Transform a gundi EventUpdate into a SMARTCompositeRequest
+    """
+
+    def __init__(self, *, config: SMARTPushEventActionConfig, **kwargs):
+        super().__init__(config=config, **kwargs)
+
+    async def transform(
+            self, message: schemas.v2.EventUpdate, rules: list = None, **kwargs
+    ) -> SMARTCompositeRequest:
+        if self._version and version.parse(self._version) < version.parse("7.5"):
             raise ValueError("Smart version < 7.5 is not supported")
-        # ToDo. We could handle these as separate requests in Gundi v2, as we do with events and attachments.
+        changes = message.changes
+        message, message_ca_uuid = get_ca_uuid_for_event(event=changes)
+        if message_ca_uuid:
+            self.ca_uuid = str(message_ca_uuid)
+        waypoint_requests = []
+        # Update Incident
+        incident = await self.event_to_incident(
+            event=message, smart_feature_type="waypoint"  # "waypoint" without /new indicates an update
+        )
+        waypoint_requests.append(incident)
+        # Update related Observation
+        observation = await self.event_to_observation(event=message)
+        waypoint_requests.append(observation)
         smart_request = SMARTCompositeRequest(
             waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
         )
-        transformed_message = json.loads(smart_request.json())
-        # Apply extra transformation rules as needed (a.k.a Field mappings)
-        if rules:
-            for rule in rules:
-                rule.apply(message=transformed_message)
-        return transformed_message
+        return smart_request
 
 
 ########################################################################################################################
@@ -1749,6 +1764,7 @@ transformers_map = {
     },
     schemas.v2.StreamPrefixEnum.event_update.value: {
         schemas.DestinationTypes.EarthRanger.value: EREventUpdateTransformer,
+        schemas.DestinationTypes.SmartConnect.value: SmartEventUpdateTransformerV2,
     },
     schemas.v2.StreamPrefixEnum.attachment.value: {
         schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer
