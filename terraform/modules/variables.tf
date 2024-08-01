@@ -103,8 +103,13 @@ variable "portal_auth_ttl" {
   default = "300"
 }
 
-variable "vpc_connector_name" {
+variable "network_name" {
   type        = string
-  description = "The name of the vpc serverless connector"
-  default     = "vpc-serverless-con"
+  description = "VPC network name"
+}
+
+variable "subnet" {
+  type        = string
+  default     = "cloud-run"
+  description = "The subnet cloud run will use"
 }

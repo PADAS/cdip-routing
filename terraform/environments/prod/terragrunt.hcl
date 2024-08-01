@@ -17,5 +17,6 @@ inputs = {
   redis_host                        = "10.208.106.172"
   movebank_dispatcher_default_topic = "destination-movebank-prod"
   max_event_age_seconds             = "86400"
+  network_name                      = "sintegrate-vpc-4bb07e9c"
   max_instance_count                = 20
 }
