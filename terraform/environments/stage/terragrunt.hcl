@@ -15,5 +15,6 @@ inputs = {
   gundi_api_base_url                = "https://api.stage.gundiservice.org"
   keycloak_issuer                   = "https://cdip-auth.pamdas.org/auth/realms/cdip-dev"
   redis_host                        = "10.243.180.36"
+  network_name                      = "sintegrate-vpc-5bbf9d1f"
   movebank_dispatcher_default_topic = "destination-movebank-stage"
 }

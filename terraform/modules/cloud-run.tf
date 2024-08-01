@@ -1,8 +1,3 @@
-locals {
-  # VPC connector is created in a different project
-  vpc_connector_id = "projects/${var.project_id}/locations/${var.location}/connectors/${var.vpc_connector_name}"
-}
-
 resource "google_cloud_run_v2_service" "default" {
   name     = "routing-transformer-service-${var.env}"
   project  = var.project_id
@@ -18,8 +13,10 @@ resource "google_cloud_run_v2_service" "default" {
     }
 
     vpc_access {
-      connector = local.vpc_connector_id
-      egress    = "PRIVATE_RANGES_ONLY"
+      network_interfaces {
+        network    = var.network_name
+        subnetwork = var.subnet
+      }
     }
 
     containers {
