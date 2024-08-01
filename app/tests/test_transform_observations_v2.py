@@ -219,23 +219,24 @@ async def test_transform_events_for_smart(
         route_configuration=None,
     )
     assert transformed_observation
-    assert transformed_observation.get("ca_uuid") == smart_ca_uuid
-    assert len(transformed_observation.get("waypoint_requests", [])) == 1
-    waypoint = transformed_observation.get("waypoint_requests")[0]
-    assert waypoint.get("geometry", {}).get("coordinates", []) == [
-        animals_sign_event_v2.location.lon,
-        animals_sign_event_v2.location.lat,
-    ]
-    properties = waypoint.get("properties", {})
-    assert properties.get("smartDataType") == "incident"
-    assert properties.get("smartFeatureType") == "waypoint/new"
-    attributes = properties.get("smartAttributes", {})
-    assert len(attributes.get("observationGroups", [])) == 1
-    observation_group = attributes["observationGroups"][0]
-    assert len(observation_group.get("observations", [])) == 1
-    observation = observation_group["observations"][0]
-    assert observation.get("category") == "animals.sign"
-    assert observation.get("attributes") == {"ageofsign": "days", "species": "lion"}
+    assert transformed_observation.ca_uuid == smart_ca_uuid
+    assert len(transformed_observation.waypoint_requests) == 1
+    waypoint = transformed_observation.waypoint_requests[0]
+    location = waypoint.geometry.coordinates
+    assert location
+    assert location == [animals_sign_event_v2.location.lon, animals_sign_event_v2.location.lat]
+    properties = waypoint.properties
+    assert properties
+    assert properties.smartDataType == "incident"
+    assert properties.smartFeatureType == "waypoint/new"
+    attributes = properties.smartAttributes
+    assert attributes
+    assert len(attributes.observationGroups) == 1
+    observation_group = attributes.observationGroups[0]
+    assert len(observation_group.observations) == 1
+    observation = observation_group.observations[0]
+    assert observation.category == "animals.sign"
+    assert observation.attributes == {"ageofsign": "days", "species": "lion"}
 
 
 @pytest.mark.asyncio
