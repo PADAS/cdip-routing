@@ -22,11 +22,12 @@ from gundi_core.schemas.v2 import (
 )
 from pydantic import BaseModel
 from smartconnect import AsyncSmartClient
-from smartconnect.models import (
+from gundi_core.schemas.v2.smart import (
     SMARTCONNECT_DATFORMAT,
     SMARTRequest,
     SMARTCompositeRequest,
     SmartObservation,
+    SMARTUpdateRequest,
     Geometry,
     Properties,
     SmartAttributes,
@@ -1240,18 +1241,14 @@ class SmartEventTransformerV2(SMARTTransformerV2):
         if message_ca_uuid:
             self.ca_uuid = str(message_ca_uuid)
         waypoint_requests = []
-        smart_response = await self.smartconnect_client.get_incident(
-            incident_uuid=message.gundi_id
+        incident = await self.event_to_incident(
+            event=message, smart_feature_type="waypoint/new"
         )
-        if not smart_response:  # Create Incident
-            incident = await self.event_to_incident(
-                event=message, smart_feature_type="waypoint/new"
-            )
-            waypoint_requests.append(incident)
-            smart_request = SMARTCompositeRequest(
-                waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
-            )
-            return smart_request
+        waypoint_requests.append(incident)
+        smart_request = SMARTCompositeRequest(
+            waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
+        )
+        return smart_request
 
 
 class SmartEventUpdateTransformerV2(SMARTTransformerV2):
@@ -1264,7 +1261,7 @@ class SmartEventUpdateTransformerV2(SMARTTransformerV2):
 
     async def transform(
             self, message: schemas.v2.EventUpdate, rules: list = None, **kwargs
-    ) -> SMARTCompositeRequest:
+    ) -> SMARTUpdateRequest:
         if self._version and version.parse(self._version) < version.parse("7.5"):
             raise ValueError("Smart version < 7.5 is not supported")
         changes = message.changes
@@ -1280,7 +1277,7 @@ class SmartEventUpdateTransformerV2(SMARTTransformerV2):
         # Update related Observation
         observation = await self.event_to_observation(event=message)
         waypoint_requests.append(observation)
-        smart_request = SMARTCompositeRequest(
+        smart_request = SMARTUpdateRequest(
             waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
         )
         return smart_request
