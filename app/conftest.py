@@ -1450,14 +1450,32 @@ def animals_sign_event_v2():
         title="Animal Sign",
         event_type="animals_sign",
         event_details={
-            "site_name": "MM Spot",
             "species": "lion",
-            "tags": ["adult", "male"],
-            "animal_count": 2,
             "ageofsign": "days",
         },
         geometry={},
         observation_type="ev",
+    )
+
+
+@pytest.fixture
+def animals_sign_event_update_v2():
+    return schemas_v2.EventUpdate(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        related_to=None,
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        changes={
+            "title": "Leopard Sign",
+            "event_details": {
+                "species": "leopard",
+                "ageofsign": "weeks"
+            },
+        },
+        observation_type="evu",
     )
 
 

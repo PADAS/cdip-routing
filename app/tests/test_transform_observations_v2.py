@@ -240,6 +240,44 @@ async def test_transform_events_for_smart(
 
 
 @pytest.mark.asyncio
+async def test_transform_event_update_for_smart(
+    mocker,
+    smart_ca_uuid,
+    mock_smart_async_client_class,
+    animals_sign_event_update_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_update_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    assert transformed_observation.ca_uuid == smart_ca_uuid
+    assert len(transformed_observation.waypoint_requests) == 1
+    waypoint = transformed_observation.waypoint_requests[0]
+    location = waypoint.geometry.coordinates
+    assert location
+    expected_changes = animals_sign_event_update_v2.changes
+    assert location == [expected_changes.location.lon, expected_changes.location.lat]
+    properties = waypoint.properties
+    assert properties
+    assert properties.smartDataType == "incident"
+    assert properties.smartFeatureType == "waypoint"  # Update
+    attributes = properties.smartAttributes
+    assert attributes
+    assert len(attributes.observationGroups) == 1
+    observation_group = attributes.observationGroups[0]
+    assert len(observation_group.observations) == 1
+    observation = observation_group.observations[0]
+    assert observation.category == "animals.sign"
+    assert observation.attributes == {"ageofsign": "weeks", "species": "leopard"}
+
+
+@pytest.mark.asyncio
 async def test_transform_event_update_with_type_mapping_for_earthranger(
     mock_cache,
     mock_gundi_client_v2,
