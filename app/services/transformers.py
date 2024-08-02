@@ -1036,13 +1036,13 @@ class SMARTTransformerV2(Transformer, ABC):
             return self._default_timezone
 
     async def resolve_category_path_for_event(
-        self, *, event: schemas.v2.Event = None
+        self, *, event_type: str = None
     ) -> str:
         """
         Favor finding a match in the Config CA Datamodel, then CA Datamodel.
         """
 
-        search_for = event.event_type.replace("_", ".")
+        search_for = event_type.replace("_", ".")
         configurable_models = await self.get_configurable_models()
         for cm in configurable_models:
             # favor config datamodel match if present
@@ -1052,18 +1052,18 @@ class SMARTTransformerV2(Transformer, ABC):
 
         # direct data model match
         ca_datamodel = await self.get_ca_datamodel()
-        if matched_category := ca_datamodel.get_category(path=event.event_type):
+        if matched_category := ca_datamodel.get_category(path=event_type):
             return matched_category["path"]
 
         # convert event type to CA path syntax
         if matched_category := ca_datamodel.get_category(
-            path=str.replace(event.event_type, "_", ".")
+            path=str.replace(event_type, "_", ".")
         ):
             return matched_category["path"]
 
         # Last option is a match in translation rules.
         for t in self._transformation_rules.category_map:
-            if t.event_type == event.event_type:
+            if t.event_type == event_type:
                 return t.category_path
 
     async def _resolve_attribute(
@@ -1105,11 +1105,11 @@ class SMARTTransformerV2(Transformer, ABC):
 
         return return_key, value
 
-    async def _resolve_attributes_for_event(
-        self, *, event: [schemas.GeoEvent, schemas.EREvent] = None
+    async def _resolve_attributes_for_event_details(
+        self, *, event_details: dict = None
     ) -> dict:
         attributes = {}
-        for k, v in event.event_details.items():
+        for k, v in event_details.items():
             # some event details are lists like updates
             v = v[0] if isinstance(v, list) and len(v) > 0 else v
 
@@ -1139,14 +1139,14 @@ class SMARTTransformerV2(Transformer, ABC):
             )
 
         # Apply SMART Transformation Rules
-        category_path = await self.resolve_category_path_for_event(event=event)
+        category_path = await self.resolve_category_path_for_event(event_type=event.event_type)
         if not category_path:
             logger.error(f"No category found for event_type: {event.event_type}")
             raise ReferenceDataError(
                 f"No category found for event_type: {event.event_type}"
             )
 
-        attributes = await self._resolve_attributes_for_event(event=event)
+        attributes = await self._resolve_attributes_for_event_details(event_details=event.event_details)
 
         present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
         event_localtime = event.recorded_at.astimezone(location_timezone)
@@ -1223,6 +1223,105 @@ class SMARTTransformerV2(Transformer, ABC):
 
         return incident_request
 
+    async def event_update_to_waypoint_update(
+        self,
+        *,
+        event_update: schemas.v2.EventUpdate = None,
+    ) -> SMARTRequest:
+        """
+        Build a SMARTRequest for updating an incident waypoint in SMART.
+        This will update location, comment and/or datetime.
+        For updating extra properties comming from event_details use event_update_to_waypoint_observation_update
+        """
+        # ToDo: Once we support a provider-defined id, we should use that here
+        event_id = str(event_update.gundi_id)
+        incident_id = f"gundi_ev_{event_id}"
+        incident_uuid = event_id
+        smart_feature_type = "waypoint"
+        smart_data_type = "incident"
+        request_kwargs = {
+            "type": "Feature"
+        }
+        smart_attributes = {
+            "incidentId": incident_id,
+            "incidentUuid": incident_uuid,
+        }
+        smart_properties = {
+            "smartDataType": smart_data_type,
+            "smartFeatureType": smart_feature_type,
+        }
+
+        changes = event_update.changes
+        location_timezone = self._default_timezone
+        present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
+
+        if title := changes.get("title"):
+            smart_attributes["comment"] = f"Report: {title} \nUpdated: {present_localtime.isoformat()}"
+
+        if location := changes.get("location"):
+            lon, lat = location.get("lon"), location.get("lat")
+            if not lon or not lat:
+                raise ValueError("Both lat and lon are required for SMART when updating location.")
+            coordinates = [lon, lat]
+            location_timezone = self.guess_location_timezone(longitude=lon, latitude=lat)
+            request_kwargs["geometry"] = Geometry(coordinates=coordinates, type="Point")
+
+        if recorded_at := changes.get("recorded_at"):
+            recorded_at_datetime = datetime.fromisoformat(recorded_at)
+            # Localize and remove tz. SMART doesn't accept the timezone (e.g +01:00) in the datetime string
+            waypoint_local_datetime = recorded_at_datetime.astimezone(location_timezone)
+            smart_properties["dateTime"] = waypoint_local_datetime.strftime(SMARTCONNECT_DATFORMAT)
+
+        # Build the final request
+        smart_request = SMARTRequest(
+            **request_kwargs,
+            properties=Properties(
+                **smart_properties,
+                smartAttributes=SmartAttributes(**smart_attributes),
+            ),
+        )
+        return smart_request
+
+
+    async def event_update_to_waypoint_observation_update(
+            self,
+            *,
+            event_update: schemas.v2.EventUpdate = None,
+    ) -> SMARTRequest:
+        observation_uuid = str(event_update.gundi_id)
+        smart_feature_type = "waypoint/observation"
+        smart_data_type = "incident"
+        smart_attributes = {
+            "observationUuid": observation_uuid,
+        }
+        changes = event_update.changes
+
+        if "event_type" not in changes or "event_details" not in changes:
+            raise ValueError("event_type and event_details are both required for SMART when updating one of these attributes.")
+
+        event_type = changes.get("event_type")
+        category_path = await self.resolve_category_path_for_event(event_type=event_type)
+        if not category_path:
+            logger.error(f"No category found for event_type: {event_type}")
+            raise ReferenceDataError(
+                f"No category found for event_type: {event_type}"
+            )
+        attributes = await self._resolve_attributes_for_event_details(event_details=changes.get("event_details"))
+
+        smart_request = SMARTRequest(
+            type="Feature",
+            properties=Properties(
+                smartDataType=smart_data_type,
+                smartFeatureType=smart_feature_type,
+                smartAttributes=SmartObservation(
+                    observationUuid=observation_uuid,
+                    category=category_path,
+                    attributes=attributes,
+                ),
+            ),
+        )
+        return smart_request
+
 
 class SmartEventTransformerV2(SMARTTransformerV2):
     """
@@ -1264,28 +1363,21 @@ class SmartEventUpdateTransformerV2(SMARTTransformerV2):
     ) -> SMARTUpdateRequest:
         if self._version and version.parse(self._version) < version.parse("7.5"):
             raise ValueError("Smart version < 7.5 is not supported")
-        changes = message.changes
-        message, message_ca_uuid = get_ca_uuid_for_event(event=changes)
-        if message_ca_uuid:
-            self.ca_uuid = str(message_ca_uuid)
         waypoint_requests = []
-        # Update Incident
-        incident = await self.event_to_incident(
-            event=message, smart_feature_type="waypoint"  # "waypoint" without /new indicates an update
-        )
-        waypoint_requests.append(incident)
-        # Update related Observation
-        observation = await self.event_to_observation(event=message)
-        waypoint_requests.append(observation)
+        if "title" in message.changes or "location" in message.changes or "recorded_at" in message.changes:
+            # Update properties in Incident
+            incident_update = await self.event_update_to_waypoint_update(event_update=message)
+            waypoint_requests.append(incident_update)
+        if "event_type" or "event_details" in message.changes:
+            # Update attributes in related Observation
+            observation_update = await self.event_update_to_waypoint_observation_update(event_update=message)
+            waypoint_requests.append(observation_update)
         smart_request = SMARTUpdateRequest(
             waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
         )
         return smart_request
 
 
-########################################################################################################################
-# GUNDI V2
-########################################################################################################################
 class TransformationRule(ABC):
     @staticmethod
     @abstractmethod
