@@ -107,7 +107,7 @@ gundi-client==1.0.2
     # via -r requirements.in
 gundi-client-v2==2.3.3
     # via -r requirements.in
-gundi-core==1.5.8
+gundi-core==1.5.9
     # via
     #   -r requirements.in
     #   gundi-client

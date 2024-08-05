@@ -1,12 +1,11 @@
 import logging
-from gundi_core import schemas
 from gundi_core.events import ObservationReceived, EventReceived, EventUpdateReceived, AttachmentReceived
 from gundi_core.events.transformers import EventTransformedER, EventUpdateTransformedER, AttachmentTransformedER, \
-    ObservationTransformedER
+    ObservationTransformedER, EventTransformedSMART, EventUpdateTransformedSMART
 from opentelemetry.trace import SpanKind
-from app.core import tracing, settings
+from app.core import tracing
 from app.core.errors import ReferenceDataError
-from app.core.gundi import apply_source_configurations, get_connection, get_route, get_integration
+from app.core.gundi import get_connection, get_route, get_integration
 from app.core.local_logging import ExtraKeys
 from app.core.utils import Broker
 from app.core.utils import get_provider_key
@@ -28,6 +27,8 @@ transformer_events_by_data_type = {
     "EREventUpdate": EventUpdateTransformedER,
     "ERAttachment": AttachmentTransformedER,
     "ERObservation": ObservationTransformedER,
+    "SMARTCompositeRequest": EventTransformedSMART,
+    "SMARTUpdateRequest": EventUpdateTransformedSMART
 }
 
 
@@ -86,7 +87,7 @@ async def transform_and_route_observation(observation):
                 # Transform the observation for the destination
                 transformed_observation = await transform_observation_v2(
                     observation=observation,
-                    destination=destination,
+                    destination=destination_integration,
                     provider=provider,
                     route_configuration=route_configuration,
                 )

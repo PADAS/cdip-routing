@@ -1,4 +1,9 @@
+from datetime import datetime
+
 import pytest
+import pytz
+from smartconnect.models import SMARTCONNECT_DATFORMAT
+
 from app.services.transformers import transform_observation_v2
 
 
@@ -40,6 +45,26 @@ async def test_event_type_mapping_default(
     )
     # Check that it's mapped to the default type
     assert transformed_observation.event_type == "wildlife_sighting_rep"
+
+
+@pytest.mark.asyncio
+async def test_event_type_mapping_with_empty_event_details(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    event_v2_with_empty_event_details,
+    destination_integration_v2_er,
+    route_config_with_event_type_mappings,
+    connection_v2,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=event_v2_with_empty_event_details,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=route_config_with_event_type_mappings,
+    )
+    # If event_details is empty, expect the event_type to be the same as the original one
+    assert transformed_observation.event_type == event_v2_with_empty_event_details.event_type
 
 
 @pytest.mark.asyncio
@@ -219,23 +244,198 @@ async def test_transform_events_for_smart(
         route_configuration=None,
     )
     assert transformed_observation
-    assert transformed_observation.get("ca_uuid") == smart_ca_uuid
-    assert len(transformed_observation.get("waypoint_requests", [])) == 1
-    waypoint = transformed_observation.get("waypoint_requests")[0]
-    assert waypoint.get("geometry", {}).get("coordinates", []) == [
-        animals_sign_event_v2.location.lon,
-        animals_sign_event_v2.location.lat,
-    ]
-    properties = waypoint.get("properties", {})
-    assert properties.get("smartDataType") == "incident"
-    assert properties.get("smartFeatureType") == "waypoint/new"
-    attributes = properties.get("smartAttributes", {})
-    assert len(attributes.get("observationGroups", [])) == 1
-    observation_group = attributes["observationGroups"][0]
-    assert len(observation_group.get("observations", [])) == 1
-    observation = observation_group["observations"][0]
-    assert observation.get("category") == "animals.sign"
-    assert observation.get("attributes") == {"ageofsign": "days", "species": "lion"}
+    assert transformed_observation.ca_uuid == smart_ca_uuid
+    assert len(transformed_observation.waypoint_requests) == 1
+    waypoint = transformed_observation.waypoint_requests[0]
+    location = waypoint.geometry.coordinates
+    assert location
+    assert location == [animals_sign_event_v2.location.lon, animals_sign_event_v2.location.lat]
+    properties = waypoint.properties
+    assert properties
+    assert properties.smartDataType == "incident"
+    assert properties.smartFeatureType == "waypoint/new"
+    attributes = properties.smartAttributes
+    assert attributes
+    assert len(attributes.observationGroups) == 1
+    observation_group = attributes.observationGroups[0]
+    assert len(observation_group.observations) == 1
+    observation = observation_group.observations[0]
+    assert observation.category == "animals.sign"
+    assert observation.attributes == {"ageofsign": "days", "species": "lion"}
+
+
+@pytest.mark.asyncio
+async def test_transform_event_update_full_for_smart(
+    mocker,
+    smart_ca_uuid,
+    mock_smart_async_client_class,
+    animals_sign_event_update_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_update_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    changes = animals_sign_event_update_v2.changes
+    gundi_id = str(animals_sign_event_update_v2.gundi_id)
+    assert transformed_observation
+    assert transformed_observation.ca_uuid == smart_ca_uuid
+    assert len(transformed_observation.waypoint_requests) == 2  # When changing event details, two requests are expected
+    # Changes in base attributes like title must generate an incident update request
+    waypoint_1 = transformed_observation.waypoint_requests[0]
+    assert waypoint_1.geometry  # Location is mapped to geometry.coordinates
+    location = waypoint_1.geometry.coordinates
+    assert location == [changes["location"]["lon"], changes["location"]["lat"]]
+    properties = waypoint_1.properties
+    assert properties
+    assert properties.smartDataType == "incident"
+    assert properties.smartFeatureType == "waypoint"  # Incident Update
+    # Check that the datetime is correctly converted to local time and formatted (SMART doesn't accept timezone)
+    timestamp = datetime.fromisoformat(changes["recorded_at"])
+    local_tz = pytz.timezone("Africa/Lagos")
+    localized_timestamp = timestamp.astimezone(local_tz)
+    smart_timestamp = localized_timestamp.strftime(SMARTCONNECT_DATFORMAT)
+    assert properties.dateTime.strftime(SMARTCONNECT_DATFORMAT) == smart_timestamp
+    attributes = properties.smartAttributes
+    assert attributes
+    assert attributes.incidentId == f"gundi_ev_{gundi_id}"
+    assert attributes.incidentUuid == gundi_id
+    assert changes["title"] in attributes.comment  # Title is mapped to comment
+    # Changes in event details must generate a second request with an observation update
+    waypoint_2 = transformed_observation.waypoint_requests[1]
+    properties = waypoint_2.properties
+    assert properties
+    assert properties.smartDataType == "incident"
+    assert properties.smartFeatureType == "waypoint/observation"  # Observation Update
+    assert properties.smartAttributes.category == "animals.sign"
+    observation = properties.smartAttributes
+    assert observation.observationUuid == gundi_id
+    assert observation.attributes == {"species": "puma", "ageofsign": "weeks"}
+
+
+@pytest.mark.asyncio
+async def test_transform_event_update_title_for_smart(
+    mocker,
+    smart_ca_uuid,
+    mock_smart_async_client_class,
+    animals_sign_event_update_title_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_update_title_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    changes = animals_sign_event_update_title_v2.changes
+    gundi_id = str(animals_sign_event_update_title_v2.gundi_id)
+    assert transformed_observation
+    assert transformed_observation.ca_uuid == smart_ca_uuid
+    assert len(transformed_observation.waypoint_requests) == 1
+    waypoint_1 = transformed_observation.waypoint_requests[0]
+    # Changes in base attributes like title must generate an incident update request
+    properties = waypoint_1.properties
+    assert properties
+    assert properties.smartDataType == "incident"
+    assert properties.smartFeatureType == "waypoint"  # Incident Update
+    attributes = properties.smartAttributes
+    assert attributes
+    assert attributes.incidentId == f"gundi_ev_{gundi_id}"
+    assert attributes.incidentUuid == gundi_id
+    assert changes["title"] in attributes.comment  # Title is mapped to comment
+
+
+@pytest.mark.asyncio
+async def test_transform_event_update_location_for_smart(
+    mocker,
+    smart_ca_uuid,
+    mock_smart_async_client_class,
+    animals_sign_event_update_location_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_update_location_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    changes = animals_sign_event_update_location_v2.changes
+    gundi_id = str(animals_sign_event_update_location_v2.gundi_id)
+    assert transformed_observation
+    assert transformed_observation.ca_uuid == smart_ca_uuid
+    assert len(transformed_observation.waypoint_requests) == 1
+    # Changes in base attributes like location must generate an incident update request
+    waypoint_1 = transformed_observation.waypoint_requests[0]
+    assert waypoint_1.geometry  # Location is mapped to geometry.coordinates
+    location = waypoint_1.geometry.coordinates
+    assert location == [changes["location"]["lon"], changes["location"]["lat"]]
+    properties = waypoint_1.properties
+    assert properties
+    assert properties.smartDataType == "incident"
+    assert properties.smartFeatureType == "waypoint"  # Incident Update
+    attributes = properties.smartAttributes
+    assert attributes
+    assert attributes.incidentId == f"gundi_ev_{gundi_id}"
+    assert attributes.incidentUuid == gundi_id
+
+
+@pytest.mark.asyncio
+async def test_transform_event_update_details_for_smart(
+    mocker,
+    smart_ca_uuid,
+    mock_smart_async_client_class,
+    animals_sign_event_update_details_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_update_details_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    gundi_id = str(animals_sign_event_update_details_v2.gundi_id)
+    assert transformed_observation
+    assert transformed_observation.ca_uuid == smart_ca_uuid
+    assert len(transformed_observation.waypoint_requests) == 1
+    # Changes in event details must generate a request with an observation update
+    waypoint_1 = transformed_observation.waypoint_requests[0]
+    properties = waypoint_1.properties
+    assert properties
+    assert properties.smartDataType == "incident"
+    assert properties.smartFeatureType == "waypoint/observation"  # Observation Update
+    assert properties.smartAttributes.category == "animals.sign"
+    observation = properties.smartAttributes
+    assert observation.observationUuid == gundi_id
+    assert observation.attributes == {"species": "leopard"}
+
+
+@pytest.mark.asyncio
+async def test_transform_event_update_details_requires_event_type_for_smart(
+    mocker,
+    smart_ca_uuid,
+    mock_smart_async_client_class,
+    animals_sign_event_update_details_without_event_type_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    with pytest.raises(ValueError):
+        transformed_observation = await transform_observation_v2(
+            observation=animals_sign_event_update_details_without_event_type_v2,
+            destination=destination_integration_v2_smart,
+            provider=connection_v2.provider,
+            route_configuration=None,
+        )
 
 
 @pytest.mark.asyncio

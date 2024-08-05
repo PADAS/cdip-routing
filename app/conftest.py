@@ -1304,6 +1304,27 @@ def leopard_detected_from_species_event_v2():
 
 
 @pytest.fixture
+def event_v2_with_empty_event_details():
+    return schemas_v2.Event(
+        gundi_id="b9b46dc1-e033-447d-a99b-0fe373ca04c9",
+        related_to="None",
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        recorded_at=datetime.datetime(2023, 7, 4, 21, 38, tzinfo=datetime.timezone.utc),
+        location=schemas_v2.Location(
+            lat=-51.667875, lon=-72.71195, alt=1800.0, hdop=None, vdop=None
+        ),
+        title="Animal Detected",
+        event_type="wildlife_sighting_rep",
+        event_details={},
+        geometry={},
+        observation_type="ev",
+    )
+
+@pytest.fixture
 def event_update_species_wildcat():
     return schemas_v2.EventUpdate(
         gundi_id="78867a74-67f0-4b56-8e44-125ae66408ff",
@@ -1450,14 +1471,115 @@ def animals_sign_event_v2():
         title="Animal Sign",
         event_type="animals_sign",
         event_details={
-            "site_name": "MM Spot",
             "species": "lion",
-            "tags": ["adult", "male"],
-            "animal_count": 2,
             "ageofsign": "days",
         },
         geometry={},
         observation_type="ev",
+    )
+
+
+@pytest.fixture
+def animals_sign_event_update_v2():
+    return schemas_v2.EventUpdate(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        related_to=None,
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        changes={
+            "title": "Puma Sign",
+            "recorded_at": "2024-08-05 13:27:10+00:00",
+            "location": {
+                "lat": 13.123456,
+                "lon": 13.123456
+            },
+            "event_type": "animals_sign",  # Event type and details must be changed together in SMART
+            "event_details": {
+                "species": "puma",
+                "ageofsign": "weeks",
+            },
+        },
+        observation_type="evu",
+    )
+
+
+@pytest.fixture
+def animals_sign_event_update_title_v2():
+    return schemas_v2.EventUpdate(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        related_to=None,
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        changes={
+            "title": "Leopard Sign"
+        },
+        observation_type="evu",
+    )
+
+
+@pytest.fixture
+def animals_sign_event_update_location_v2():
+    return schemas_v2.EventUpdate(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        related_to=None,
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        changes={
+            "location": {
+                "lat": 13.123457,
+                "lon": 13.123457
+            }
+        },
+        observation_type="evu",
+    )
+
+
+@pytest.fixture
+def animals_sign_event_update_details_v2():
+    return schemas_v2.EventUpdate(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        related_to=None,
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        changes={
+            "event_type": "animals_sign",  # Event type and details must be changed together in SMART
+            "event_details": {
+                "species": "leopard"
+            },
+        },
+        observation_type="evu",
+    )
+
+
+@pytest.fixture
+def animals_sign_event_update_details_without_event_type_v2():
+    return schemas_v2.EventUpdate(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        related_to=None,
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        changes={
+            # Event type intentionally left out
+            "event_details": {
+                "species": "leopard"
+            },
+        },
+        observation_type="evu",
     )
 
 
