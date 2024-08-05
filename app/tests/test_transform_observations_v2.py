@@ -298,6 +298,40 @@ async def test_transform_event_update_full_for_smart(
 
 
 @pytest.mark.asyncio
+async def test_transform_event_update_title_for_smart(
+    mocker,
+    smart_ca_uuid,
+    mock_smart_async_client_class,
+    animals_sign_event_update_title_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_update_title_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    changes = animals_sign_event_update_title_v2.changes
+    gundi_id = str(animals_sign_event_update_title_v2.gundi_id)
+    assert transformed_observation
+    assert transformed_observation.ca_uuid == smart_ca_uuid
+    assert len(transformed_observation.waypoint_requests) == 1
+    waypoint_1 = transformed_observation.waypoint_requests[0]
+    # Changes in base attributes like title must generate an incident update request
+    properties = waypoint_1.properties
+    assert properties
+    assert properties.smartDataType == "incident"
+    assert properties.smartFeatureType == "waypoint"  # Incident Update
+    attributes = properties.smartAttributes
+    assert attributes
+    assert attributes.incidentId == f"gundi_ev_{gundi_id}"
+    assert attributes.incidentUuid == gundi_id
+    assert changes["title"] in attributes.comment  # Title is mapped to comment
+
+
+@pytest.mark.asyncio
 async def test_transform_event_update_with_type_mapping_for_earthranger(
     mock_cache,
     mock_gundi_client_v2,
