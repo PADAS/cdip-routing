@@ -1503,6 +1503,66 @@ def animals_sign_event_update_title_v2():
 
 
 @pytest.fixture
+def animals_sign_event_update_location_v2():
+    return schemas_v2.EventUpdate(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        related_to=None,
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        changes={
+            "location": {
+                "lat": 13.123457,
+                "lon": 13.123457
+            }
+        },
+        observation_type="evu",
+    )
+
+
+@pytest.fixture
+def animals_sign_event_update_details_v2():
+    return schemas_v2.EventUpdate(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        related_to=None,
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        changes={
+            "event_type": "animals_sign",  # Event type and details must be changed together in SMART
+            "event_details": {
+                "species": "leopard"
+            },
+        },
+        observation_type="evu",
+    )
+
+
+@pytest.fixture
+def animals_sign_event_update_details_without_event_type_v2():
+    return schemas_v2.EventUpdate(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        related_to=None,
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        changes={
+            # Event type intentionally left out
+            "event_details": {
+                "species": "leopard"
+            },
+        },
+        observation_type="evu",
+    )
+
+
+@pytest.fixture
 def integration_type_er():
     return schemas_v2.ConnectionIntegrationType(
         id="45c66a61-71e4-4664-a7f2-30d465f87aa6",
