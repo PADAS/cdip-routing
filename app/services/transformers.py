@@ -1364,7 +1364,7 @@ class SmartEventUpdateTransformerV2(SMARTTransformerV2):
             # Update properties in Incident
             incident_update = await self.event_update_to_waypoint_update(event_update=message)
             waypoint_requests.append(incident_update)
-        if "event_type" or "event_details" in message.changes:
+        if "event_type" in message.changes or "event_details" in message.changes:
             # Update attributes in related Observation
             observation_update = await self.event_update_to_waypoint_observation_update(event_update=message)
             waypoint_requests.append(observation_update)
