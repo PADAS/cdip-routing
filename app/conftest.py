@@ -1304,6 +1304,27 @@ def leopard_detected_from_species_event_v2():
 
 
 @pytest.fixture
+def event_v2_with_empty_event_details():
+    return schemas_v2.Event(
+        gundi_id="b9b46dc1-e033-447d-a99b-0fe373ca04c9",
+        related_to="None",
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        recorded_at=datetime.datetime(2023, 7, 4, 21, 38, tzinfo=datetime.timezone.utc),
+        location=schemas_v2.Location(
+            lat=-51.667875, lon=-72.71195, alt=1800.0, hdop=None, vdop=None
+        ),
+        title="Animal Detected",
+        event_type="wildlife_sighting_rep",
+        event_details={},
+        geometry={},
+        observation_type="ev",
+    )
+
+@pytest.fixture
 def event_update_species_wildcat():
     return schemas_v2.EventUpdate(
         gundi_id="78867a74-67f0-4b56-8e44-125ae66408ff",

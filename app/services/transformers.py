@@ -1402,7 +1402,8 @@ class FieldMappingRule(TransformationRule):
             return
 
         source_value = self._extract_value(message=message, source=self.source)
-        if source_value is None:
+        if not source_value:
+            logger.warning(f"Field Mappings: Couldn't find a valid value for '{self.source}'. Value:'{source_value}'")
             return
 
         if not self.map:

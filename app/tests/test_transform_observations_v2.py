@@ -48,6 +48,26 @@ async def test_event_type_mapping_default(
 
 
 @pytest.mark.asyncio
+async def test_event_type_mapping_with_empty_event_details(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    event_v2_with_empty_event_details,
+    destination_integration_v2_er,
+    route_config_with_event_type_mappings,
+    connection_v2,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=event_v2_with_empty_event_details,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=route_config_with_event_type_mappings,
+    )
+    # If event_details is empty, expect the event_type to be the same as the original one
+    assert transformed_observation.event_type == event_v2_with_empty_event_details.event_type
+
+
+@pytest.mark.asyncio
 async def test_movebank_transform_observation(
     mock_cache,
     mock_gundi_client_v2,
