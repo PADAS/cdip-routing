@@ -1282,7 +1282,6 @@ class SMARTTransformerV2(Transformer, ABC):
         )
         return smart_request
 
-
     async def event_update_to_waypoint_observation_update(
             self,
             *,
@@ -1291,9 +1290,6 @@ class SMARTTransformerV2(Transformer, ABC):
         observation_uuid = str(event_update.gundi_id)
         smart_feature_type = "waypoint/observation"
         smart_data_type = "incident"
-        smart_attributes = {
-            "observationUuid": observation_uuid,
-        }
         changes = event_update.changes
 
         if "event_type" not in changes or "event_details" not in changes:

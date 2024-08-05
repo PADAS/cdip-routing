@@ -1470,9 +1470,15 @@ def animals_sign_event_update_v2():
         external_source_id="Xyz123",
         changes={
             "title": "Leopard Sign",
+            "recorded_at": "2024-08-05 13:27:10+00:00",
+            "location": {
+                "lat": 13.123456,
+                "lon": 13.123456
+            },
+            "event_type": "animals_sign",  # Event type and details must be changed together in SMART
             "event_details": {
-                "species": "leopard",
-                "ageofsign": "weeks"
+                "species": "puma",
+                "ageofsign": "weeks",
             },
         },
         observation_type="evu",

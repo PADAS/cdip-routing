@@ -1,4 +1,9 @@
+from datetime import datetime
+
 import pytest
+import pytz
+from smartconnect.models import SMARTCONNECT_DATFORMAT
+
 from app.services.transformers import transform_observation_v2
 
 
@@ -240,7 +245,7 @@ async def test_transform_events_for_smart(
 
 
 @pytest.mark.asyncio
-async def test_transform_event_update_for_smart(
+async def test_transform_event_update_full_for_smart(
     mocker,
     smart_ca_uuid,
     mock_smart_async_client_class,
@@ -255,26 +260,41 @@ async def test_transform_event_update_for_smart(
         provider=connection_v2.provider,
         route_configuration=None,
     )
+    changes = animals_sign_event_update_v2.changes
+    gundi_id = str(animals_sign_event_update_v2.gundi_id)
     assert transformed_observation
     assert transformed_observation.ca_uuid == smart_ca_uuid
-    assert len(transformed_observation.waypoint_requests) == 1
-    waypoint = transformed_observation.waypoint_requests[0]
-    location = waypoint.geometry.coordinates
-    assert location
-    expected_changes = animals_sign_event_update_v2.changes
-    assert location == [expected_changes.location.lon, expected_changes.location.lat]
-    properties = waypoint.properties
+    assert len(transformed_observation.waypoint_requests) == 2  # When changing event details, two requests are expected
+    # Changes in base attributes like title must generate an incident update request
+    waypoint_1 = transformed_observation.waypoint_requests[0]
+    assert waypoint_1.geometry  # Location is mapped to geometry.coordinates
+    location = waypoint_1.geometry.coordinates
+    assert location == [changes["location"]["lon"], changes["location"]["lat"]]
+    properties = waypoint_1.properties
     assert properties
     assert properties.smartDataType == "incident"
-    assert properties.smartFeatureType == "waypoint"  # Update
+    assert properties.smartFeatureType == "waypoint"  # Incident Update
+    # Check that the datetime is correctly converted to local time and formatted (SMART doesn't accept timezone)
+    timestamp = datetime.fromisoformat(changes["recorded_at"])
+    local_tz = pytz.timezone("Africa/Lagos")
+    localized_timestamp = timestamp.astimezone(local_tz)
+    smart_timestamp = localized_timestamp.strftime(SMARTCONNECT_DATFORMAT)
+    assert properties.dateTime.strftime(SMARTCONNECT_DATFORMAT) == smart_timestamp
     attributes = properties.smartAttributes
     assert attributes
-    assert len(attributes.observationGroups) == 1
-    observation_group = attributes.observationGroups[0]
-    assert len(observation_group.observations) == 1
-    observation = observation_group.observations[0]
-    assert observation.category == "animals.sign"
-    assert observation.attributes == {"ageofsign": "weeks", "species": "leopard"}
+    assert attributes.incidentId == f"gundi_ev_{gundi_id}"
+    assert attributes.incidentUuid == gundi_id
+    assert changes["title"] in attributes.comment  # Title is mapped to comment
+    # Changes in event details must generate a second request with an observation update
+    waypoint_2 = transformed_observation.waypoint_requests[1]
+    properties = waypoint_2.properties
+    assert properties
+    assert properties.smartDataType == "incident"
+    assert properties.smartFeatureType == "waypoint/observation"  # Observation Update
+    assert properties.smartAttributes.category == "animals.sign"
+    observation = properties.smartAttributes
+    assert observation.observationUuid == gundi_id
+    assert observation.attributes == {"species": "puma", "ageofsign": "weeks"}
 
 
 @pytest.mark.asyncio
