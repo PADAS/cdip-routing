@@ -17,4 +17,5 @@ inputs = {
   redis_host                        = "10.3.176.132"
   network_name                      = "sintegrate-vpc-b2b9960e"
   movebank_dispatcher_default_topic = "destination-movebank-dev"
+  log_level                         = "DEBUG"
 }
