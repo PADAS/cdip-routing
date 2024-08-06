@@ -4,6 +4,7 @@ import pytest
 import pytz
 from smartconnect.models import SMARTCONNECT_DATFORMAT
 
+from app.core.errors import ReferenceDataError
 from app.services.transformers import transform_observation_v2
 
 
@@ -262,6 +263,28 @@ async def test_transform_events_for_smart(
     observation = observation_group.observations[0]
     assert observation.category == "animals.sign"
     assert observation.attributes == {"ageofsign": "days", "species": "lion"}
+
+
+@pytest.mark.asyncio
+async def test_transform_event_for_smart_raises_on_category_missmatch(
+    mocker,
+    smart_ca_uuid,
+    mock_smart_async_client_class,
+    smart_event_v2_with_unmatched_category,
+    connection_v2,
+    destination_integration_v2_smart_without_transform_rules,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient",
+        mock_smart_async_client_class,
+    )
+    with pytest.raises(ReferenceDataError):
+        transformed_observation = await transform_observation_v2(
+            observation=smart_event_v2_with_unmatched_category,
+            destination=destination_integration_v2_smart_without_transform_rules,
+            provider=connection_v2.provider,
+            route_configuration=None,
+        )
 
 
 @pytest.mark.asyncio

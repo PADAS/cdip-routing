@@ -1480,6 +1480,32 @@ def animals_sign_event_v2():
 
 
 @pytest.fixture
+def smart_event_v2_with_unmatched_category():
+    return schemas_v2.Event(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        recorded_at=datetime.datetime(
+            2023, 12, 28, 19, 26, tzinfo=datetime.timezone.utc
+        ),
+        location=schemas_v2.Location(
+            lat=-51.688645, lon=-72.704440, alt=1800.0, hdop=None, vdop=None
+        ),
+        title="Test Event",
+        event_type="bad_event_type",
+        event_details={
+            "species": "lion",
+            "ageofsign": "days",
+        },
+        geometry={},
+        observation_type="ev",
+    )
+
+
+@pytest.fixture
 def animals_sign_event_update_v2():
     return schemas_v2.EventUpdate(
         gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
@@ -1810,6 +1836,198 @@ def destination_integration_v2_smart(integration_type_smart, smart_ca_uuid):
                     "version": "7.5.3",
                     "ca_uuids": [smart_ca_uuid],
                     "transformation_rules": {"category_map": [], "attribute_map": []},
+                },
+            ),
+            schemas_v2.IntegrationActionConfiguration(
+                id=UUID("abce8c67-a74c-46fd-b5c3-62a7b76f2b17"),
+                integration=UUID("b42c9205-5228-49e0-a75b-ebe5b6a9f78e"),
+                action=schemas_v2.IntegrationActionSummary(
+                    id=UUID("b0a0e7ed-d668-41b5-96d2-397f026c4ecb"),
+                    type="auth",
+                    name="Authenticate",
+                    value="auth",
+                ),
+                data={
+                    "login": "fakeusername",
+                    "endpoint": "https://integrationx.smartconservationtools.org/server",
+                    "password": "something fancy",
+                },
+            ),
+        ],
+        default_route=None,
+        additional={},
+        status={
+            "id": "mockid-b16a-4dbd-ad32-197c58aeef59",
+            "is_healthy": True,
+            "details": "Last observation has been delivered with success.",
+            "observation_delivered_24hrs": 50231,
+            "last_observation_delivered_at": "2023-03-31T11:20:00+0200",
+        },
+    )
+
+
+@pytest.fixture
+def destination_integration_v2_smart_without_transform_rules(integration_type_smart, smart_ca_uuid):
+    return schemas_v2.Integration(
+        id=UUID("b42c9205-5228-49e0-a75b-ebe5b6a9f78e"),
+        name="Integration X SMART Connect",
+        type=schemas_v2.IntegrationType(
+            id=integration_type_smart.id,
+            name=integration_type_smart.name,
+            value=integration_type_smart.value,
+            description="",
+            actions=[
+                schemas_v2.IntegrationAction(
+                    id=UUID("b0a0e7ed-d668-41b5-96d2-397f026c4ecb"),
+                    type="auth",
+                    name="Authenticate",
+                    value="auth",
+                    description="Authenticate against smart",
+                    action_schema={
+                        "type": "object",
+                        "title": "SMARTAuthActionConfig",
+                        "required": ["login", "password"],
+                        "properties": {
+                            "login": {"type": "string", "title": "Login"},
+                            "endpoint": {"type": "string", "title": "Endpoint"},
+                            "password": {"type": "string", "title": "Password"},
+                        },
+                    },
+                ),
+                schemas_v2.IntegrationAction(
+                    id=UUID("ebe72917-c112-4064-9f38-707bbd14a50f"),
+                    type="push",
+                    name="Push Events",
+                    value="push_events",
+                    description="Send Events to SMART Connect (a.k.a Incidents or waypoints)",
+                    action_schema={
+                        "type": "object",
+                        "title": "SMARTPushEventActionConfig",
+                        "properties": {
+                            "ca_uuid": {
+                                "type": "string",
+                                "title": "Ca Uuid",
+                                "format": "uuid",
+                            },
+                            "version": {"type": "string", "title": "Version"},
+                            "ca_uuids": {
+                                "type": "array",
+                                "items": {"type": "string", "format": "uuid"},
+                                "title": "Ca Uuids",
+                            },
+                            "transformation_rules": {
+                                "$ref": "#/definitions/TransformationRules"
+                            },
+                            "configurable_models_lists": {
+                                "type": "object",
+                                "title": "Configurable Models Lists",
+                            },
+                            "configurable_models_enabled": {
+                                "type": "array",
+                                "items": {"type": "string", "format": "uuid"},
+                                "title": "Configurable Models Enabled",
+                            },
+                        },
+                        "definitions": {
+                            "OptionMap": {
+                                "type": "object",
+                                "title": "OptionMap",
+                                "required": ["from_key", "to_key"],
+                                "properties": {
+                                    "to_key": {"type": "string", "title": "To Key"},
+                                    "from_key": {"type": "string", "title": "From Key"},
+                                },
+                            },
+                            "CategoryPair": {
+                                "type": "object",
+                                "title": "CategoryPair",
+                                "required": ["event_type", "category_path"],
+                                "properties": {
+                                    "event_type": {
+                                        "type": "string",
+                                        "title": "Event Type",
+                                    },
+                                    "category_path": {
+                                        "type": "string",
+                                        "title": "Category Path",
+                                    },
+                                },
+                            },
+                            "AttributeMapper": {
+                                "type": "object",
+                                "title": "AttributeMapper",
+                                "required": ["from_key", "to_key"],
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "title": "Type",
+                                        "default": "string",
+                                    },
+                                    "to_key": {"type": "string", "title": "To Key"},
+                                    "from_key": {"type": "string", "title": "From Key"},
+                                    "event_types": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                        "title": "Event Types",
+                                    },
+                                    "options_map": {
+                                        "type": "array",
+                                        "items": {"$ref": "#/definitions/OptionMap"},
+                                        "title": "Options Map",
+                                    },
+                                    "default_option": {
+                                        "type": "string",
+                                        "title": "Default Option",
+                                    },
+                                },
+                            },
+                            "TransformationRules": {
+                                "type": "object",
+                                "title": "TransformationRules",
+                                "properties": {
+                                    "category_map": {
+                                        "type": "array",
+                                        "items": {"$ref": "#/definitions/CategoryPair"},
+                                        "title": "Category Map",
+                                        "default": [],
+                                    },
+                                    "attribute_map": {
+                                        "type": "array",
+                                        "items": {
+                                            "$ref": "#/definitions/AttributeMapper"
+                                        },
+                                        "title": "Attribute Map",
+                                        "default": [],
+                                    },
+                                },
+                            },
+                        },
+                    },
+                ),
+            ],
+        ),
+        base_url="https://integrationx.smartconservationtools.org/server",
+        enabled=True,
+        owner=schemas_v2.Organization(
+            id=UUID("a91b400b-482a-4546-8fcb-ee42b01deeb6"),
+            name="Test Org",
+            description="",
+        ),
+        configurations=[
+            schemas_v2.IntegrationActionConfiguration(
+                id=UUID("55760315-3d68-4925-bf2d-c4d39de433c9"),
+                integration=UUID("b42c9205-5228-49e0-a75b-ebe5b6a9f78e"),
+                action=schemas_v2.IntegrationActionSummary(
+                    id=UUID("ebe72917-c112-4064-9f38-707bbd14a50f"),
+                    type="push",
+                    name="Push Events",
+                    value="push_events",
+                ),
+                data={
+                    "version": "7.5.3",
+                    "ca_uuids": [smart_ca_uuid],
+                    # No transformation rules set in configuration
+                    # "transformation_rules": {"category_map": [], "attribute_map": []},
                 },
             ),
             schemas_v2.IntegrationActionConfiguration(

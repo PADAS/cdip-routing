@@ -970,7 +970,10 @@ class SMARTTransformerV2(Transformer, ABC):
             self._default_timezone = pytz.utc
 
         self.ca_timezone = self._default_timezone
-        self._transformation_rules = self.push_config.transformation_rules
+        transformation_rules_dict = self.push_config.transformation_rules or {}
+        self._transformation_rules = SMARTTransformationRules.parse_obj(
+            transformation_rules_dict
+        )
 
     async def get_ca(self, config):
         if not self.ca:
