@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - 'release-**'
+      - 'gundi-3296-ordered-event-updates'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -32,7 +33,7 @@ jobs:
 
   dev-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
-    if: startsWith(github.ref, 'refs/heads/main')
+    if: startsWith(github.ref, 'refs/heads/gundi-3296')
     needs: [vars, build]
     with:
       environment: dev
