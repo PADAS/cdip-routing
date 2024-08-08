@@ -231,6 +231,7 @@ async def process_observation(raw_observation, attributes):
 
 def is_too_old(timestamp):
     if not timestamp:
+        logger.warning("No timestamp found in Pubsub Message. Skipping age check.")
         return False
     try:  # The timestamp does not always include the microseconds part
         event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -250,7 +251,7 @@ async def process_request(request):
     with tracing.tracer.start_as_current_span(
         "routing_service.process_request", kind=SpanKind.CLIENT
     ) as current_span:
-        if is_too_old(timestamp=request.headers.get("ce-time")):
+        if is_too_old(timestamp=request.headers.get("publish_time")):
             logger.warning(
                 f"Message discarded. The message is too old or the retry time limit has been reached."
             )
