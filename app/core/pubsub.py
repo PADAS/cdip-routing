@@ -44,9 +44,8 @@ async def send_message_to_gcp_pubsub_dispatcher(
             # Serialize UUIDs or other complex types to string
             attributes_clean = json.loads(json.dumps(attributes, default=str))
             ordering_key_clean = str(ordering_key)
-            # ToDo: enable ordering key once we update the infra to support it
-            #messages = [pubsub.PubsubMessage(message, ordering_key=ordering_key_clean, **attributes_clean)]
-            messages = [pubsub.PubsubMessage(message, **attributes_clean)]
+            messages = [pubsub.PubsubMessage(message, ordering_key=ordering_key_clean, **attributes_clean)]
+            #messages = [pubsub.PubsubMessage(message, **attributes_clean)]
             logger.info(f"Sending observation to PubSub topic {topic_name}..")
             try:
                 response = await client.publish(
