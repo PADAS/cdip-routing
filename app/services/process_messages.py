@@ -254,7 +254,8 @@ async def process_request(request):
     ) as current_span:
         pubsub_message_id = pubsub_message.get("message_id")
         gundi_event_id = payload.get("event_id")
-        current_span.set_attribute("pubsub_message_id", pubsub_message_id)
+        current_span.set_attribute("pubsub_message_id", str(pubsub_message_id))
+        current_span.set_attribute("gundi_event_id", str(gundi_event_id))
         logger.debug(f"Received PubsubMessage(PubSub ID:{pubsub_message_id}, Gundi Event ID: {gundi_event_id}): {pubsub_message}")
         #ToDo Check duplicates using message_id / gundi_event_id
         timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time")
