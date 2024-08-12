@@ -243,7 +243,7 @@ def is_too_old(timestamp):
 
 
 async def process_request(request):
-    # Extract the observation and attributes from the CloudEvent
+    # Extract the observation and attributes from the request
     json_data = await request.json()
     pubsub_message = json_data["message"]
     payload, attributes = extract_fields_from_message(pubsub_message)
