@@ -258,14 +258,14 @@ async def process_request(request):
         "routing_service.process_request", kind=SpanKind.CLIENT
     ) as current_span:
         pubsub_message_id = pubsub_message.get("message_id")
-        gundi_event_id = payload.get("event_id")
+        system_event_id = payload.get("event_id")
         current_span.set_attribute("pubsub_message_id", str(pubsub_message_id))
-        current_span.set_attribute("gundi_event_id", str(gundi_event_id))
-        logger.debug(f"Received PubsubMessage(PubSub ID:{pubsub_message_id}, Gundi Event ID: {gundi_event_id}): {pubsub_message}")
+        current_span.set_attribute("system_event_id", str(system_event_id))
+        logger.debug(f"Received PubsubMessage(PubSub ID:{pubsub_message_id}, System Event ID: {system_event_id}): {pubsub_message}")
         # Discard duplicate events by checking if the event_id has been processed before
-        if await is_event_processed(event_id=gundi_event_id):
+        if await is_event_processed(event_id=system_event_id):
             logger.warning(
-                f"Message discarded. Event with ID '{gundi_event_id}' has already been processed (possible duplicate)."
+                f"Message discarded. Event with ID '{system_event_id}' has already been processed (possible duplicate)."
             )
             current_span.set_attribute("is_duplicate", True)
             await send_observation_to_dead_letter_topic(payload, attributes)
