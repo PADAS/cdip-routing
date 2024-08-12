@@ -1,11 +1,6 @@
 curl localhost:8282 \
   -X POST \
   -H "Content-Type: application/json" \
-  -H "ce-id: 123451234512345" \
-  -H "ce-specversion: 1.0" \
-  -H "ce-time: 2024-07-18T17:40:00.789Z" \
-  -H "ce-type: google.cloud.pubsub.topic.v1.messagePublished" \
-  -H "ce-source: //pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC" \
   -d '{
       "message": {
         "data":"eyJldmVudF9pZCI6ICJjMTQxMmZiZi0xNTcwLTQ0YjAtOGE3ZC00MTFlZGUzMDFmMzciLCAidGltZXN0YW1wIjogIjIwMjQtMDgtMDIgMTE6MTg6MDQuNzIyNTI4KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Imd1bmRpX2lkIjogIjU0NmI5MjdiLTU3OGMtNDUwNC05OWNlLWE0Mjg5NTI4NDk0MSIsICJyZWxhdGVkX3RvIjogIk5vbmUiLCAib3duZXIiOiAiYTkxYjQwMGItNDgyYS00NTQ2LThmY2ItZWU0MmIwMWRlZWI2IiwgImRhdGFfcHJvdmlkZXJfaWQiOiAiZDg4YWM1MjAtMmJmNi00ZTZiLWFiMDktMzhlZDFlYzY5NDdhIiwgInNvdXJjZV9pZCI6ICIyOTY2OWIxNy1jODg4LTRjNmQtODdiNS1kOGI5ZTE0ZTM0MmQiLCAiZXh0ZXJuYWxfc291cmNlX2lkIjogImRlZmF1bHQtc291cmNlIiwgImNoYW5nZXMiOiB7InRpdGxlIjogIkFuaW1hbHMgMDIgRWRpdGVkIChUZXN0IE1hcmlhbm8pIiwgInJlY29yZGVkX2F0IjogIjIwMjQtMDgtMDIgMTA6NDY6MTArMDA6MDAiLCAibG9jYXRpb24iOiB7ImxhdCI6IDEzLjEyMzQ1NiwgImxvbiI6IDEzLjEyMzQ1Nn0sICJldmVudF90eXBlIjogImFuaW1hbHMiLCAiZXZlbnRfZGV0YWlscyI6IHsidGFyZ2V0c3BlY2llcyI6ICJyZXB0aWxlcy5weXRob25zcHAiLCAid2lsZGxpZmVvYnNlcnZhdGlvbnR5cGUiOiAiZGlyZWN0b2JzZXJ2YXRpb24iLCAiYWdlb2ZzaWduYW5pbWFsIjogImZyZXNoIiwgIm51bWJlcm9mYW5pbWFsIjogMn19LCAib2JzZXJ2YXRpb25fdHlwZSI6ICJldnUifSwgImV2ZW50X3R5cGUiOiAiRXZlbnRVcGRhdGVSZWNlaXZlZCJ9",
@@ -21,7 +16,11 @@ curl localhost:8282 \
           "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
           "annotations":"{}",
           "tracing_context":"{}"
-        }
+        },
+        "messageId": "9155786613739819",
+        "message_id": "9155786613739819",
+        "publishTime": "2024-08-12T12:40:00.789Z",
+        "publish_time": "2024-07-18T12:40:00.789Z"
       },
       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
     }'
@@ -41,7 +40,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -61,7 +64,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -81,7 +88,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -101,7 +112,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -121,7 +136,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -141,7 +160,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -161,7 +184,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -181,7 +208,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
