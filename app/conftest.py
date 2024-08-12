@@ -34,6 +34,16 @@ def mock_cache(mocker):
 
 
 @pytest.fixture
+def mock_deduplication_cache(mocker):
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.return_value = async_return(None)
+    mock_cache.setex.return_value = async_return(None)
+    mock_cache.__aenter__.return_value = mock_cache
+    mock_cache.__aexit__.return_value = None
+    return mock_cache
+
+
+@pytest.fixture
 def mock_cache_with_cached_connection(mocker, connection_v2):
     mock_cache = mocker.MagicMock()
     cached_data = connection_v2.json()
