@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from app.core import tracing
 from opentelemetry.trace import SpanKind
 from gundi_core import schemas
+from app.core.deduplication import set_event_processing_status, EventProcessingStatus
+from app.core.deduplication import is_event_processed
 from app.core.local_logging import ExtraKeys
 from app.core.utils import Broker
 from app.core.errors import ReferenceDataError
@@ -51,7 +53,10 @@ async def process_observation_event(raw_message, attributes):
         except KeyError:
             logger.warning(f"Event Schema for '{event_type}' not found. Message discarded.")
         parsed_event = schema.parse_obj(raw_message)
-        return await handler(event=parsed_event)
+        result = await handler(event=parsed_event)
+        # Keep track of processed events for deduplication
+        await set_event_processing_status(event_id=str(parsed_event.event_id), status=EventProcessingStatus.PROCESSED)
+        return result
 
 
 async def process_observation(raw_observation, attributes):
@@ -257,7 +262,18 @@ async def process_request(request):
         current_span.set_attribute("pubsub_message_id", str(pubsub_message_id))
         current_span.set_attribute("gundi_event_id", str(gundi_event_id))
         logger.debug(f"Received PubsubMessage(PubSub ID:{pubsub_message_id}, Gundi Event ID: {gundi_event_id}): {pubsub_message}")
-        #ToDo Check duplicates using message_id / gundi_event_id
+        # Discard duplicate events by checking if the event_id has been processed before
+        if await is_event_processed(event_id=gundi_event_id):
+            logger.warning(
+                f"Message discarded. Event with ID '{gundi_event_id}' has already been processed (possible duplicate)."
+            )
+            current_span.set_attribute("is_duplicate", True)
+            await send_observation_to_dead_letter_topic(payload, attributes)
+            return {
+                "status": "discarded",
+                "reason": "Event has already been processed (possible duplicate)."
+            }
+        # Handle maximum retries and age of the event
         timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time")
         if is_too_old(timestamp=timestamp):
             logger.warning(
