@@ -8,7 +8,7 @@ async def test_process_observation_and_route_to_gcp_pubsub_dispatcher(
     mocker,
     mock_cache,
     mock_gundi_client,
-    mock_pubsub_client,
+    mock_pubsub,
     raw_observation_position,
     raw_observation_position_attributes,
     outbound_configuration_gcp_pubsub,
@@ -19,13 +19,13 @@ async def test_process_observation_and_route_to_gcp_pubsub_dispatcher(
     )
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
-    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
     await process_observation(
         raw_observation_position, raw_observation_position_attributes
     )
     # Check that the right methods, to publish to PuSub, were called
-    assert mock_pubsub_client.PublisherClient.called
-    assert mock_pubsub_client.PublisherClient.return_value.publish.called
+    assert mock_pubsub.PublisherClient.called
+    assert mock_pubsub.PublisherClient.return_value.publish.called
 
 
 @pytest.mark.asyncio
@@ -188,7 +188,7 @@ async def test_process_observation_geoevent_and_route_to_gcp_pubsub_dispatcher(
     mocker,
     mock_cache,
     mock_gundi_client,
-    mock_pubsub_client,
+    mock_pubsub,
     raw_observation_geoevent,
     raw_observation_geoevent_attributes,
     outbound_configuration_gcp_pubsub,
@@ -199,13 +199,13 @@ async def test_process_observation_geoevent_and_route_to_gcp_pubsub_dispatcher(
     )
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
-    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
     await process_observation(
         raw_observation_geoevent, raw_observation_geoevent_attributes
     )
     # Check that the right methods, to publish to PuSub, were called
-    assert mock_pubsub_client.PublisherClient.called
-    assert mock_pubsub_client.PublisherClient.return_value.publish.called
+    assert mock_pubsub.PublisherClient.called
+    assert mock_pubsub.PublisherClient.return_value.publish.called
 
 
 @pytest.mark.asyncio
@@ -213,7 +213,7 @@ async def test_process_observation_cameratrap_and_route_to_gcp_pubsub_dispatcher
     mocker,
     mock_cache,
     mock_gundi_client,
-    mock_pubsub_client,
+    mock_pubsub,
     raw_observation_cameratrap,
     raw_observation_cameratrap_attributes,
     outbound_configuration_gcp_pubsub,
@@ -224,10 +224,10 @@ async def test_process_observation_cameratrap_and_route_to_gcp_pubsub_dispatcher
     )
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
-    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
     await process_observation(
         raw_observation_cameratrap, raw_observation_cameratrap_attributes
     )
     # Check that the right methods, to publish to PuSub, were called
-    assert mock_pubsub_client.PublisherClient.called
-    assert mock_pubsub_client.PublisherClient.return_value.publish.called
+    assert mock_pubsub.PublisherClient.called
+    assert mock_pubsub.PublisherClient.return_value.publish.called

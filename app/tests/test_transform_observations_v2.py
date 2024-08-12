@@ -12,7 +12,7 @@ from app.services.transformers import transform_observation_v2
 async def test_event_type_mapping(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     leopard_detected_from_species_event_v2,
     destination_integration_v2_er,
     route_config_with_event_type_mappings,
@@ -31,7 +31,7 @@ async def test_event_type_mapping(
 async def test_event_type_mapping_default(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     unmapped_animal_detected_event_v2,
     destination_integration_v2_er,
     route_config_with_event_type_mappings,
@@ -52,7 +52,7 @@ async def test_event_type_mapping_default(
 async def test_event_type_mapping_with_empty_event_details(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     event_v2_with_empty_event_details,
     destination_integration_v2_er,
     route_config_with_event_type_mappings,
@@ -72,7 +72,7 @@ async def test_event_type_mapping_with_empty_event_details(
 async def test_movebank_transform_observation(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     observation_object_v2,
     destination_integration_v2_movebank,
     route_config_with_no_mappings,
@@ -104,7 +104,7 @@ async def test_movebank_transform_observation(
 async def test_transform_observations_for_earthranger(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     observation_object_v2,
     destination_integration_v2_er,
     route_config_with_no_mappings,
@@ -130,7 +130,7 @@ async def test_transform_observations_for_earthranger(
 async def test_transform_observations_without_route_configuration(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     observation_object_v2,
     destination_integration_v2_er,
     connection_v2,
@@ -148,7 +148,7 @@ async def test_transform_observations_without_route_configuration(
 async def test_transform_events_without_route_configuration(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     animals_sign_event_v2,
     destination_integration_v2_er,
     connection_v2,
@@ -166,7 +166,7 @@ async def test_transform_events_without_route_configuration(
 async def test_provider_key_mapping_with_default(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     animals_sign_event_v2,
     destination_integration_v2_er,
     route_config_with_provider_key_mappings,
@@ -187,7 +187,7 @@ async def test_provider_key_mapping_with_default(
 async def test_provider_key_mapping_in_observations_v2(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     observation_object_v2,
     destination_integration_v2_er,
     route_config_with_provider_key_mappings,
@@ -208,7 +208,7 @@ async def test_provider_key_mapping_in_observations_v2(
 async def test_provider_key_mapping_in_events_v2(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     leopard_detected_event_v2,
     destination_integration_v2_er,
     route_config_with_provider_key_mappings,
@@ -465,7 +465,7 @@ async def test_transform_event_update_details_requires_event_type_for_smart(
 async def test_transform_event_update_with_type_mapping_for_earthranger(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     event_update_species_wildcat,
     destination_integration_v2_er,
     route_config_with_event_type_mappings,
@@ -484,7 +484,7 @@ async def test_transform_event_update_with_type_mapping_for_earthranger(
 async def test_transform_event_update_partial_location_with_type_mapping_for_earthranger(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     event_update_location_lon,
     destination_integration_v2_er,
     route_config_with_event_type_mappings,
@@ -508,7 +508,7 @@ async def test_transform_event_update_partial_location_with_type_mapping_for_ear
 async def test_transform_event_update_full_location_with_type_mapping_for_earthranger(
     mock_cache,
     mock_gundi_client_v2,
-    mock_pubsub_client,
+    mock_pubsub,
     event_update_location_full,
     destination_integration_v2_er,
     route_config_with_event_type_mappings,

@@ -45,7 +45,6 @@ async def send_message_to_gcp_pubsub_dispatcher(
             attributes_clean = json.loads(json.dumps(attributes, default=str))
             ordering_key_clean = str(ordering_key)
             messages = [pubsub.PubsubMessage(message, ordering_key=ordering_key_clean, **attributes_clean)]
-            #messages = [pubsub.PubsubMessage(message, **attributes_clean)]
             logger.info(f"Sending observation to PubSub topic {topic_name}..")
             try:
                 response = await client.publish(

@@ -1,3 +1,4 @@
+import base64
 import datetime
 import aiohttp
 import httpx
@@ -183,7 +184,7 @@ def mock_gundi_client_with_server_timeout_error_once(
 
 
 @pytest.fixture
-def mock_pubsub_client(mocker, gcp_pubsub_publish_response):
+def mock_pubsub(mocker, gcp_pubsub_publish_response):
     mock_client = mocker.MagicMock()
     mock_publisher = mocker.MagicMock()
     mock_publisher.publish.return_value = async_return(gcp_pubsub_publish_response)
@@ -2131,9 +2132,8 @@ def route_config_with_no_mappings():
     )
 
 
-# ToDo: Update with the correct payload
 @pytest.fixture
-def geoevent_v1_cloud_event_payload():
+def geoevent_v1_request_payload():
     timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     return {
         "message": {
@@ -2151,60 +2151,67 @@ def geoevent_v1_cloud_event_payload():
             "publishTime": timestamp,
             "publish_time": timestamp,
         },
-        "subscription": "projects/cdip-stage-78ca/subscriptions/eventarc-us-central1-smart-dispatcher-topic-test-trigger-1zb7crbq-sub-909",
-    }
-
-
-# ToDo: Update with the correct payload
-@pytest.fixture
-def geoevent_v2_cloud_event_payload():
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    return {
-        "message": {
-            "attributes": {
-                "annotations": "{}",
-                "data_provider_id": "88ac5e9c-a3f0-47ff-9382-58d0abfa95f3",
-                "destination_id": "58c44611-e356-4e4d-82bb-26f50f1fc1e8",
-                "external_source_id": "default-source",
-                "gundi_id": "44eaf798-fa87-48d9-9baf-42dfdb4c6231",
-                "gundi_version": "v2",
-                "provider_key": "gundi_cellstop_88ac5e9c-a3f0-47ff-9382-58d0abfa95f3",
-                "related_to": "",
-                "source_id": "e702598d-42d0-4094-8d1e-856caca4926e",
-                "stream_type": "ev",
-                "tracing_context": "{}",
-            },
-            "data": "eyJjYV91dWlkIjogIjRiMjMyNDJhLTExNjEtNDZjMy1hZjg0LTVlMzVkYzgwMWM0MyIsICJwYXRyb2xfcmVxdWVzdHMiOiBbXSwgIndheXBvaW50X3JlcXVlc3RzIjogW3sidHlwZSI6ICJGZWF0dXJlIiwgImdlb21ldHJ5IjogeyJjb29yZGluYXRlcyI6IFstNzIuNzA0NDI1LCAtNTEuNjg4NjQ1XX0sICJwcm9wZXJ0aWVzIjogeyJkYXRlVGltZSI6ICIyMDI0LTAxLTA4VDA5OjUxOjE0IiwgInNtYXJ0RGF0YVR5cGUiOiAiaW5jaWRlbnQiLCAic21hcnRGZWF0dXJlVHlwZSI6ICJ3YXlwb2ludC9uZXciLCAic21hcnRBdHRyaWJ1dGVzIjogeyJvYnNlcnZhdGlvbkdyb3VwcyI6IFt7Im9ic2VydmF0aW9ucyI6IFt7Im9ic2VydmF0aW9uVXVpZCI6ICI0NGVhZjc5OC1mYTg3LTQ4ZDktOWJhZi00MmRmZGI0YzYyMzEiLCAiY2F0ZWdvcnkiOiAiYW5pbWFscy5zaWduIiwgImF0dHJpYnV0ZXMiOiB7InNwZWNpZXMiOiAibGlvbiJ9fV19XSwgInBhdHJvbFV1aWQiOiBudWxsLCAicGF0cm9sTGVnVXVpZCI6IG51bGwsICJwYXRyb2xJZCI6IG51bGwsICJpbmNpZGVudElkIjogImd1bmRpX2V2XzQ0ZWFmNzk4LWZhODctNDhkOS05YmFmLTQyZGZkYjRjNjIzMSIsICJpbmNpZGVudFV1aWQiOiAiNDRlYWY3OTgtZmE4Ny00OGQ5LTliYWYtNDJkZmRiNGM2MjMxIiwgInRlYW0iOiBudWxsLCAib2JqZWN0aXZlIjogbnVsbCwgImNvbW1lbnQiOiAiUmVwb3J0OiBBbmltYWxzIFNpZ25cbkltcG9ydGVkOiAyMDI0LTAxLTA4VDEwOjQwOjU5LjU4MzE4MC0wMzowMCIsICJpc0FybWVkIjogbnVsbCwgInRyYW5zcG9ydFR5cGUiOiBudWxsLCAibWFuZGF0ZSI6IG51bGwsICJudW1iZXIiOiBudWxsLCAibWVtYmVycyI6IG51bGwsICJsZWFkZXIiOiBudWxsLCAiYXR0YWNobWVudHMiOiBudWxsfX19XSwgInRyYWNrX3BvaW50X3JlcXVlc3RzIjogW119",
-            # pragma: allowlist secret
-            "messageId": "9155786613739819",
-            "message_id": "9155786613739819",
-            "publishTime": timestamp,
-            "publish_time": timestamp,
-        },
-        "subscription": "projects/cdip-stage-78ca/subscriptions/eventarc-us-central1-smart-dispatcher-topic-test-trigger-1zb7crbq-sub-909",
+        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB",
     }
 
 
 @pytest.fixture
-def pubsub_cloud_event_headers():
+def event_v2_request_payload(animals_sign_event_v2):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     return {
-        "host": "smart-dispatcher-jabcutl7za-uc.a.run.app",
-        "content-type": "application/json",
-        "authorization": "Bearer fake-token",
-        "content-length": "2057",
-        "accept": "application/json",
-        "from": "noreply@google.com",
-        "user-agent": "APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)",
-        "x-cloud-trace-context": "",
-        "traceparent": "",
-        "x-forwarded-for": "64.233.172.137",
-        "x-forwarded-proto": "https",
-        "forwarded": 'for="64.233.172.137";proto=https',
-        "accept-encoding": "gzip, deflate, br",
-        "ce-id": "10090163454824831",
-        "ce-source": "//pubsub.googleapis.com/projects/cdip-stage-78ca/topics/smart-dispatcher-topic-test",
-        "ce-specversion": "1.0",
-        "ce-type": "google.cloud.pubsub.topic.v1.messagePublished",
-        "ce-time": timestamp,
+       "message": {
+          "attributes": {
+             "gundi_id": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
+             "gundi_version": "v2",
+             "observation_type": "ev",
+             "tracing_context": "{}"
+          },
+          "data": "eyJldmVudF9pZCI6ICI0Y2M5NjVmZS04ZGQxLTQxZjEtODc1ZC0wYTdmNWIyMjI5ZDMiLCAidGltZXN0YW1wIjogIjIwMjQtMDgtMTIgMTI6Mjk6MjkuNDc2NDA1KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Imd1bmRpX2lkIjogIjQ1N2MwYmZkLWUyMDgtNGQ2NS1iYjllLWE3MjgwODIyY2I0MiIsICJvd25lciI6ICI0NTAxODM5OC03YTJhLTRmNDgtODk3MS0zOWEyNzEwZDVkYmQiLCAiZGF0YV9wcm92aWRlcl9pZCI6ICI3Y2M4MGU4NS01YTk3LTRmYjQtYWE5Yy0zMTVhNjg0YjU2NDYiLCAiYW5ub3RhdGlvbnMiOiB7fSwgInNvdXJjZV9pZCI6ICIzYjNjMjk5My04MjAxLTQ0MzQtOTMzNy0yMzBiODkxN2Y2NTIiLCAiZXh0ZXJuYWxfc291cmNlX2lkIjogImRlZmF1bHQtc291cmNlIiwgInJlY29yZGVkX2F0IjogIjIwMjQtMDgtMTIgMTI6Mjk6MTArMDA6MDAiLCAibG9jYXRpb24iOiB7ImxhdCI6IDEzLjY4ODYzMiwgImxvbiI6IDEzLjc4MzA2OCwgImFsdCI6IDAuMH0sICJ0aXRsZSI6ICJBbmltYWxzIERldGVjdGVkIiwgImV2ZW50X3R5cGUiOiAiYW5pbWFscyIsICJldmVudF9kZXRhaWxzIjogeyJ0YXJnZXRzcGVjaWVzIjogInJlcHRpbGVzLnB5dGhvbnNwcCIsICJ3aWxkbGlmZW9ic2VydmF0aW9udHlwZSI6ICJkaXJlY3RvYnNlcnZhdGlvbiIsICJhZ2VvZnNpZ25hbmltYWwiOiAiZnJlc2giLCAibnVtYmVyb2ZhbmltYWwiOiAyfSwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZXYifSwgImV2ZW50X3R5cGUiOiAiRXZlbnRSZWNlaXZlZCJ9",
+          "messageId": "11960027960451651",
+          "message_id": "11960027960451651",
+          "publishTime": timestamp,
+          "publish_time": timestamp
+       },
+       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+    }
+
+
+@pytest.fixture
+def event_update_v2_request_payload():
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return {
+       "message": {
+          "attributes": {
+             "gundi_id": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
+             "gundi_version": "v2",
+             "observation_type": "evu",
+             "tracing_context": "{}"
+          },
+          "data": "eyJldmVudF9pZCI6ICI1ZDU4NjQ5ZC00YWQ1LTQ2YmUtOWEwZS1mMGJmZmYxMWMwMjQiLCAidGltZXN0YW1wIjogIjIwMjQtMDgtMTIgMTI6NDg6MDcuMzM2NzIwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Imd1bmRpX2lkIjogIjQ1N2MwYmZkLWUyMDgtNGQ2NS1iYjllLWE3MjgwODIyY2I0MiIsICJyZWxhdGVkX3RvIjogIk5vbmUiLCAib3duZXIiOiAiNDUwMTgzOTgtN2EyYS00ZjQ4LTg5NzEtMzlhMjcxMGQ1ZGJkIiwgImRhdGFfcHJvdmlkZXJfaWQiOiAiN2NjODBlODUtNWE5Ny00ZmI0LWFhOWMtMzE1YTY4NGI1NjQ2IiwgInNvdXJjZV9pZCI6ICIzYjNjMjk5My04MjAxLTQ0MzQtOTMzNy0yMzBiODkxN2Y2NTIiLCAiZXh0ZXJuYWxfc291cmNlX2lkIjogImRlZmF1bHQtc291cmNlIiwgImNoYW5nZXMiOiB7InRpdGxlIjogIlNuZWFrcyBkZXRlY3RlZCIsICJyZWNvcmRlZF9hdCI6ICIyMDI0LTA4LTEyIDEyOjEyOjEwKzAwOjAwIiwgImxvY2F0aW9uIjogeyJsYXQiOiAxMy42ODg2MzUsICJsb24iOiAxMy43ODMwNjh9LCAiZXZlbnRfdHlwZSI6ICJhbmltYWxzIiwgImV2ZW50X2RldGFpbHMiOiB7InRhcmdldHNwZWNpZXMiOiAicmVwdGlsZXMucHl0aG9uc3BwIiwgIndpbGRsaWZlb2JzZXJ2YXRpb250eXBlIjogImRpcmVjdG9ic2VydmF0aW9uIiwgImFnZW9mc2lnbmFuaW1hbCI6ICJmcmVzaCIsICJudW1iZXJvZmFuaW1hbCI6IDJ9fSwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZXZ1In0sICJldmVudF90eXBlIjogIkV2ZW50VXBkYXRlUmVjZWl2ZWQifQ==",
+          "messageId": "11960897894856249",
+          "message_id": "11960897894856249",
+          "orderingKey": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
+          "publishTime": timestamp,
+          "publish_time": timestamp
+       },
+       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+    }
+
+
+@pytest.fixture
+def pubsub_request_headers():
+    return {
+       "host": "routing-transformer-service-dev-jba4og2dyq-uc.a.run.app",
+       "content-type": "application/json",
+       "authorization": "Bearer test-token",
+       "content-length": "1524",
+       "accept": "application/json",
+       "from": "noreply@google.com",
+       "user-agent":"APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)",
+       "x-cloud-trace-context": "cb94e62c4850655436ac78b7e9466b18/12389870433059380709;o=1",
+       "traceparent": "00-cb94e62c4850655436ac78b7e9466b18-abf1a983b79e9de5-01",
+       "x-forwarded-for": "66.102.6.198",
+       "x-forwarded-proto": "https",
+       "forwarded": "for=\"66.102.6.198\";proto=https",
+       "accept-encoding": "gzip, deflate, br"
     }
