@@ -8,25 +8,28 @@ resource "google_pubsub_topic" "transformer-dead-letter" {
   project = var.project_id
 }
 
-resource "google_eventarc_trigger" "default" {
-  name            = "raw-observations-${var.env}"
-  project         = var.project_id
-  location        = var.location
-  service_account = google_service_account.default.email
+resource "google_pubsub_subscription" "transformer-subscription" {
+  name  = "raw-observations-transformer-${var.env}"
+  topic = google_pubsub_topic.raw-observations.id
+  project = var.project_id
 
-  matching_criteria {
-    attribute = "type"
-    value     = "google.cloud.pubsub.topic.v1.messagePublished"
+  ack_deadline_seconds = 600
+  enable_message_ordering = true
+
+  expiration_policy {
+    ttl = ""
   }
-  destination {
-    cloud_run_service {
-      service = google_cloud_run_v2_service.default.name
-      region  = var.location
-    }
+
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
   }
-  transport {
-    pubsub {
-      topic = google_pubsub_topic.raw-observations.id
+
+  push_config {
+    push_endpoint = google_cloud_run_v2_service.default.uri
+
+    oidc_token {
+      service_account_email = google_service_account.default.email
     }
   }
 }

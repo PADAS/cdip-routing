@@ -37,6 +37,8 @@ jobs:
     with:
       environment: dev
       working_dir: terraform/environments/dev
+      tf_version: "1.9.4"
+      tg_version: "0.66.5"
       tg_command: "run-all apply -var image=${{ needs.vars.outputs.repository }}:${{ needs.vars.outputs.tag }}"
 
   stage-deploy:
@@ -46,6 +48,8 @@ jobs:
     with:
       environment: stage
       working_dir: terraform/environments/stage
+      tf_version: "1.9.4"
+      tg_version: "0.66.5"
       tg_command: "run-all apply -var image=${{ needs.vars.outputs.repository }}:${{ needs.vars.outputs.tag }}"
 
   prod-deploy:
@@ -55,4 +59,6 @@ jobs:
     with:
       environment: prod
       working_dir: terraform/environments/prod
+      tf_version: "1.9.4"
+      tg_version: "0.66.5"
       tg_command: "run-all apply -var image=${{ needs.vars.outputs.repository }}:${{ needs.vars.outputs.tag }}"
