@@ -366,13 +366,15 @@ def is_too_old(timestamp):
 async def process_request(request):
     # Extract the observation and attributes from the CloudEvent
     json_data = await request.json()
+    pubsub_message = json_data["message"]
     raw_observation, attributes = extract_fields_from_message(json_data["message"])
     # Load tracing context
     tracing.pubsub_instrumentation.load_context_from_attributes(attributes)
     with tracing.tracer.start_as_current_span(
         "routing_service.process_request", kind=SpanKind.CLIENT
     ) as current_span:
-        if is_too_old(timestamp=request.headers.get("ce-time")):
+        timestamp = pubsub_message.get("publish_time") or request.headers.get("ce-time")
+        if is_too_old(timestamp=timestamp):
             logger.warning(
                 f"Message discarded. The message is too old or the retry time limit has been reached."
             )
