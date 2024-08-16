@@ -8,6 +8,7 @@ import gundi_core.schemas.v2 as schemas_v2
 import gundi_core.schemas.v1 as schemas_v1
 from aiohttp.client_reqrep import ConnectionKey
 from pydantic.types import UUID
+from smartconnect import SMARTClientException
 
 
 def async_return(result):
@@ -82,9 +83,29 @@ def mock_smart_async_client(mocker, smart_ca_data_model, smart_cm_data_models):
 
 
 @pytest.fixture
+def mock_smart_async_client_with_server_error(mocker, smart_ca_data_model, smart_cm_data_models):
+    mock_client = mocker.MagicMock()
+    mock_client.get_incident.side_effect = SMARTClientException
+    mock_client.get_patrol.return_value = async_return(None)
+    mock_client.get_configurable_models.return_value = async_return(
+        smart_cm_data_models
+    )
+    mock_client.get_data_model.return_value = async_return(smart_ca_data_model)
+    mock_client.post_smart_request.return_value = async_return({"status": "success"})
+    return mock_client
+
+
+@pytest.fixture
 def mock_smart_async_client_class(mocker, mock_smart_async_client):
     mock_smart_async_client_class = mocker.MagicMock()
     mock_smart_async_client_class.return_value = mock_smart_async_client
+    return mock_smart_async_client_class
+
+
+@pytest.fixture
+def mock_smart_async_client_class_with_server_error(mocker, mock_smart_async_client_with_server_error):
+    mock_smart_async_client_class = mocker.MagicMock()
+    mock_smart_async_client_class.return_value = mock_smart_async_client_with_server_error
     return mock_smart_async_client_class
 
 
@@ -357,6 +378,30 @@ def raw_observation_geoevent():
         "additional": None,
         "title": "Rainfall",
         "event_type": "rainfall_rep",
+        "event_details": {"amount_mm": 6, "height_m": 3},
+        "geometry": None,
+        "observation_type": "ge",
+    }
+
+
+@pytest.fixture
+def raw_observation_geoevent_with_valid_uuid():
+    return {
+        "id": "088a191a-bcf3-471b-9e7d-6ba8bc71be9e",
+        "owner": "na",
+        "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
+        "device_id": "003",
+        "recorded_at": "2023-07-05 09:16:02-03:00",
+        "location": {
+            "x": -55.784992,
+            "y": 20.806785,
+            "z": 0.0,
+            "hdop": None,
+            "vdop": None,
+        },
+        "additional": None,
+        "title": "Rainfall",
+        "event_type": "f61b0c60-c863-44d7-adc6-d9b49b389e69_rainfall_rep",
         "event_details": {"amount_mm": 6, "height_m": 3},
         "geometry": None,
         "observation_type": "ge",
