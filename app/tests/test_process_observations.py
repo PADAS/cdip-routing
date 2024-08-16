@@ -265,7 +265,7 @@ async def test_retry_process_event_on_smart_error_and_send_to_dlq(
     )
 
     # Check that is retried and then sent to the dead letter topic
-    assert mock_smart_async_client_class_with_server_error.retrurn_value.get_incident.call_count == 3
+    assert mock_smart_async_client_class_with_server_error.return_value.get_incident.call_count == 3
     assert mock_send_observation_to_dead_letter_topic.called
 
 
