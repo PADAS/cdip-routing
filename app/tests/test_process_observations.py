@@ -304,6 +304,6 @@ async def test_process_event_doesnt_call_smart_with_invalid_uuid(
     )
 
     # Check that we don't make extra requests to smart
-    assert not mock_smart_async_client_class.retrurn_value.get_incident.called
+    assert not mock_smart_async_client_class.return_value.get_incident.called
     # Check that message was Not sent to teh dead letter
     assert not mock_send_observation_to_dead_letter_topic.called

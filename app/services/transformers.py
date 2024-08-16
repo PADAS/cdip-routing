@@ -313,16 +313,16 @@ class SMARTTransformer:
         """
 
         # Remove the uuid prefix from the event type if present
-        event_type = event.event_type
-        event_type_parts = event.event_type.split("_")
+        ca_uuid, pruned_event_type = get_ca_uuid_for_event(event=event)
+        event_type_parts = pruned_event_type.split("_")
         if event_type_parts and is_uuid(id_str=event_type_parts[0]):
-            event_type = "_".join(event_type_parts[1:])
+            pruned_event_type = "_".join(event_type_parts[1:])
 
         # Convert ER event type to CA path syntax
-        event_type = event_type.replace("_", ".")
+        pruned_event_type = pruned_event_type.replace("_", ".")
         ca_datamodel = await self.get_ca_datamodel()
         # Look in the CA DataModel
-        if matched_category := ca_datamodel.get_category(path=event_type):
+        if matched_category := ca_datamodel.get_category(path=pruned_event_type):
             return matched_category["path"]
 
         # Look in configurable models
@@ -330,16 +330,16 @@ class SMARTTransformer:
         for cm in configurable_models:
             # favor config datamodel match if present
             # convert ER event type to CA path syntax
-            if matched_category := cm.get_category(path=event_type):
+            if matched_category := cm.get_category(path=pruned_event_type):
                 return matched_category["hkeyPath"]
 
         # Try a direct data model match
-        if matched_category := ca_datamodel.get_category(path=event.event_type):
+        if matched_category := ca_datamodel.get_category(path=pruned_event_type):
             return matched_category["path"]
 
         # Last option is a match in translation rules.
         for t in self._transformation_rules.category_map:
-            if t.event_type == event.event_type:
+            if t.event_type == pruned_event_type:
                 return t.category_path
 
     async def _resolve_attribute(
@@ -1048,6 +1048,7 @@ class SMARTTransformerV2(Transformer, ABC):
         Favor finding a match in the Config CA Datamodel, then CA Datamodel.
         """
 
+        
         search_for = event.event_type.replace("_", ".")
         configurable_models = await self.get_configurable_models()
         for cm in configurable_models:
@@ -1241,7 +1242,7 @@ class SmartEventTransformerV2(SMARTTransformerV2):
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
     ) -> dict:
-        message, message_ca_uuid = get_ca_uuid_for_event(event=message)
+        message_ca_uuid, pruned_event_type = get_ca_uuid_for_event(event=message)
         if message_ca_uuid:
             self.ca_uuid = str(message_ca_uuid)
         waypoint_requests = []
@@ -1451,7 +1452,7 @@ async def transform_observation(
         stream_type == schemas.StreamPrefixEnum.geoevent
         or stream_type == schemas.StreamPrefixEnum.earthranger_event
     ) and config.type_slug == schemas.DestinationTypes.SmartConnect.value:
-        observation, ca_uuid = get_ca_uuid_for_event(event=observation)
+        ca_uuid, pruned_event_type = get_ca_uuid_for_event(event=observation)
         transformer = SmartEventTransformer(config=config, ca_uuid=ca_uuid)
     elif (
         stream_type == schemas.StreamPrefixEnum.earthranger_patrol
@@ -1478,7 +1479,7 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
     ca_uuids = set()
     for segment in patrol.patrol_segments:
         for event in segment.event_details:
-            event, event_ca_uuid = get_ca_uuid_for_event(event=event)
+            event_ca_uuid, pruned_event_type = get_ca_uuid_for_event(event=event)
             if event_ca_uuid:
                 ca_uuids.add(event_ca_uuid)
 
@@ -1530,9 +1531,8 @@ def get_ca_uuid_for_event(
 
     # validation that uuid prefix exists
     ca_uuid = id_list[0] if id_list else None
-    # remove ca_uuid prefix if it exists
-    event.event_type = "_".join(nonid_list)
-    return event, ca_uuid
+    pruned_event_type = "_".join(nonid_list)
+    return ca_uuid, pruned_event_type
 
 
 def get_source_id(observation, gundi_version="v1"):
@@ -1556,6 +1556,8 @@ async def transform_observation_to_destination_schema(
     gundi_version="v1",
     route_configuration=None,
 ) -> dict:
+    
+    copied_observation = observation.copy()
     if gundi_version == "v2":
         return await transform_observation_v2(
             observation=observation,
