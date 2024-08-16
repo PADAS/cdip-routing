@@ -564,9 +564,9 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
         waypoint_requests = []
         if self._version and version.parse(self._version) >= version.parse("7.5"):
             # Avoid querying with blank or invalid uuids
-            if item.id and is_uuid(id_str=item.id):
+            if item.id and is_uuid(id_str=str(item.id)):
                 smart_response = await self.smartconnect_client.get_incident(
-                    incident_uuid=item.id
+                    incident_uuid=str(item.id)
                 )
             else:
                 smart_response = None
@@ -1547,7 +1547,7 @@ def get_data_provider_id(observation, gundi_version="v1"):
     )
 
 
-@backoff.on_exception(backoff.expo, Exception, max_tries=3)
+@backoff.on_exception(backoff.expo, (Exception, ), max_tries=3)
 async def transform_observation_to_destination_schema(
     *,
     observation,

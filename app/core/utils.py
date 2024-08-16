@@ -37,8 +37,13 @@ def create_cache_key(hashable_string):
 
 
 def is_uuid(*, id_str: str):
+
+    if type(id_str) is UUID:
+        return True
+
     if type(id_str) is not str:
         return False
+
     try:
         uuid_obj = UUID(id_str)
         return True
