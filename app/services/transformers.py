@@ -1,6 +1,8 @@
 import json
 import base64
 import logging
+
+import backoff
 import pytz
 import pathlib
 import uuid
@@ -1539,6 +1541,7 @@ def get_data_provider_id(observation, gundi_version="v1"):
     )
 
 
+@backoff.on_exception(backoff.expo, Exception, max_tries=3)
 async def transform_observation_to_destination_schema(
     *,
     observation,
