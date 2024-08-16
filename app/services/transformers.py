@@ -563,9 +563,15 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
     async def transform(self, item) -> dict:
         waypoint_requests = []
         if self._version and version.parse(self._version) >= version.parse("7.5"):
-            smart_response = await self.smartconnect_client.get_incident(
-                incident_uuid=item.id
-            )
+            # Avoid querying with blank or invalid uuids
+            if item.id and is_uuid(id_str=item.id):
+                smart_response = await self.smartconnect_client.get_incident(
+                    incident_uuid=item.id
+                )
+            else:
+                smart_response = None
+
+            # New incident
             if not smart_response:
                 incident = await self.event_to_incident(
                     event=item, smart_feature_type="waypoint/new"
