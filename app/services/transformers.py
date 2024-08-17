@@ -204,7 +204,7 @@ class SMARTTransformer:
             # no passed in value assumes only 1 CA is mapped
             ca_uuids = self._config.additional.get("ca_uuids", None)
             # if not exactly one CA mapped raise Exception
-            self.ca_uuid = ca_uuids[0] if len(ca_uuids) == 1 else None
+            self.ca_uuid = ca_uuids[0] if ca_uuids else None
         if not self.ca_uuid:
             raise IndeterminableCAException(
                 "Unable to determine CA uuid for observation"
@@ -1048,6 +1048,7 @@ class SMARTTransformerV2(Transformer, ABC):
         Favor finding a match in the Config CA Datamodel, then CA Datamodel.
         """
 
+        ca_uuid, search_for = get_ca_uuid_for_event(event=event)
         
         search_for = event.event_type.replace("_", ".")
         configurable_models = await self.get_configurable_models()

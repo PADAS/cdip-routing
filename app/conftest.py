@@ -383,6 +383,29 @@ def raw_observation_geoevent():
         "observation_type": "ge",
     }
 
+@pytest.fixture
+def raw_observation_geoevent_for_smart():
+    return {
+        "id": None,
+        "owner": "na",
+        "integration_id": "36485b4f-88cd-49c4-a723-0ddff1f580c4",
+        "device_id": "survey_one",
+        "recorded_at": "2024-08-16 15:01:00-07:00",
+        "location": {
+            "x": -71.04190,
+            "y": 34.490285,
+            "z": 0.0,
+            "hdop": None,
+            "vdop": None,
+        },
+        "additional": None,
+        "title": "Anthropogenic Disturbance",
+        "event_type": "humanactivity_humansign",
+        "event_details": {"typeofhumansign": "footprints", 
+                          "ageofsign": "10 days"},
+        "geometry": None,
+        "observation_type": "ge",
+    }
 
 @pytest.fixture
 def raw_observation_geoevent_with_valid_uuid():
@@ -842,6 +865,9 @@ def smart_outbound_configuration_gcp_pubsub():
                 "broker": "gcp_pubsub",
                 "topic": "smart-dispatcher-xyz-topic",
                 "version": "7.5.7",
+                "ca_uuids": [
+                    "b48f15a7-dd87-4fb0-af42-a6a7d893705f"
+                ],
             },
         }
     )
