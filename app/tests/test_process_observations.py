@@ -276,7 +276,7 @@ async def test_process_event_doesnt_call_smart_with_invalid_uuid(
     mock_gundi_client,
     mock_pubsub_client,
     mock_smart_async_client_class,
-    raw_observation_geoevent,
+    raw_observation_geoevent_for_smart,
     raw_observation_geoevent_attributes,
     mock_send_observation_to_dead_letter_topic,
     smart_outbound_configuration_gcp_pubsub,
@@ -299,8 +299,10 @@ async def test_process_event_doesnt_call_smart_with_invalid_uuid(
         "app.services.process_messages.send_observation_to_dead_letter_topic",
         mock_send_observation_to_dead_letter_topic
     )
+    mocker.patch("app.services.process_messages.pubsub", mock_pubsub_client)
+
     await process_observation(
-        raw_observation_geoevent, raw_observation_geoevent_attributes
+        raw_observation_geoevent_for_smart, raw_observation_geoevent_attributes
     )
 
     # Check that we don't make extra requests to smart
