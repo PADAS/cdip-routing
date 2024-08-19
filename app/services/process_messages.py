@@ -211,19 +211,28 @@ async def process_observation(raw_observation, attributes):
                     else:
                         broker_config = destination.additional
                     # Transform the observation for the destination
-                    transformed_observation = (
-                        await transform_observation_to_destination_schema(
-                            observation=observation,
-                            destination=destination_integration
-                            if gundi_version == "v2"
-                            else destination,
-                            provider=provider,
-                            route_configuration=route_configuration,
-                            gundi_version=gundi_version,
+                    try:
+                        transformed_observation = await transform_observation_to_destination_schema(
+                                observation=observation,
+                                destination=destination_integration
+                                if gundi_version == "v2"
+                                else destination,
+                                provider=provider,
+                                route_configuration=route_configuration,
+                                gundi_version=gundi_version,
+                            )
+                    except Exception as e:
+                        error_msg = (
+                            f"Error transforming observation. Sending to dead-letter. {type(e)}: {e}"
                         )
-                    )
+                        logger.exception(error_msg)
+                        await send_observation_to_dead_letter_topic(raw_observation, attributes)
+                        current_span.set_attribute("error", error_msg)
+                        continue  # Skip to the next destination
+
                     if not transformed_observation:
                         continue
+
                     attributes = build_transformed_message_attributes(
                         observation=observation,
                         destination=destination,
