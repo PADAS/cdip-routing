@@ -1,9 +1,8 @@
 from datetime import datetime
-
 import pytest
 import pytz
 from smartconnect.models import SMARTCONNECT_DATFORMAT
-
+from gundi_core import schemas
 from app.core.errors import ReferenceDataError
 from app.services.transformers import transform_observation_v2
 
@@ -526,3 +525,39 @@ async def test_transform_event_update_full_location_with_type_mapping_for_earthr
     }
     assert transformed_observation.changes.get("location") == er_location_changes
     assert "event_type" not in transformed_observation.changes
+
+
+@pytest.mark.asyncio
+async def test_transform_event_for_wpswatch(
+    animals_sign_event_v2,
+    connection_v2_traptagger_to_wpswatch,
+    destination_integration_v2_wpswatch,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_v2,
+        destination=destination_integration_v2_wpswatch,
+        provider=connection_v2_traptagger_to_wpswatch.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    # The external source/device id is used as metadata when uploading images to for WPS Watch
+    assert type(transformed_observation) == schemas.v2.WPSWatchImageMetadata
+    assert transformed_observation.camera_id == animals_sign_event_v2.external_source_id
+
+
+@pytest.mark.asyncio
+async def test_transform_attachment_for_wpswatch(
+    photo_attachment_v2,
+    connection_v2_traptagger_to_wpswatch,
+    destination_integration_v2_wpswatch,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=photo_attachment_v2,
+        destination=destination_integration_v2_wpswatch,
+        provider=connection_v2_traptagger_to_wpswatch.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    # Attachments are images for WPS Watch
+    assert type(transformed_observation) == schemas.v2.WPSWatchImage
+    assert transformed_observation.file_path == photo_attachment_v2.file_path
