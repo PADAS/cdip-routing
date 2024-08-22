@@ -1452,6 +1452,7 @@ class EREventUpdateTransformer(Transformer):
             "event_details": "event_details",
             "recorded_at": "time",
             "location": "location",
+            "status": "state",
         }
 
     async def transform(
