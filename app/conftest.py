@@ -1525,6 +1525,23 @@ def event_update_location_full():
     )
 
 
+@pytest.fixture
+def event_update_status_resolved():
+    return schemas_v2.EventUpdate(
+        gundi_id="78867a74-67f0-4b56-8e44-125ae66408ff",
+        related_to=None,
+        owner="a91b400b-482a-4546-8fcb-ee42b01deeb6",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations=None,
+        source_id="ac1b9cdc-a193-4515-b446-b177bcc5f342",
+        external_source_id="camera123",
+        changes={
+            "status": "resolved"
+        },
+        observation_type="evu"
+    )
+
+
 from smartconnect.models import (
     SMARTRequest,
     SmartAttributes,
@@ -1623,6 +1640,33 @@ def animals_sign_event_v2():
 
 
 @pytest.fixture
+def animals_sign_event_with_status():
+    return schemas_v2.Event(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        recorded_at=datetime.datetime(
+            2023, 12, 28, 19, 26, tzinfo=datetime.timezone.utc
+        ),
+        location=schemas_v2.Location(
+            lat=-51.688645, lon=-72.704440, alt=1800.0, hdop=None, vdop=None
+        ),
+        title="Animal Sign",
+        event_type="animals_sign",
+        event_details={
+            "species": "lion",
+            "ageofsign": "days",
+        },
+        geometry={},
+        status="active",
+        observation_type="ev",
+    )
+
+
+@pytest.fixture
 def photo_attachment_v2():
     return schemas_v2.Attachment(
         gundi_id="9bedc03e-8415-46db-aa70-782490cdff31",
@@ -1684,6 +1728,7 @@ def animals_sign_event_update_v2():
                 "species": "puma",
                 "ageofsign": "weeks",
             },
+            "status": "resolved"
         },
         observation_type="evu",
     )

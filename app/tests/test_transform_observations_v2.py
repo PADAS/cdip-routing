@@ -162,6 +162,26 @@ async def test_transform_events_without_route_configuration(
 
 
 @pytest.mark.asyncio
+async def test_transform_events_with_status_for_earthranger(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    animals_sign_event_with_status,
+    destination_integration_v2_er,
+    connection_v2,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_with_status,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    assert transformed_observation.state
+    assert transformed_observation.state == animals_sign_event_with_status.status
+
+
+@pytest.mark.asyncio
 async def test_provider_key_mapping_with_default(
     mock_cache,
     mock_gundi_client_v2,
@@ -525,6 +545,25 @@ async def test_transform_event_update_full_location_with_type_mapping_for_earthr
     }
     assert transformed_observation.changes.get("location") == er_location_changes
     assert "event_type" not in transformed_observation.changes
+
+
+@pytest.mark.asyncio
+async def test_transform_event_update_status_resolved_for_earthranger(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub_client,
+    event_update_status_resolved,
+    destination_integration_v2_er,
+    connection_v2,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=event_update_status_resolved,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation.changes
+    assert transformed_observation.changes.get("state") == "resolved"
 
 
 @pytest.mark.asyncio
