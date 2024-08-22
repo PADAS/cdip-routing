@@ -1429,7 +1429,8 @@ class EREventTransformer(Transformer):
             location=dict(
                 longitude=message.location.lon, latitude=message.location.lat
             ),
-            geometry=message.geometry
+            geometry=message.geometry,
+            state=message.status
         )
         # Apply extra transformation rules as needed
         if rules:
