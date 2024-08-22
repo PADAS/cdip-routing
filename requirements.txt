@@ -103,11 +103,11 @@ grpcio==1.56.2
     #   grpcio-status
 grpcio-status==1.48.2
     # via google-api-core
-gundi-client==1.0.2
+gundi-client==1.0.4
     # via -r requirements.in
-gundi-client-v2==2.3.3
+gundi-client-v2==2.3.5
     # via -r requirements.in
-gundi-core==1.5.9
+gundi-core==1.6.1
     # via
     #   -r requirements.in
     #   gundi-client

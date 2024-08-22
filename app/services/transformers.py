@@ -1490,6 +1490,42 @@ class ERAttachmentTransformer(Transformer):
         )
 
 
+class WPSWatchEventTransformerV2(Transformer):
+
+    async def transform(
+        self, message: schemas.v2.Event, rules: list = None, **kwargs
+    ) -> schemas.v2.WPSWatchImageMetadata:
+        transformed_event_fields = dict(
+            camera_id=message.external_source_id
+        )
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_event_fields)
+        wps_image_metadata = schemas.v2.WPSWatchImageMetadata(
+            **transformed_event_fields
+        )
+        return wps_image_metadata
+
+
+class WPSWatchAttachmentTransformerV2(Transformer):
+
+    async def transform(
+        self, message: schemas.v2.Attachment, rules: list = None, **kwargs
+    ) -> schemas.v2.WPSWatchImage:
+        transformed_attachment_fields = dict(
+            file_path=message.file_path
+        )
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_attachment_fields)
+        wps_image = schemas.v2.WPSWatchImage(
+            **transformed_attachment_fields
+        )
+        return wps_image
+
+
 class ERObservationTransformer(Transformer):
     async def transform(
         self, message: schemas.v2.Observation, rules: list = None, **kwargs
@@ -1706,7 +1742,7 @@ async def transform_observation_to_destination_schema(
     provider=None,
     gundi_version="v1",
     route_configuration=None,
-) -> dict:
+):
     if gundi_version == "v2":
         return await transform_observation_v2(
             observation=observation,
@@ -1850,13 +1886,15 @@ transformers_map = {
     schemas.v2.StreamPrefixEnum.event.value: {
         schemas.DestinationTypes.EarthRanger.value: EREventTransformer,
         schemas.DestinationTypes.SmartConnect.value: SmartEventTransformerV2,
+        schemas.DestinationTypes.WPSWatch.value: WPSWatchEventTransformerV2
     },
     schemas.v2.StreamPrefixEnum.event_update.value: {
         schemas.DestinationTypes.EarthRanger.value: EREventUpdateTransformer,
         schemas.DestinationTypes.SmartConnect.value: SmartEventUpdateTransformerV2,
     },
     schemas.v2.StreamPrefixEnum.attachment.value: {
-        schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer
+        schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer,
+        schemas.DestinationTypes.WPSWatch.value: WPSWatchAttachmentTransformerV2
     },
     schemas.v2.StreamPrefixEnum.observation.value: {
         schemas.DestinationTypes.Movebank.value: MBObservationTransformer,

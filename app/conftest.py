@@ -985,6 +985,92 @@ def destination_integration_v2():
 
 
 @pytest.fixture
+def destination_integration_v2_wpswatch():
+    return schemas_v2.Integration.parse_obj(
+        {
+            "id": "79bef222-74aa-4065-88a8-ac9656246693",
+            "name": "WPS Watch QA",
+            "base_url": "https://wpswatch-api-qa.azurewebsites.net",
+            "enabled": True,
+            "type": {
+                "id": "80bda69d-51ed-4c33-8420-0104e62d6639",
+                "name": "WPS Watch QA",
+                "value": "wps_watch",
+                "description": "",
+                "actions": [
+                    {
+                        "id": "1c9e2383-8154-404a-90b1-f4c591627d51",
+                        "type": "auth",
+                        "name": "Authenticate",
+                        "value": "auth",
+                        "description": "",
+                        "schema": {
+                            "type": "object",
+                            "required": ["api_key"],
+                            "properties": {"api_key": {"type": "string"}},
+                        },
+                    },
+                    {
+                        "id": "1109d75f-6456-4060-b2da-385e9ddde554",
+                        "type": "push",
+                        "name": "Push Events",
+                        "value": "push_events",
+                        "description": "",
+                        "schema": {
+                            "type": "object",
+                            "required": ["upload_domain"],
+                            "properties": {"upload_domain": {"type": "string"}},
+                        },
+                    },
+                ],
+                "webhook": None,
+            },
+            "owner": {
+                "id": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+                "name": "Test Org",
+                "description": "",
+            },
+            "configurations": [
+                {
+                    "id": "92d9fb49-f3c6-473f-9220-59745e854da5",
+                    "integration": "79bef222-74aa-4065-88a8-ac9656246693",
+                    "action": {
+                        "id": "1109d75f-6456-4060-b2da-385e9ddde554",
+                        "type": "push",
+                        "name": "Push Events",
+                        "value": "push_events",
+                    },
+                    "data": {"upload_domain": "upload-qa.wpswatch.org"},
+                },
+                {
+                    "id": "61a55770-0cf4-42b9-9054-ba0222ee5bc3",
+                    "integration": "79bef222-74aa-4065-88a8-ac9656246693",
+                    "action": {
+                        "id": "1c9e2383-8154-404a-90b1-f4c591627d51",
+                        "type": "auth",
+                        "name": "Authenticate",
+                        "value": "auth",
+                    },
+                    "data": {"api_key": "fakekey123"},  # pragma: allowlist secret
+                },
+            ],
+            "webhook_configuration": None,
+            "additional": {
+                "topic": "wpswatch-api-qa-wpswatch-sTHDqqN-topic",
+                "broker": "gcp_pubsub",
+            },
+            "default_route": None,
+            "status": {
+                "id": "mockid-b16a-4dbd-ad32-197c58aeef59",
+                "is_healthy": True,
+                "details": "Last observation has been delivered with success.",
+                "observation_delivered_24hrs": 50231,
+                "last_observation_delivered_at": "2023-03-31T11:20:00+0200",
+            },
+        }
+    )
+
+@pytest.fixture
 def connection_v2():
     return schemas_v2.Connection.parse_obj(
         {
@@ -1033,6 +1119,63 @@ def connection_v2():
             },
             "owner": {
                 "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                "name": "Test Organization",
+                "description": "",
+            },
+            "status": "healthy",
+        }
+    )
+
+
+@pytest.fixture
+def connection_v2_traptagger_to_wpswatch():
+    return schemas_v2.Connection.parse_obj(
+        {
+            "id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+            "provider": {
+                "id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "name": "Trap Tagger",
+                "owner": {
+                    "id": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+                    "name": "Test Organization",
+                },
+                "type": {
+                    "id": "190e3710-3a29-4710-b932-f951222209a7",
+                    "name": "TrapTagger",
+                    "value": "traptagger",
+                },
+                "base_url": "https://test.traptagger.com",
+                "status": "healthy",
+            },
+            "destinations": [
+                {
+                    "id": "79bef222-74aa-4065-88a8-ac9656246693",
+                    "name": "WPS Watch QA",
+                    "owner": {
+                        "id": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+                        "name": "Test Organization",
+                    },
+                    "type": {
+                        "id": "45c66a61-71e4-4664-a7f2-30d465f87aa6",
+                        "name": "WPS Watch",
+                        "value": "wps_watch",
+                    },
+                    "base_url": "https://wpswatch-api-qa.azurewebsites.net",
+                    "status": "healthy",
+                }
+            ],
+            "routing_rules": [
+                {
+                    "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                    "name": "TrapTagger Default Route",
+                }
+            ],
+            "default_route": {
+                "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                "name": "TrapTagger Default Route",
+            },
+            "owner": {
+                "id": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
                 "name": "Test Organization",
                 "description": "",
             },
@@ -1476,6 +1619,20 @@ def animals_sign_event_v2():
         },
         geometry={},
         observation_type="ev",
+    )
+
+
+@pytest.fixture
+def photo_attachment_v2():
+    return schemas_v2.Attachment(
+        gundi_id="9bedc03e-8415-46db-aa70-782490cdff31",
+        related_to="b9b46dc1-e033-447d-a99b-0fe373ca04c9",
+        owner="a91b400b-482a-4546-8fcb-ee42b01deeb6",
+        data_provider_id="d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+        source_id="ea2d5fca-752a-4a44-b170-668d780db85e",
+        external_source_id="gunditest",
+        file_path="attachments/9bedc03e-8415-46db-aa70-782490cdff31_elephant.jpg",
+        observation_type="att"
     )
 
 
