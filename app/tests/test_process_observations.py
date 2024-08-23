@@ -342,9 +342,7 @@ async def test_process_event_publishes_smart_event(
         "app.services.process_messages.send_observation_to_dead_letter_topic",
         mock_send_observation_to_dead_letter_topic
     )
-
     mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client)
-    
     await process_observation(
         raw_observation_geoevent_for_smart, raw_observation_geoevent_attributes
     )
