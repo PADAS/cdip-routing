@@ -11,7 +11,7 @@ aioredis==2.0.1
 hiredis==2.3.2
 packaging==23.0
 https://github.com/PADAS/er-client/releases/download/v1.2.0-alpha/earthranger_client-1.2.0-py3-none-any.whl
-https://github.com/PADAS/smartconnect-client/releases/download/v1.5.3/smartconnect_client-1.5.3-py3-none-any.whl
+https://github.com/PADAS/smartconnect-client/releases/download/v1.7.0/smartconnect_client-1.7.0-py3-none-any.whl
 gundi-client==1.0.4
 gundi-client-v2==2.3.5
 gundi-core==1.6.2
