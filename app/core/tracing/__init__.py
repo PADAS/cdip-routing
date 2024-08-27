@@ -20,7 +20,9 @@ tracer = config.configure_tracer(name="cdip-routing", version="2.0.0")
 # Capture requests (sync and async)
 if settings.TRACING_ENABLED:
     RequestsInstrumentor().instrument()
+    HTTPXClientInstrumentor().instrument()
+    AioHttpClientInstrumentor().instrument()
 else:
     RequestsInstrumentor().uninstrument()
-HTTPXClientInstrumentor().instrument()
-AioHttpClientInstrumentor().instrument()
+    HTTPXClientInstrumentor().uninstrument()
+    AioHttpClientInstrumentor().uninstrument()
