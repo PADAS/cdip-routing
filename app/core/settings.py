@@ -34,3 +34,4 @@ GCP_PROJECT_ID = env.str("GCP_PROJECT_ID", "cdip-78ca")
 GCP_ENVIRONMENT = env.str("GCP_ENVIRONMENT", "dev")
 DEAD_LETTER_TOPIC = env.str("DEAD_LETTER_TOPIC", "transformer-dead-letter-dev")
 MAX_EVENT_AGE_SECONDS = env.int("MAX_EVENT_AGE_SECONDS", 86400)  # 24hrs
+TRACING_ENABLED = env.str("TRACING_ENABLED", True)
