@@ -2,6 +2,7 @@
 import requests
 import httpx
 import aiohttp
+from app.core import settings
 from opentelemetry.propagators.cloud_trace_propagator import (
     CloudTraceFormatPropagator,
 )
@@ -17,6 +18,11 @@ set_global_textmap(CloudTraceFormatPropagator())
 tracer = config.configure_tracer(name="cdip-routing", version="2.0.0")
 
 # Capture requests (sync and async)
-RequestsInstrumentor().instrument()
-HTTPXClientInstrumentor().instrument()
-AioHttpClientInstrumentor().instrument()
+if settings.TRACING_ENABLED:
+    RequestsInstrumentor().instrument()
+    HTTPXClientInstrumentor().instrument()
+    AioHttpClientInstrumentor().instrument()
+else:
+    RequestsInstrumentor().uninstrument()
+    HTTPXClientInstrumentor().uninstrument()
+    AioHttpClientInstrumentor().uninstrument()
