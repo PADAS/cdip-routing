@@ -9,7 +9,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 env:
-  TRACING_ENABLE: ${{settings.TRACING_ENABLED}}
+  TRACING_ENABLED: ${{settings.TRACING_ENABLED}}
 
 jobs:
   vars:
