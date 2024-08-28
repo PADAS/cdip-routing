@@ -43,7 +43,7 @@ jobs:
 
   build:
     uses: PADAS/gundi-workflows/.github/workflows/build_docker.yml@v2
-    needs: run_unit_tests
+    needs: [vars, run_unit_tests]
     with:
       environment: stage
       repository: ${{ needs.vars.outputs.repository }}
@@ -52,7 +52,7 @@ jobs:
   dev-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
     if: startsWith(github.ref, 'refs/heads/main')
-    needs: [run_unit_tests, build]
+    needs: [vars, run_unit_tests, build]
     with:
       environment: dev
       working_dir: terraform/environments/dev
@@ -61,7 +61,7 @@ jobs:
   stage-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
     if: startsWith(github.ref, 'refs/heads/release')
-    needs: [run_unit_tests, build]
+    needs: [vars, run_unit_tests, build]
     with:
       environment: stage
       working_dir: terraform/environments/stage
@@ -70,7 +70,7 @@ jobs:
   prod-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
     if: startsWith(github.ref, 'refs/heads/release')
-    needs: [run_unit_tests, build, stage-deploy]
+    needs: [vars, run_unit_tests, build, stage-deploy]
     with:
       environment: prod
       working_dir: terraform/environments/prod
