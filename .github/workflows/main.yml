@@ -43,7 +43,7 @@ jobs:
 
   build:
     uses: PADAS/gundi-workflows/.github/workflows/build_docker.yml@v2
-    needs: run_unit_tests
+    needs: [vars, run_unit_tests]
     with:
       environment: stage
       repository: ${{ needs.vars.outputs.repository }}
