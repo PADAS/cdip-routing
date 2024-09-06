@@ -8,6 +8,8 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+env:
+  TRACING_ENABLED: ${{secrets.TRACING_ENABLED}}
 
 jobs:
   vars:
@@ -22,9 +24,26 @@ jobs:
           echo "tag=${{ github.head_ref || github.ref_name }}-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "repository=us-central1-docker.pkg.dev/cdip-78ca/gundi/cdip-routing" >> $GITHUB_OUTPUT
 
+  run_unit_tests:
+    runs-on: ubuntu-latest
+    needs: [vars]
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.8' 
+      - name: Install pip
+        run: python -m ensurepip --upgrade
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run unit tests
+        run: pytest
+
+
   build:
     uses: PADAS/gundi-workflows/.github/workflows/build_docker.yml@v2
-    needs: vars
+    needs: [vars, run_unit_tests]
     with:
       environment: stage
       repository: ${{ needs.vars.outputs.repository }}
@@ -33,7 +52,7 @@ jobs:
   dev-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
     if: startsWith(github.ref, 'refs/heads/main')
-    needs: [vars, build]
+    needs: [vars, run_unit_tests, build]
     with:
       environment: dev
       working_dir: terraform/environments/dev
@@ -42,7 +61,7 @@ jobs:
   stage-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
     if: startsWith(github.ref, 'refs/heads/release')
-    needs: [vars, build]
+    needs: [vars, run_unit_tests, build]
     with:
       environment: stage
       working_dir: terraform/environments/stage
@@ -51,7 +70,7 @@ jobs:
   prod-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
     if: startsWith(github.ref, 'refs/heads/release')
-    needs: [vars, build, stage-deploy]
+    needs: [vars, run_unit_tests, build, stage-deploy]
     with:
       environment: prod
       working_dir: terraform/environments/prod

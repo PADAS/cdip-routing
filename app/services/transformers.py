@@ -1,6 +1,8 @@
 import json
 import base64
 import logging
+
+import backoff
 import pytz
 import pathlib
 import uuid
@@ -204,7 +206,7 @@ class SMARTTransformer:
             # no passed in value assumes only 1 CA is mapped
             ca_uuids = self._config.additional.get("ca_uuids", None)
             # if not exactly one CA mapped raise Exception
-            self.ca_uuid = ca_uuids[0] if len(ca_uuids) == 1 else None
+            self.ca_uuid = ca_uuids[0] if ca_uuids else None
         if not self.ca_uuid:
             raise IndeterminableCAException(
                 "Unable to determine CA uuid for observation"
@@ -313,16 +315,16 @@ class SMARTTransformer:
         """
 
         # Remove the uuid prefix from the event type if present
-        event_type = event.event_type
-        event_type_parts = event.event_type.split("_")
+        ca_uuid, pruned_event_type = get_ca_uuid_for_event(event=event)
+        event_type_parts = pruned_event_type.split("_")
         if event_type_parts and is_uuid(id_str=event_type_parts[0]):
-            event_type = "_".join(event_type_parts[1:])
+            pruned_event_type = "_".join(event_type_parts[1:])
 
         # Convert ER event type to CA path syntax
-        event_type = event_type.replace("_", ".")
+        pruned_event_type = pruned_event_type.replace("_", ".")
         ca_datamodel = await self.get_ca_datamodel()
         # Look in the CA DataModel
-        if matched_category := ca_datamodel.get_category(path=event_type):
+        if matched_category := ca_datamodel.get_category(path=pruned_event_type):
             return matched_category["path"]
 
         # Look in configurable models
@@ -330,16 +332,16 @@ class SMARTTransformer:
         for cm in configurable_models:
             # favor config datamodel match if present
             # convert ER event type to CA path syntax
-            if matched_category := cm.get_category(path=event_type):
+            if matched_category := cm.get_category(path=pruned_event_type):
                 return matched_category["hkeyPath"]
 
         # Try a direct data model match
-        if matched_category := ca_datamodel.get_category(path=event.event_type):
+        if matched_category := ca_datamodel.get_category(path=pruned_event_type):
             return matched_category["path"]
 
         # Last option is a match in translation rules.
         for t in self._transformation_rules.category_map:
-            if t.event_type == event.event_type:
+            if t.event_type == pruned_event_type:
                 return t.category_path
 
     async def _resolve_attribute(
@@ -563,9 +565,15 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
     async def transform(self, item) -> dict:
         waypoint_requests = []
         if self._version and version.parse(self._version) >= version.parse("7.5"):
-            smart_response = await self.smartconnect_client.get_incident(
-                incident_uuid=item.id
-            )
+            # Avoid querying with blank or invalid uuids
+            if item.id and is_uuid(id_str=str(item.id)):
+                smart_response = await self.smartconnect_client.get_incident(
+                    incident_uuid=str(item.id)
+                )
+            else:
+                smart_response = None
+
+            # New incident
             if not smart_response:
                 incident = await self.event_to_incident(
                     event=item, smart_feature_type="waypoint/new"
@@ -1044,7 +1052,6 @@ class SMARTTransformerV2(Transformer, ABC):
         """
         Favor finding a match in the Config CA Datamodel, then CA Datamodel.
         """
-
         search_for = event_type.replace("_", ".")
         configurable_models = await self.get_configurable_models()
         for cm in configurable_models:
@@ -1335,7 +1342,7 @@ class SmartEventTransformerV2(SMARTTransformerV2):
     ) -> SMARTCompositeRequest:
         if self._version and version.parse(self._version) < version.parse("7.5"):
             raise ValueError("Smart version < 7.5 is not supported")
-        message, message_ca_uuid = get_ca_uuid_for_event(event=message)
+        message_ca_uuid, pruned_event_type = get_ca_uuid_for_event(event=message)
         if message_ca_uuid:
             self.ca_uuid = str(message_ca_uuid)
         waypoint_requests = []
@@ -1429,7 +1436,8 @@ class EREventTransformer(Transformer):
             location=dict(
                 longitude=message.location.lon, latitude=message.location.lat
             ),
-            geometry=message.geometry
+            geometry=message.geometry,
+            state=message.status
         )
         # Apply extra transformation rules as needed
         if rules:
@@ -1451,6 +1459,7 @@ class EREventUpdateTransformer(Transformer):
             "event_details": "event_details",
             "recorded_at": "time",
             "location": "location",
+            "status": "state",
         }
 
     async def transform(
@@ -1488,6 +1497,42 @@ class ERAttachmentTransformer(Transformer):
         return schemas.v2.ERAttachment(
             file_path=message.file_path
         )
+
+
+class WPSWatchEventTransformerV2(Transformer):
+
+    async def transform(
+        self, message: schemas.v2.Event, rules: list = None, **kwargs
+    ) -> schemas.v2.WPSWatchImageMetadata:
+        transformed_event_fields = dict(
+            camera_id=message.external_source_id
+        )
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_event_fields)
+        wps_image_metadata = schemas.v2.WPSWatchImageMetadata(
+            **transformed_event_fields
+        )
+        return wps_image_metadata
+
+
+class WPSWatchAttachmentTransformerV2(Transformer):
+
+    async def transform(
+        self, message: schemas.v2.Attachment, rules: list = None, **kwargs
+    ) -> schemas.v2.WPSWatchImage:
+        transformed_attachment_fields = dict(
+            file_path=message.file_path
+        )
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_attachment_fields)
+        wps_image = schemas.v2.WPSWatchImage(
+            **transformed_attachment_fields
+        )
+        return wps_image
 
 
 class ERObservationTransformer(Transformer):
@@ -1603,7 +1648,7 @@ async def transform_observation(
         stream_type == schemas.StreamPrefixEnum.geoevent
         or stream_type == schemas.StreamPrefixEnum.earthranger_event
     ) and config.type_slug == schemas.DestinationTypes.SmartConnect.value:
-        observation, ca_uuid = get_ca_uuid_for_event(event=observation)
+        ca_uuid, pruned_event_type = get_ca_uuid_for_event(event=observation)
         transformer = SmartEventTransformer(config=config, ca_uuid=ca_uuid)
     elif (
         stream_type == schemas.StreamPrefixEnum.earthranger_patrol
@@ -1630,7 +1675,7 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
     ca_uuids = set()
     for segment in patrol.patrol_segments:
         for event in segment.event_details:
-            event, event_ca_uuid = get_ca_uuid_for_event(event=event)
+            event_ca_uuid, pruned_event_type = get_ca_uuid_for_event(event=event)
             if event_ca_uuid:
                 ca_uuids.add(event_ca_uuid)
 
@@ -1682,9 +1727,8 @@ def get_ca_uuid_for_event(
 
     # validation that uuid prefix exists
     ca_uuid = id_list[0] if id_list else None
-    # remove ca_uuid prefix if it exists
-    event.event_type = "_".join(nonid_list)
-    return event, ca_uuid
+    pruned_event_type = "_".join(nonid_list)
+    return ca_uuid, pruned_event_type
 
 
 def get_source_id(observation, gundi_version="v1"):
@@ -1699,6 +1743,7 @@ def get_data_provider_id(observation, gundi_version="v1"):
     )
 
 
+@backoff.on_exception(backoff.expo, (Exception, ), max_tries=3)
 async def transform_observation_to_destination_schema(
     *,
     observation,
@@ -1706,7 +1751,9 @@ async def transform_observation_to_destination_schema(
     provider=None,
     gundi_version="v1",
     route_configuration=None,
-) -> dict:
+):
+    # ToDo: Ask Chris about this. THe copy doesn't seem to be used
+    copied_observation = observation.copy()
     if gundi_version == "v2":
         return await transform_observation_v2(
             observation=observation,
@@ -1850,13 +1897,15 @@ transformers_map = {
     schemas.v2.StreamPrefixEnum.event.value: {
         schemas.DestinationTypes.EarthRanger.value: EREventTransformer,
         schemas.DestinationTypes.SmartConnect.value: SmartEventTransformerV2,
+        schemas.DestinationTypes.WPSWatch.value: WPSWatchEventTransformerV2
     },
     schemas.v2.StreamPrefixEnum.event_update.value: {
         schemas.DestinationTypes.EarthRanger.value: EREventUpdateTransformer,
         schemas.DestinationTypes.SmartConnect.value: SmartEventUpdateTransformerV2,
     },
     schemas.v2.StreamPrefixEnum.attachment.value: {
-        schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer
+        schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer,
+        schemas.DestinationTypes.WPSWatch.value: WPSWatchAttachmentTransformerV2
     },
     schemas.v2.StreamPrefixEnum.observation.value: {
         schemas.DestinationTypes.Movebank.value: MBObservationTransformer,

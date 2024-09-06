@@ -1,8 +1,16 @@
 import logging
 from gundi_core.events import ObservationReceived, EventReceived, EventUpdateReceived, AttachmentReceived
-from gundi_core.events.transformers import EventTransformedER, EventUpdateTransformedER, AttachmentTransformedER, \
-    ObservationTransformedER, EventTransformedSMART, EventUpdateTransformedSMART
 from gundi_core.schemas.v2 import StreamPrefixEnum
+from gundi_core.events.transformers import (
+    EventTransformedER,
+    EventUpdateTransformedER,
+    AttachmentTransformedER,
+    ObservationTransformedER,
+    EventTransformedSMART,
+    EventUpdateTransformedSMART,
+    EventTransformedWPSWatch,
+    AttachmentTransformedWPSWatch
+)
 from opentelemetry.trace import SpanKind
 from app.core import tracing
 from app.core.errors import ReferenceDataError
@@ -29,7 +37,9 @@ transformer_events_by_data_type = {
     "ERAttachment": AttachmentTransformedER,
     "ERObservation": ObservationTransformedER,
     "SMARTCompositeRequest": EventTransformedSMART,
-    "SMARTUpdateRequest": EventUpdateTransformedSMART
+    "SMARTUpdateRequest": EventUpdateTransformedSMART,
+    "WPSWatchImageMetadata": EventTransformedWPSWatch,
+    "WPSWatchImage": AttachmentTransformedWPSWatch
 }
 
 

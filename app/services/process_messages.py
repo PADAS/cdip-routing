@@ -136,18 +136,27 @@ async def process_observation(raw_observation, attributes):
                 for destination in destinations:
                     # Get additional configuration for the destination
                     broker_config = destination.additional
-                    # Transform the observation for the destination
-                    transformed_observation = (
-                        await transform_observation_to_destination_schema(
-                            observation=observation,
-                            destination=destination,
-                            provider=provider,
-                            route_configuration=route_configuration,
-                            gundi_version=gundi_version,
+
+                    try:  # Transform the observation for the destination
+                        transformed_observation = await transform_observation_to_destination_schema(
+                                observation=observation,
+                                destination=destination,
+                                provider=provider,
+                                route_configuration=route_configuration,
+                                gundi_version=gundi_version,
                         )
-                    )
+                    except Exception as e:
+                        error_msg = (
+                            f"Error transforming observation. Sending to dead-letter. {type(e)}: {e}"
+                        )
+                        logger.exception(error_msg)
+                        await send_observation_to_dead_letter_topic(raw_observation, attributes)
+                        current_span.set_attribute("error", error_msg)
+                        continue  # Skip to the next destination
+
                     if not transformed_observation:
                         continue
+
                     attributes = build_transformed_message_attributes(
                         observation=observation,
                         destination=destination,
@@ -250,6 +259,7 @@ def is_too_old(timestamp):
 async def process_request(request):
     # Extract the observation and attributes from the request
     json_data = await request.json()
+    headers = request.headers
     pubsub_message = json_data["message"]
     payload, attributes = extract_fields_from_message(pubsub_message)
     # Load tracing context
@@ -274,7 +284,7 @@ async def process_request(request):
                 "reason": "Event has already been processed (possible duplicate)."
             }
         # Handle maximum retries and age of the event
-        timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time")
+        timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time") or headers.get("ce-time")
         if is_too_old(timestamp=timestamp):
             logger.warning(
                 f"Message discarded. The message is too old or the retry time limit has been reached."
