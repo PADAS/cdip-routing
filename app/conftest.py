@@ -2422,17 +2422,31 @@ def geoevent_v1_request_payload():
         "message": {
             "attributes": {
                 "observation_type": "ge",
-                "device_id": "none",
-                "outbound_config_id": "38ebbae6-2535-43f9-be88-96f9daec83f3",
-                "integration_id": "c25a53f6-e206-43dd-8f62-a3759565ae3d",
                 "tracing_context": "{}",
             },
             "data": "eyJpZCI6IG51bGwsICJvd25lciI6ICJuYSIsICJpbnRlZ3JhdGlvbl9pZCI6ICJjMjVhNTNmNi1lMjA2LTQzZGQtOGY2Mi1hMzc1OTU2NWFlM2QiLCAiZGV2aWNlX2lkIjogIm5vbmUiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wMi0yMCAyMDozNDowOC0wMzowMCIsICJsb2NhdGlvbiI6IHsieCI6IC01MS42ODg2NzUsICJ5IjogLTcyLjcwNDQ2NSwgInoiOiAwLjAsICJoZG9wIjogbnVsbCwgInZkb3AiOiBudWxsfSwgImFkZGl0aW9uYWwiOiBudWxsLCAidGl0bGUiOiAiUG9hY2hlcnMgQWN0aXZpdHkiLCAiZXZlbnRfdHlwZSI6ICJodW1hbmFjdGl2aXR5X3BvYWNoaW5nIiwgImV2ZW50X2RldGFpbHMiOiB7fSwgImdlb21ldHJ5IjogbnVsbCwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZ2UifQ==",
             # pragma: allowlist secret
-            "messageId": "8255786613739820",
-            "message_id": "8255786613739820",
+            "messageId": "8255786613739821",
+            "message_id": "8255786613739821",
             "publishTime": timestamp,
             "publish_time": timestamp,
+        },
+        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB",
+    }
+
+
+@pytest.fixture
+def geoevent_v1_eventarc_request_payload():
+    return {
+        "message": {
+            "attributes": {
+                "observation_type": "ge",
+                "tracing_context": "{}",
+            },
+            "data": "eyJpZCI6IG51bGwsICJvd25lciI6ICJuYSIsICJpbnRlZ3JhdGlvbl9pZCI6ICJjMjVhNTNmNi1lMjA2LTQzZGQtOGY2Mi1hMzc1OTU2NWFlM2QiLCAiZGV2aWNlX2lkIjogIm5vbmUiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wMi0yMCAyMDozNDowOC0wMzowMCIsICJsb2NhdGlvbiI6IHsieCI6IC01MS42ODg2NzUsICJ5IjogLTcyLjcwNDQ2NSwgInoiOiAwLjAsICJoZG9wIjogbnVsbCwgInZkb3AiOiBudWxsfSwgImFkZGl0aW9uYWwiOiBudWxsLCAidGl0bGUiOiAiUG9hY2hlcnMgQWN0aXZpdHkiLCAiZXZlbnRfdHlwZSI6ICJodW1hbmFjdGl2aXR5X3BvYWNoaW5nIiwgImV2ZW50X2RldGFpbHMiOiB7fSwgImdlb21ldHJ5IjogbnVsbCwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZ2UifQ==",
+            # pragma: allowlist secret
+            "messageId": "8255786613739821",
+            "message_id": "8255786613739821"
         },
         "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB",
     }
@@ -2454,6 +2468,24 @@ def event_v2_request_payload(animals_sign_event_v2):
           "message_id": "11960027960451651",
           "publishTime": timestamp,
           "publish_time": timestamp
+       },
+       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+    }
+
+
+@pytest.fixture
+def event_v2_eventarc_request_payload(animals_sign_event_v2):
+    return {
+       "message": {
+          "attributes": {
+             "gundi_id": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
+             "gundi_version": "v2",
+             "observation_type": "ev",
+             "tracing_context": "{}"
+          },
+          "data": "eyJldmVudF9pZCI6ICI0Y2M5NjVmZS04ZGQxLTQxZjEtODc1ZC0wYTdmNWIyMjI5ZDMiLCAidGltZXN0YW1wIjogIjIwMjQtMDgtMTIgMTI6Mjk6MjkuNDc2NDA1KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Imd1bmRpX2lkIjogIjQ1N2MwYmZkLWUyMDgtNGQ2NS1iYjllLWE3MjgwODIyY2I0MiIsICJvd25lciI6ICI0NTAxODM5OC03YTJhLTRmNDgtODk3MS0zOWEyNzEwZDVkYmQiLCAiZGF0YV9wcm92aWRlcl9pZCI6ICI3Y2M4MGU4NS01YTk3LTRmYjQtYWE5Yy0zMTVhNjg0YjU2NDYiLCAiYW5ub3RhdGlvbnMiOiB7fSwgInNvdXJjZV9pZCI6ICIzYjNjMjk5My04MjAxLTQ0MzQtOTMzNy0yMzBiODkxN2Y2NTIiLCAiZXh0ZXJuYWxfc291cmNlX2lkIjogImRlZmF1bHQtc291cmNlIiwgInJlY29yZGVkX2F0IjogIjIwMjQtMDgtMTIgMTI6Mjk6MTArMDA6MDAiLCAibG9jYXRpb24iOiB7ImxhdCI6IDEzLjY4ODYzMiwgImxvbiI6IDEzLjc4MzA2OCwgImFsdCI6IDAuMH0sICJ0aXRsZSI6ICJBbmltYWxzIERldGVjdGVkIiwgImV2ZW50X3R5cGUiOiAiYW5pbWFscyIsICJldmVudF9kZXRhaWxzIjogeyJ0YXJnZXRzcGVjaWVzIjogInJlcHRpbGVzLnB5dGhvbnNwcCIsICJ3aWxkbGlmZW9ic2VydmF0aW9udHlwZSI6ICJkaXJlY3RvYnNlcnZhdGlvbiIsICJhZ2VvZnNpZ25hbmltYWwiOiAiZnJlc2giLCAibnVtYmVyb2ZhbmltYWwiOiAyfSwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZXYifSwgImV2ZW50X3R5cGUiOiAiRXZlbnRSZWNlaXZlZCJ9",
+          "messageId": "11960027960451651",
+          "message_id": "11960027960451651",
        },
        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
     }
@@ -2497,4 +2529,29 @@ def pubsub_request_headers():
        "x-forwarded-proto": "https",
        "forwarded": "for=\"66.102.6.198\";proto=https",
        "accept-encoding": "gzip, deflate, br"
+    }
+
+
+@pytest.fixture
+def eventarc_request_headers():
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return {
+       "host": "routing-transformer-service-prod-nhgde2snxa-uc.a.run.app",
+       "content-type": "application/json",
+       "authorization": "Bearer F4keT0k3n",
+       "content-length": "1733",
+       "accept": "application/json",
+       "from": "noreply@google.com",
+       "user-agent": "APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)",
+       "x-cloud-trace-context": "fa75a3bf8bed02e44d18cb795acf931b/10784891745238219625",
+       "traceparent": "00-fa75a3bf8bed02e44d18cb795acf931b-95aba1e6c7f77b69-00",
+       "x-forwarded-for": "64.233.172.66",
+       "x-forwarded-proto": "https",
+       "forwarded": "for=\"64.233.172.66\";proto=https",
+       "accept-encoding": "gzip, deflate, br",
+       "ce-id": "12180675488418773",
+       "ce-source": "//pubsub.googleapis.com/projects/cdip-prod1-78ca/topics/raw-observations-prod",
+       "ce-specversion": "1.0",
+       "ce-type": "google.cloud.pubsub.topic.v1.messagePublished",
+       "ce-time": timestamp
     }

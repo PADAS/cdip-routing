@@ -12,23 +12,30 @@ from app.services.transformers import extract_fields_from_message
 api_client = TestClient(app)
 
 
+@pytest.mark.parametrize("request_headers, request_payload", [
+    ("pubsub_request_headers", "geoevent_v1_request_payload",),
+    ("eventarc_request_headers", "geoevent_v1_eventarc_request_payload",),
+])
 @pytest.mark.asyncio
 async def test_process_geoevent_v1_successfully(
     mocker,
+    request,
     mock_cache,
     mock_gundi_client,
     mock_pubsub,
-    pubsub_request_headers,
-    geoevent_v1_request_payload,
+    request_headers,
+    request_payload
 ):
+    request_headers = request.getfixturevalue(request_headers)
+    request_payload = request.getfixturevalue(request_payload)
     # Mock external dependencies
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
     mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
     response = api_client.post(
         "/",
-        headers=pubsub_request_headers,
-        json=geoevent_v1_request_payload,
+        headers=request_headers,
+        json=request_payload,
     )
     assert response.status_code == 200
     # Check that the report was sent to a pubsub topic
@@ -36,24 +43,31 @@ async def test_process_geoevent_v1_successfully(
     assert mock_pubsub.PublisherClient.return_value.publish.called
 
 
+@pytest.mark.parametrize("request_headers, request_payload", [
+    ("pubsub_request_headers", "event_v2_request_payload",),
+    ("eventarc_request_headers", "event_v2_eventarc_request_payload",),
+])
 @pytest.mark.asyncio
 async def test_process_event_v2_successfully(
     mocker,
+    request,
     mock_cache,
     mock_gundi_client_v2,
     mock_pubsub,
-    pubsub_request_headers,
-    event_v2_request_payload,
+    request_headers,
+    request_payload,
     destination_integration_v2
 ):
+    request_headers = request.getfixturevalue(request_headers)
+    request_payload = request.getfixturevalue(request_payload)
     # Mock external dependencies
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
     mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
     response = api_client.post(
         "/",
-        headers=pubsub_request_headers,
-        json=event_v2_request_payload,
+        headers=request_headers,
+        json=request_payload,
     )
     assert response.status_code == 200
     # Check that the report was sent to a pubsub topic once
