@@ -11,6 +11,8 @@ from pydantic.types import UUID
 from redis import exceptions as redis_exceptions
 from smartconnect import SMARTClientException
 
+from app.core.deduplication import EventProcessingStatus
+
 
 def async_return(result):
     f = asyncio.Future()
@@ -35,9 +37,19 @@ def mock_cache(mocker):
 
 
 @pytest.fixture
-def mock_deduplication_cache(mocker):
+def mock_deduplication_cache_empty(mocker):
     mock_cache = mocker.MagicMock()
     mock_cache.get.return_value = async_return(None)
+    mock_cache.setex.return_value = async_return(None)
+    mock_cache.__aenter__.return_value = mock_cache
+    mock_cache.__aexit__.return_value = None
+    return mock_cache
+
+
+@pytest.fixture
+def mock_deduplication_cache_one_miss(mocker):
+    mock_cache = mocker.MagicMock()
+    mock_cache.get.side_effect = (async_return(None), async_return("1"),)
     mock_cache.setex.return_value = async_return(None)
     mock_cache.__aenter__.return_value = mock_cache
     mock_cache.__aexit__.return_value = None

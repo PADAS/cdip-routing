@@ -59,7 +59,7 @@ async def process_observation_event(raw_message, attributes):
         return result
 
 
-async def process_observation(raw_observation, attributes):
+async def process_observation(raw_observation, attributes, message_id=None):
     """
     Handle one message that has not yet been processed.
     This function transforms a message into an appropriate Model and
@@ -193,6 +193,11 @@ async def process_observation(raw_observation, attributes):
                             "destination_id": str(destination.id),
                         },
                     )
+                    # Keep track of processed events for deduplication
+                    await set_event_processing_status(
+                        event_id=message_id,
+                        status=EventProcessingStatus.PROCESSED
+                    )
             else:
                 logger.error(
                     "Logic error, expecting 'observation' to be not None.",
@@ -273,9 +278,10 @@ async def process_request(request):
         current_span.set_attribute("system_event_id", str(system_event_id))
         logger.debug(f"Received PubsubMessage(PubSub ID:{pubsub_message_id}, System Event ID: {system_event_id}): {pubsub_message}")
         # Discard duplicate events by checking if the event_id has been processed before
-        if await is_event_processed(event_id=system_event_id):
+        message_id = system_event_id or pubsub_message_id  # system_event_id is not available in v1 messages
+        if message_id and await is_event_processed(event_id=message_id):
             logger.warning(
-                f"Message discarded. Event with ID '{system_event_id}' has already been processed (possible duplicate)."
+                f"Message discarded. Event with ID '{message_id}' has already been processed (possible duplicate)."
             )
             current_span.set_attribute("is_duplicate", True)
             await send_observation_to_dead_letter_topic(payload, attributes)
@@ -296,7 +302,7 @@ async def process_request(request):
                 "reason": "Message is too old or the retry time limit has been reach",
             }
         if (version := attributes.get("gundi_version", "v1")) == "v1":
-            await process_observation(payload, attributes)
+            await process_observation(payload, attributes, message_id)
         elif version == "v2":
             await process_observation_event(payload, attributes)
         else:

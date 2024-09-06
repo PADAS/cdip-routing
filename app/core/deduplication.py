@@ -29,10 +29,13 @@ async def get_event_processing_status(event_id) -> EventProcessingStatus:
         return await _cache_db.get(key)
 
     status = EventProcessingStatus.UNPROCESSED
+    if not event_id:
+        return status
+
     key = get_event_status_key(event_id)
     try:
-        value = await read_from_redis(key)
-        status = EventProcessingStatus(value)
+        value = await read_from_redis(key) or 0
+        status = EventProcessingStatus(int(value))
     except redis_exceptions.RedisError as e:
         logger.warning(
             f"RedisError while reading key '{key}' from Redis:{type(e)} \n {e}",
@@ -49,6 +52,9 @@ async def set_event_processing_status(event_id, status: EventProcessingStatus):
     @backoff.on_exception(backoff.expo, redis_exceptions.RedisError, max_time=10)
     async def write_to_redis(key, ttl, value):
         return await _cache_db.setex(key, ttl, value)
+
+    if not event_id:
+        return
 
     key = get_event_status_key(event_id)
     try:
