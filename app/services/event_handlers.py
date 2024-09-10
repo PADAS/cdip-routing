@@ -1,5 +1,6 @@
 import logging
 from gundi_core.events import ObservationReceived, EventReceived, EventUpdateReceived, AttachmentReceived
+from gundi_core.schemas.v2 import StreamPrefixEnum
 from gundi_core.events.transformers import (
     EventTransformedER,
     EventUpdateTransformedER,
@@ -131,12 +132,14 @@ async def transform_and_route_observation(observation):
                 pubsub_message = build_gcp_pubsub_message(
                     payload=transformer_event.dict(exclude_none=True)
                 )
+                # Set ordering key only for updates
+                ordering_key = str(observation.gundi_id) if observation.observation_type == StreamPrefixEnum.event_update.value else ""
                 await send_message_to_gcp_pubsub_dispatcher(
                     message=pubsub_message,
                     attributes=attributes,
                     destination=destination,
                     broker_config=broker_config,
-                    ordering_key=observation.gundi_id
+                    ordering_key=ordering_key
                 )
                 logger.info(
                     f"Observation {observation.gundi_id} transformed and sent to pubsub topic successfully.",

@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from app.core import tracing
 from opentelemetry.trace import SpanKind
 from gundi_core import schemas
+from app.core.deduplication import set_event_processing_status, EventProcessingStatus
+from app.core.deduplication import is_event_processed
 from app.core.local_logging import ExtraKeys
 from app.core.utils import Broker
 from app.core.errors import ReferenceDataError
@@ -51,10 +53,13 @@ async def process_observation_event(raw_message, attributes):
         except KeyError:
             logger.warning(f"Event Schema for '{event_type}' not found. Message discarded.")
         parsed_event = schema.parse_obj(raw_message)
-        return await handler(event=parsed_event)
+        result = await handler(event=parsed_event)
+        # Keep track of processed events for deduplication
+        await set_event_processing_status(event_id=str(parsed_event.event_id), status=EventProcessingStatus.PROCESSED)
+        return result
 
 
-async def process_observation(raw_observation, attributes):
+async def process_observation(raw_observation, attributes, message_id=None):
     """
     Handle one message that has not yet been processed.
     This function transforms a message into an appropriate Model and
@@ -188,6 +193,11 @@ async def process_observation(raw_observation, attributes):
                             "destination_id": str(destination.id),
                         },
                     )
+                    # Keep track of processed events for deduplication
+                    await set_event_processing_status(
+                        event_id=message_id,
+                        status=EventProcessingStatus.PROCESSED
+                    )
             else:
                 logger.error(
                     "Logic error, expecting 'observation' to be not None.",
@@ -240,6 +250,7 @@ async def process_observation(raw_observation, attributes):
 
 def is_too_old(timestamp):
     if not timestamp:
+        logger.warning("No timestamp found in Pubsub Message. Skipping age check.")
         return False
     try:  # The timestamp does not always include the microseconds part
         event_time = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -251,25 +262,47 @@ def is_too_old(timestamp):
 
 
 async def process_request(request):
-    # Extract the observation and attributes from the CloudEvent
+    # Extract the observation and attributes from the request
     json_data = await request.json()
-    payload, attributes = extract_fields_from_message(json_data["message"])
+    headers = request.headers
+    pubsub_message = json_data["message"]
+    payload, attributes = extract_fields_from_message(pubsub_message)
     # Load tracing context
     tracing.pubsub_instrumentation.load_context_from_attributes(attributes)
     with tracing.tracer.start_as_current_span(
         "routing_service.process_request", kind=SpanKind.CLIENT
     ) as current_span:
-        if is_too_old(timestamp=request.headers.get("ce-time")):
+        pubsub_message_id = pubsub_message.get("message_id")
+        system_event_id = payload.get("event_id")
+        current_span.set_attribute("pubsub_message_id", str(pubsub_message_id))
+        current_span.set_attribute("system_event_id", str(system_event_id))
+        logger.debug(f"Received PubsubMessage(PubSub ID:{pubsub_message_id}, System Event ID: {system_event_id}): {pubsub_message}")
+        # Discard duplicate events by checking if the event_id has been processed before
+        message_id = system_event_id or pubsub_message_id  # system_event_id is not available in v1 messages
+        if message_id and await is_event_processed(event_id=message_id):
+            logger.warning(
+                f"Message discarded. Event with ID '{message_id}' has already been processed (possible duplicate)."
+            )
+            current_span.set_attribute("is_duplicate", True)
+            await send_observation_to_dead_letter_topic(payload, attributes)
+            return {
+                "status": "discarded",
+                "reason": "Event has already been processed (possible duplicate)."
+            }
+        # Handle maximum retries and age of the event
+        timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time") or headers.get("ce-time")
+        if is_too_old(timestamp=timestamp):
             logger.warning(
                 f"Message discarded. The message is too old or the retry time limit has been reached."
             )
+            current_span.set_attribute("is_too_old", True)
             await send_observation_to_dead_letter_topic(payload, attributes)
             return {
                 "status": "discarded",
                 "reason": "Message is too old or the retry time limit has been reach",
             }
         if (version := attributes.get("gundi_version", "v1")) == "v1":
-            await process_observation(payload, attributes)
+            await process_observation(payload, attributes, message_id)
         elif version == "v2":
             await process_observation_event(payload, attributes)
         else:

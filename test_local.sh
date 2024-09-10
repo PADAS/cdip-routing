@@ -1,11 +1,6 @@
 curl localhost:8282 \
   -X POST \
   -H "Content-Type: application/json" \
-  -H "ce-id: 123451234512345" \
-  -H "ce-specversion: 1.0" \
-  -H "ce-time: 2024-07-18T17:40:00.789Z" \
-  -H "ce-type: google.cloud.pubsub.topic.v1.messagePublished" \
-  -H "ce-source: //pubsub.googleapis.com/projects/MY-PROJECT/topics/MY-TOPIC" \
   -d '{
       "message": {
         "data":"eyJldmVudF9pZCI6ICI5MzE5NDA0Yy1hMDJhLTQwMzgtYWQ4OC1kNzUwMmU3OGMyMDMiLCAidGltZXN0YW1wIjogIjIwMjQtMDctMjQgMjA6MTM6MzMuNjk1MDE0KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Imd1bmRpX2lkIjogIjliZWRjMDNlLTg0MTUtNDZkYi1hYTcwLTc4MjQ5MGNkZmYzMSIsICJyZWxhdGVkX3RvIjogIjZjYjgyMTgyLTUxYjItNDMwOS1iYTgzLWM5OWVkOGU2MWFlOCIsICJvd25lciI6ICJuYSIsICJkYXRhX3Byb3ZpZGVyX2lkIjogImQ4OGFjNTIwLTJiZjYtNGU2Yi1hYjA5LTM4ZWQxZWM2OTQ3YSIsICJzb3VyY2VfaWQiOiAiZWEyZDVmY2EtNzUyYS00YTQ0LWIxNzAtNjY4ZDc4MGRiODVlIiwgImV4dGVybmFsX3NvdXJjZV9pZCI6ICJndW5kaXRlc3QiLCAiZmlsZV9wYXRoIjogImF0dGFjaG1lbnRzLzliZWRjMDNlLTg0MTUtNDZkYi1hYTcwLTc4MjQ5MGNkZmYzMV93aWxkX2RvZy1tYWxlLnN2ZyIsICJvYnNlcnZhdGlvbl90eXBlIjogImF0dCJ9LCAiZXZlbnRfdHlwZSI6ICJBdHRhY2htZW50UmVjZWl2ZWQifQ==",
@@ -21,7 +16,11 @@ curl localhost:8282 \
           "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
           "annotations":"{}",
           "tracing_context":"{}"
-        }
+        },
+        "messageId": "9155786613739819",
+        "message_id": "9155786613739819",
+        "publishTime": "2024-08-12T12:40:00.789Z",
+        "publish_time": "2024-07-18T12:40:00.789Z"
       },
       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
     }'
@@ -42,7 +41,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -62,7 +65,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -102,7 +109,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -122,7 +133,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -142,7 +157,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -162,7 +181,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -182,7 +205,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
@@ -202,7 +229,11 @@ curl localhost:8282 \
 #          "data_provider_id":"d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
 #          "annotations":"{}",
 #          "tracing_context":"{}"
-#        }
+#        },
+#        "messageId": "9155786613739819",
+#        "message_id": "9155786613739819",
+#        "publishTime": "2024-08-12T12:40:00.789Z",
+#        "publish_time": "2024-07-18T12:40:00.789Z"
 #      },
 #      "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
 #    }'
