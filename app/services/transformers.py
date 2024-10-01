@@ -1347,8 +1347,8 @@ class SMARTTransformerV2(Transformer, ABC):
         smart_request = SMARTRequest(
             type="Feature",
             properties=Properties(
-                smartDataType="waypoint",
-                smartFeatureType="incident",
+                smartDataType="incident",
+                smartFeatureType="waypoint",
                 smartAttributes=SmartAttributes(
                     incidentUuid=incident_uuid,
                     attachments=[file_reference]
