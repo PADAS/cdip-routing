@@ -1296,8 +1296,8 @@ def destination_integration_v2_smart():
                         "value": "auth"
                     },
                     "data": {
-                        "login": "dennis.schneider",
-                        "password": "earthranger"
+                        "login": "testuser",
+                        "password": "testpsw"
                     }
                 }
             ],
