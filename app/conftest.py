@@ -1164,6 +1164,160 @@ def destination_integration_v2_wpswatch():
         }
     )
 
+
+@pytest.fixture
+def destination_integration_v2_smart():
+    return schemas_v2.Integration.parse_obj(
+        {
+            "id": "0eecad72-1d2e-43b1-a169-c419c81fc957",
+            "name": "SMART Demo (Mariano)",
+            "base_url": "https://smartdemoconnect.smartconservationtools.org:443/server",
+            "enabled": True,
+            "type": {
+                "id": "be324645-de3f-4f88-beb7-c9a287f938f7",
+                "name": "SMART Connect",
+                "value": "smart_connect",
+                "description": "",
+                "actions": [
+                    {
+                        "id": "a306a813-047c-4868-9f17-4e7732000b44",
+                        "type": "auth",
+                        "name": "Authenticate",
+                        "value": "auth",
+                        "description": "Authenticate against smart connect",
+                        "schema": {
+                            "type": "object",
+                            "title": "SMARTAuthActionConfig",
+                            "required": [
+                                "login",
+                                "password"
+                            ],
+                            "properties": {
+                                "login": {
+                                    "type": "string",
+                                    "title": "Login"
+                                },
+                                "password": {
+                                    "type": "string",
+                                    "title": "Password"
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "id": "eb78e965-f955-461a-9325-f678c9c57fdb",
+                        "type": "push",
+                        "name": "Push Events",
+                        "value": "push_events",
+                        "description": "Send Events to SMART Connect (a.k.a Incidents or waypoints)",
+                        "schema": {
+                            "type": "object",
+                            "title": "SMARTPushEventActionConfig",
+                            "properties": {
+                                "ca_uuids": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string",
+                                        "format": "uuid"
+                                    },
+                                    "title": "Ca Uuids"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "webhook": None
+            },
+            "owner": {
+                "id": "45018398-7a2a-4f48-8971-39a2710d5dbd",
+                "name": "Gundi Engineering",
+                "description": "Test organization"
+            },
+            "configurations": [
+                {
+                    "id": "fc2484d5-ad49-4895-9afe-f122c2fdda8f",
+                    "integration": "0eecad72-1d2e-43b1-a169-c419c81fc957",
+                    "action": {
+                        "id": "eb78e965-f955-461a-9325-f678c9c57fdb",
+                        "type": "push",
+                        "name": "Push Events",
+                        "value": "push_events"
+                    },
+                    "data": {
+                        "version": "7.5.7",
+                        "ca_uuids": [
+                            "169361d0-62b8-411d-a8e6-019823805016"
+                        ],
+                        "configurable_models_lists": {
+                            "169361d0-62b8-411d-a8e6-019823805016": [
+                                {
+                                    "name": "គូលែន ព្រហ្មទេព 072022",
+                                    "uuid": "303b2e0a-d4b7-41b8-b6dc-065c9a661c7b",
+                                    "ca_id": "SMART",
+                                    "ca_name": "Demo Conservation Area",
+                                    "ca_uuid": "169361d0-62b8-411d-a8e6-019823805016",
+                                    "translations": [
+                                        {
+                                            "value": "គូលែន ព្រហ្មទេព 072022",
+                                            "language_code": "en"
+                                        },
+                                        {
+                                            "value": "គូលែន ព្រហ្មទេព 072022",
+                                            "language_code": "km"
+                                        }
+                                    ],
+                                    "use_with_earth_ranger": False
+                                },
+                                {
+                                    "name": "ខនិក គូលែន ព្រហ្មទេព 092022",
+                                    "uuid": "a645f302-7fb0-4a29-a0ce-9d0092652803",
+                                    "ca_id": "SMART",
+                                    "ca_name": "Demo Conservation Area",
+                                    "ca_uuid": "169361d0-62b8-411d-a8e6-019823805016",
+                                    "translations": [
+                                        {
+                                            "value": "ខនិក គូលែន ព្រហ្មទេព 092022",
+                                            "language_code": "en"
+                                        }
+                                    ],
+                                    "use_with_earth_ranger": True
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "id": "2a0e8863-2ed9-4f9d-9496-1a08ac483df9",
+                    "integration": "0eecad72-1d2e-43b1-a169-c419c81fc957",
+                    "action": {
+                        "id": "a306a813-047c-4868-9f17-4e7732000b44",
+                        "type": "auth",
+                        "name": "Authenticate",
+                        "value": "auth"
+                    },
+                    "data": {
+                        "login": "dennis.schneider",
+                        "password": "earthranger"
+                    }
+                }
+            ],
+            "webhook_configuration": None,
+            "additional": {
+                "topic": "smartdemoconnect-smartcon-c0PRUpN-topic",
+                "broker": "gcp_pubsub"
+            },
+            "default_route": None,
+            "status": {
+                "id": "mockid-b16a-4dbd-ad32-197c58aeef59",
+                "is_healthy": True,
+                "details": "Last observation has been delivered with success.",
+                "observation_delivered_24hrs": 50231,
+                "last_observation_delivered_at": "2023-03-31T11:20:00+0200"
+            }
+        }
+    )
+
+
 @pytest.fixture
 def connection_v2():
     return schemas_v2.Connection.parse_obj(
@@ -1256,6 +1410,63 @@ def connection_v2_traptagger_to_wpswatch():
                     },
                     "base_url": "https://wpswatch-api-qa.azurewebsites.net",
                     "status": "healthy",
+                }
+            ],
+            "routing_rules": [
+                {
+                    "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                    "name": "TrapTagger Default Route",
+                }
+            ],
+            "default_route": {
+                "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                "name": "TrapTagger Default Route",
+            },
+            "owner": {
+                "id": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+                "name": "Test Organization",
+                "description": "",
+            },
+            "status": "healthy",
+        }
+    )
+
+
+@pytest.fixture
+def connection_v2_traptagger_to_smart():
+    return schemas_v2.Connection.parse_obj(
+        {
+            "id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+            "provider": {
+                "id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "name": "Trap Tagger",
+                "owner": {
+                    "id": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+                    "name": "Test Organization",
+                },
+                "type": {
+                    "id": "190e3710-3a29-4710-b932-f951222209a7",
+                    "name": "TrapTagger",
+                    "value": "traptagger",
+                },
+                "base_url": "https://test.traptagger.com",
+                "status": "healthy",
+            },
+            "destinations": [
+                {
+                    "id": "0eecad72-1d2e-43b1-a169-c419c81fc957",
+                    "name": "SMART Demo (Mariano)",
+                    "owner": {
+                        "id": "45018398-7a2a-4f48-8971-39a2710d5dbd",
+                        "name": "Gundi Engineering"
+                    },
+                    "type": {
+                        "id": "be324645-de3f-4f88-beb7-c9a287f938f7",
+                        "name": "SMART Connect",
+                        "value": "smart_connect"
+                    },
+                    "base_url": "https://smartdemoconnect.smartconservationtools.org:443/server",
+                    "status": "healthy"
                 }
             ],
             "routing_rules": [

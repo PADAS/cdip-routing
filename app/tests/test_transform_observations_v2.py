@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 import pytest
 import pytz
@@ -600,3 +601,26 @@ async def test_transform_attachment_for_wpswatch(
     # Attachments are images for WPS Watch
     assert type(transformed_observation) == schemas.v2.WPSWatchImage
     assert transformed_observation.file_path == photo_attachment_v2.file_path
+
+
+@pytest.mark.asyncio
+async def test_transform_attachment_for_smart(
+    photo_attachment_v2,
+    connection_v2_traptagger_to_smart,
+    destination_integration_v2_smart,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=photo_attachment_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2_traptagger_to_smart.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    # Attachments added to SMART incidents by updating the waypoint attachments
+    assert type(transformed_observation) == schemas.v2.SMARTUpdateRequest
+    assert transformed_observation.waypoint_requests
+    assert len(transformed_observation.waypoint_requests) == 1
+    attachment = transformed_observation.waypoint_requests[0].properties.smartAttributes.attachments[0]
+    assert attachment.filename == os.path.basename(photo_attachment_v2.file_path)
+    assert attachment.data == f"gundi:storage:{photo_attachment_v2.file_path}"
+
