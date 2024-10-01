@@ -1290,8 +1290,8 @@ def destination_integration_v2_smart():
                         "value": "auth",
                     },
                     "data": {
-                        "login": "fakeuser",
-                        "password": "fakepass",  # pragma: allowlist secret
+                        "login": "fakeuser",  # ggignore
+                        "password": "fakepass",  # ggignore # pragma: allowlist secret
                     },
                 },
             ],
