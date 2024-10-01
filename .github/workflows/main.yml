@@ -52,7 +52,7 @@ jobs:
 
   dev-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
-    if: startsWith(github.ref, 'gundi-2975-smart-attachments')
+    if: startsWith(github.ref, 'refs/heads/gundi-2975-smart-attachments')
     needs: [vars, run_unit_tests, build]
     with:
       environment: dev
