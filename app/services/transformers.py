@@ -1,6 +1,7 @@
 import json
 import base64
 import logging
+import os
 
 import backoff
 import pytz
@@ -1328,6 +1329,34 @@ class SMARTTransformerV2(Transformer, ABC):
         )
         return smart_request
 
+    async def attachment_to_waypoint_update(
+        self,
+        *,
+        attachment: schemas.v2.Attachment = None,
+    ) -> SMARTRequest:
+        """
+        Build a SMARTRequest for updating an incident waypoint in SMART.
+        This will add an attachment in the incident waypoint.
+        """
+        incident_uuid = str(attachment.related_to)
+        file_path = attachment.file_path
+        file_reference = File(
+            filename=os.path.basename(file_path),
+            data=f"gundi:storage:{file_path}",
+        )
+        smart_request = SMARTRequest(
+            type="Feature",
+            properties=Properties(
+                smartDataType="incident",
+                smartFeatureType="waypoint",
+                smartAttributes=SmartAttributes(
+                    incidentUuid=incident_uuid,
+                    attachments=[file_reference]
+                ),
+            ),
+        )
+        return smart_request
+
 
 class SmartEventTransformerV2(SMARTTransformerV2):
     """
@@ -1380,6 +1409,26 @@ class SmartEventUpdateTransformerV2(SMARTTransformerV2):
             waypoint_requests.append(observation_update)
         smart_request = SMARTUpdateRequest(
             waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
+        )
+        return smart_request
+
+
+class SmartAttachmentTransformerV2(SMARTTransformerV2):
+    """
+    Transform a gundi Attachment into a SMARTUpdateRequest to add an attachment to an incident waypoint.
+    """
+
+    def __init__(self, *, config: SMARTPushEventActionConfig, **kwargs):
+        super().__init__(config=config, **kwargs)
+
+    async def transform(
+            self, message: schemas.v2.Attachment, rules: list = None, **kwargs
+    ) -> SMARTUpdateRequest:
+        if self._version and version.parse(self._version) < version.parse("7.5"):
+            raise ValueError("Smart version < 7.5 is not supported")
+        incident_update = await self.attachment_to_waypoint_update(attachment=message)
+        smart_request = SMARTUpdateRequest(
+            waypoint_requests=[incident_update], ca_uuid=self.ca_uuid
         )
         return smart_request
 
@@ -1905,7 +1954,8 @@ transformers_map = {
     },
     schemas.v2.StreamPrefixEnum.attachment.value: {
         schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer,
-        schemas.DestinationTypes.WPSWatch.value: WPSWatchAttachmentTransformerV2
+        schemas.DestinationTypes.WPSWatch.value: WPSWatchAttachmentTransformerV2,
+        schemas.DestinationTypes.SmartConnect.value: SmartAttachmentTransformerV2,
     },
     schemas.v2.StreamPrefixEnum.observation.value: {
         schemas.DestinationTypes.Movebank.value: MBObservationTransformer,

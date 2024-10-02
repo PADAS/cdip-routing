@@ -49,7 +49,10 @@ def mock_deduplication_cache_empty(mocker):
 @pytest.fixture
 def mock_deduplication_cache_one_miss(mocker):
     mock_cache = mocker.MagicMock()
-    mock_cache.get.side_effect = (async_return(None), async_return("1"),)
+    mock_cache.get.side_effect = (
+        async_return(None),
+        async_return("1"),
+    )
     mock_cache.setex.return_value = async_return(None)
     mock_cache.__aenter__.return_value = mock_cache
     mock_cache.__aexit__.return_value = None
@@ -75,11 +78,11 @@ def mock_cache_with_connection_error(mocker):
 
 @pytest.fixture
 def mock_gundi_client(
-        mocker,
-        inbound_integration_config,
-        outbound_integration_config,
-        outbound_integration_config_list,
-        device,
+    mocker,
+    inbound_integration_config,
+    outbound_integration_config,
+    outbound_integration_config_list,
+    device,
 ):
     mock_client = mocker.MagicMock()
     mock_client.get_inbound_integration.return_value = async_return(
@@ -123,7 +126,9 @@ def mock_smart_async_client(mocker, smart_ca_data_model, smart_cm_data_models):
 
 
 @pytest.fixture
-def mock_smart_async_client_with_server_error(mocker, smart_ca_data_model, smart_cm_data_models):
+def mock_smart_async_client_with_server_error(
+    mocker, smart_ca_data_model, smart_cm_data_models
+):
     mock_client = mocker.MagicMock()
     mock_client.get_incident.side_effect = SMARTClientException
     mock_client.get_patrol.return_value = async_return(None)
@@ -143,9 +148,13 @@ def mock_smart_async_client_class(mocker, mock_smart_async_client):
 
 
 @pytest.fixture
-def mock_smart_async_client_class_with_server_error(mocker, mock_smart_async_client_with_server_error):
+def mock_smart_async_client_class_with_server_error(
+    mocker, mock_smart_async_client_with_server_error
+):
     mock_smart_async_client_class = mocker.MagicMock()
-    mock_smart_async_client_class.return_value = mock_smart_async_client_with_server_error
+    mock_smart_async_client_class.return_value = (
+        mock_smart_async_client_with_server_error
+    )
     return mock_smart_async_client_class
 
 
@@ -168,11 +177,11 @@ def _set_side_effect_error_on_gundi_client_once(mock_client, error):
 
 @pytest.fixture
 def mock_gundi_client_with_client_connector_error_once(
-        mocker,
-        inbound_integration_config,
-        outbound_integration_config,
-        outbound_integration_config_list,
-        device,
+    mocker,
+    inbound_integration_config,
+    outbound_integration_config,
+    outbound_integration_config_list,
+    device,
 ):
     mock_client = mocker.MagicMock()
     # Simulate a connection error
@@ -188,11 +197,11 @@ def mock_gundi_client_with_client_connector_error_once(
 
 @pytest.fixture
 def mock_gundi_client_with_server_disconnected_error_once(
-        mocker,
-        inbound_integration_config,
-        outbound_integration_config,
-        outbound_integration_config_list,
-        device,
+    mocker,
+    inbound_integration_config,
+    outbound_integration_config,
+    outbound_integration_config_list,
+    device,
 ):
     mock_client = mocker.MagicMock()
     # Simulate a server disconnected error
@@ -208,11 +217,11 @@ def mock_gundi_client_with_server_disconnected_error_once(
 
 @pytest.fixture
 def mock_gundi_client_with_server_timeout_error_once(
-        mocker,
-        inbound_integration_config,
-        outbound_integration_config,
-        outbound_integration_config_list,
-        device,
+    mocker,
+    inbound_integration_config,
+    outbound_integration_config,
+    outbound_integration_config_list,
+    device,
 ):
     mock_client = mocker.MagicMock()
     # Simulate a timeout error
@@ -423,6 +432,7 @@ def raw_observation_geoevent():
         "observation_type": "ge",
     }
 
+
 @pytest.fixture
 def raw_observation_geoevent_for_smart():
     return {
@@ -441,11 +451,11 @@ def raw_observation_geoevent_for_smart():
         "additional": None,
         "title": "Anthropogenic Disturbance",
         "event_type": "humanactivity_humansign",
-        "event_details": {"typeofhumansign": "footprints", 
-                          "ageofsign": "10 days"},
+        "event_details": {"typeofhumansign": "footprints", "ageofsign": "10 days"},
         "geometry": None,
         "observation_type": "ge",
     }
+
 
 @pytest.fixture
 def raw_observation_geoevent_with_valid_uuid():
@@ -905,9 +915,7 @@ def smart_outbound_configuration_gcp_pubsub():
                 "broker": "gcp_pubsub",
                 "topic": "smart-dispatcher-xyz-topic",
                 "version": "7.5.7",
-                "ca_uuids": [
-                    "b48f15a7-dd87-4fb0-af42-a6a7d893705f"
-                ],
+                "ca_uuids": ["b48f15a7-dd87-4fb0-af42-a6a7d893705f"],
             },
         }
     )
@@ -936,10 +944,10 @@ def outbound_configuration_default():
 # ToDo: Find a common place for mocks and testing utilities that can be reused across services
 @pytest.fixture
 def mock_gundi_client_v2(
-        mocker,
-        connection_v2,
-        destination_integration_v2,
-        route_v2,
+    mocker,
+    connection_v2,
+    destination_integration_v2,
+    route_v2,
 ):
     mock_client = mocker.MagicMock()
     mock_client.get_connection_details.return_value = async_return(connection_v2)
@@ -1164,6 +1172,146 @@ def destination_integration_v2_wpswatch():
         }
     )
 
+
+@pytest.fixture
+def destination_integration_v2_smart():
+    return schemas_v2.Integration.parse_obj(
+        {
+            "id": "0eecad72-1d2e-43b1-a169-c419c81fc957",
+            "name": "SMART Demo (Mariano)",
+            "base_url": "https://smartdemoconnect.smartconservationtools.org:443/server",
+            "enabled": True,
+            "type": {
+                "id": "be324645-de3f-4f88-beb7-c9a287f938f7",
+                "name": "SMART Connect",
+                "value": "smart_connect",
+                "description": "",
+                "actions": [
+                    {
+                        "id": "a306a813-047c-4868-9f17-4e7732000b44",
+                        "type": "auth",
+                        "name": "Authenticate",
+                        "value": "auth",
+                        "description": "Authenticate against smart connect",
+                        "schema": {
+                            "type": "object",
+                            "title": "SMARTAuthActionConfig",
+                            "required": ["login", "password"],
+                            "properties": {
+                                "login": {"type": "string", "title": "Login"},
+                                "password": {"type": "string", "title": "Password"},
+                            },
+                        },
+                    },
+                    {
+                        "id": "eb78e965-f955-461a-9325-f678c9c57fdb",
+                        "type": "push",
+                        "name": "Push Events",
+                        "value": "push_events",
+                        "description": "Send Events to SMART Connect (a.k.a Incidents or waypoints)",
+                        "schema": {
+                            "type": "object",
+                            "title": "SMARTPushEventActionConfig",
+                            "properties": {
+                                "ca_uuids": {
+                                    "type": "array",
+                                    "items": {"type": "string", "format": "uuid"},
+                                    "title": "Ca Uuids",
+                                }
+                            },
+                        },
+                    },
+                ],
+                "webhook": None,
+            },
+            "owner": {
+                "id": "45018398-7a2a-4f48-8971-39a2710d5dbd",
+                "name": "Gundi Engineering",
+                "description": "Test organization",
+            },
+            "configurations": [
+                {
+                    "id": "fc2484d5-ad49-4895-9afe-f122c2fdda8f",
+                    "integration": "0eecad72-1d2e-43b1-a169-c419c81fc957",
+                    "action": {
+                        "id": "eb78e965-f955-461a-9325-f678c9c57fdb",
+                        "type": "push",
+                        "name": "Push Events",
+                        "value": "push_events",
+                    },
+                    "data": {
+                        "version": "7.5.7",
+                        "ca_uuids": ["169361d0-62b8-411d-a8e6-019823805016"],
+                        "configurable_models_lists": {
+                            "169361d0-62b8-411d-a8e6-019823805016": [
+                                {
+                                    "name": "គូលែន ព្រហ្មទេព 072022",
+                                    "uuid": "303b2e0a-d4b7-41b8-b6dc-065c9a661c7b",
+                                    "ca_id": "SMART",
+                                    "ca_name": "Demo Conservation Area",
+                                    "ca_uuid": "169361d0-62b8-411d-a8e6-019823805016",
+                                    "translations": [
+                                        {
+                                            "value": "គូលែន ព្រហ្មទេព 072022",
+                                            "language_code": "en",
+                                        },
+                                        {
+                                            "value": "គូលែន ព្រហ្មទេព 072022",
+                                            "language_code": "km",
+                                        },
+                                    ],
+                                    "use_with_earth_ranger": False,
+                                },
+                                {
+                                    "name": "ខនិក គូលែន ព្រហ្មទេព 092022",
+                                    "uuid": "a645f302-7fb0-4a29-a0ce-9d0092652803",
+                                    "ca_id": "SMART",
+                                    "ca_name": "Demo Conservation Area",
+                                    "ca_uuid": "169361d0-62b8-411d-a8e6-019823805016",
+                                    "translations": [
+                                        {
+                                            "value": "ខនិក គូលែន ព្រហ្មទេព 092022",
+                                            "language_code": "en",
+                                        }
+                                    ],
+                                    "use_with_earth_ranger": True,
+                                },
+                            ]
+                        },
+                    },
+                },
+                {
+                    "id": "2a0e8863-2ed9-4f9d-9496-1a08ac483df9",
+                    "integration": "0eecad72-1d2e-43b1-a169-c419c81fc957",
+                    "action": {
+                        "id": "a306a813-047c-4868-9f17-4e7732000b44",
+                        "type": "auth",
+                        "name": "Authenticate",
+                        "value": "auth",
+                    },
+                    "data": {
+                        "login": "fakeuser",  # ggignore
+                        "password": "fakepass",  # ggignore # pragma: allowlist secret
+                    },
+                },
+            ],
+            "webhook_configuration": None,
+            "additional": {
+                "topic": "smartdemoconnect-smartcon-c0PRUpN-topic",
+                "broker": "gcp_pubsub",
+            },
+            "default_route": None,
+            "status": {
+                "id": "mockid-b16a-4dbd-ad32-197c58aeef59",
+                "is_healthy": True,
+                "details": "Last observation has been delivered with success.",
+                "observation_delivered_24hrs": 50231,
+                "last_observation_delivered_at": "2023-03-31T11:20:00+0200",
+            },
+        }
+    )
+
+
 @pytest.fixture
 def connection_v2():
     return schemas_v2.Connection.parse_obj(
@@ -1279,6 +1427,63 @@ def connection_v2_traptagger_to_wpswatch():
 
 
 @pytest.fixture
+def connection_v2_traptagger_to_smart():
+    return schemas_v2.Connection.parse_obj(
+        {
+            "id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+            "provider": {
+                "id": "ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+                "name": "Trap Tagger",
+                "owner": {
+                    "id": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+                    "name": "Test Organization",
+                },
+                "type": {
+                    "id": "190e3710-3a29-4710-b932-f951222209a7",
+                    "name": "TrapTagger",
+                    "value": "traptagger",
+                },
+                "base_url": "https://test.traptagger.com",
+                "status": "healthy",
+            },
+            "destinations": [
+                {
+                    "id": "0eecad72-1d2e-43b1-a169-c419c81fc957",
+                    "name": "SMART Demo (Mariano)",
+                    "owner": {
+                        "id": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+                        "name": "Test Organization",
+                    },
+                    "type": {
+                        "id": "be324645-de3f-4f88-beb7-c9a287f938f7",
+                        "name": "SMART Connect",
+                        "value": "smart_connect",
+                    },
+                    "base_url": "https://smartdemoconnect.smartconservationtools.org:443/server",
+                    "status": "healthy",
+                }
+            ],
+            "routing_rules": [
+                {
+                    "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                    "name": "TrapTagger Default Route",
+                }
+            ],
+            "default_route": {
+                "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                "name": "TrapTagger Default Route",
+            },
+            "owner": {
+                "id": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+                "name": "Test Organization",
+                "description": "",
+            },
+            "status": "healthy",
+        }
+    )
+
+
+@pytest.fixture
 def route_v2():
     return schemas_v2.Route.parse_obj(
         {
@@ -1368,14 +1573,12 @@ def raw_observation_v2():
                 "lon": -72.704459,
                 "alt": 0,
                 "hdop": None,
-                "vdop": None
+                "vdop": None,
             },
-            "additional": {
-                "speed_kmph": 30
-            },
-            "observation_type": "obv"
+            "additional": {"speed_kmph": 30},
+            "observation_type": "obv",
         },
-        "event_type": "ObservationReceived"
+        "event_type": "ObservationReceived",
     }
 
 
@@ -1404,13 +1607,19 @@ def raw_event_v2():
             "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
             "external_source_id": "camera123",
             "recorded_at": "2024-07-04 18:09:12+00:00",
-            "location": {"lat": 13.688635, "lon": 13.783064, "alt": 0.0, "hdop": None, "vdop": None},
+            "location": {
+                "lat": 13.688635,
+                "lon": 13.783064,
+                "alt": 0.0,
+                "hdop": None,
+                "vdop": None,
+            },
             "title": "Animal Detected Test Event",
             "event_type": "wildlife_sighting_rep",
             "event_details": {"species": "lion"},
             "geometry": {},
-            "observation_type": "ev"
-        }
+            "observation_type": "ev",
+        },
     }
 
 
@@ -1437,14 +1646,10 @@ def raw_event_update():
             "annotations": None,
             "source_id": "ac1b9cdc-a193-4515-b446-b177bcc5f342",
             "external_source_id": "camera123",
-            "changes": {
-                "event_details": {
-                    "species": "wildcat"
-                }
-            },
-            "observation_type": "evu"
+            "changes": {"event_details": {"species": "wildcat"}},
+            "observation_type": "evu",
         },
-        "event_type": "EventUpdateReceived"
+        "event_type": "EventUpdateReceived",
     }
 
 
@@ -1467,13 +1672,14 @@ def raw_attachment_v2():
         "payload": {
             "gundi_id": "7687a8d5-a89d-4ceb-be3b-5e1e3b7dc1a9",
             "related_to": "5f0b33b0-cf0d-4280-990f-0096c357b6c5",
-            "owner": "na", "data_provider_id": "f870e228-4a65-40f0-888c-41bdc1124c3c",
+            "owner": "na",
+            "data_provider_id": "f870e228-4a65-40f0-888c-41bdc1124c3c",
             "annotations": None,
             "source_id": "None",
             "external_source_id": "None",
             "file_path": "attachments/7687a8d5-a89d-4ceb-be3b-5e1e3b7dc1a9_elephant-female.png",
-            "observation_type": "att"
-        }
+            "observation_type": "att",
+        },
     }
 
 
@@ -1561,6 +1767,7 @@ def event_v2_with_empty_event_details():
         observation_type="ev",
     )
 
+
 @pytest.fixture
 def event_update_species_wildcat():
     return schemas_v2.EventUpdate(
@@ -1571,12 +1778,8 @@ def event_update_species_wildcat():
         annotations=None,
         source_id="ac1b9cdc-a193-4515-b446-b177bcc5f342",
         external_source_id="camera123",
-        changes={
-            "event_details": {
-                "species": "Wildcat"
-            }
-        },
-        observation_type="evu"
+        changes={"event_details": {"species": "Wildcat"}},
+        observation_type="evu",
     )
 
 
@@ -1590,12 +1793,8 @@ def event_update_location_lon():
         annotations=None,
         source_id="ac1b9cdc-a193-4515-b446-b177bcc5f342",
         external_source_id="camera123",
-        changes={
-            "location": {
-                "lon": 13.783061
-            }
-        },
-        observation_type="evu"
+        changes={"location": {"lon": 13.783061}},
+        observation_type="evu",
     )
 
 
@@ -1609,13 +1808,8 @@ def event_update_location_full():
         annotations=None,
         source_id="ac1b9cdc-a193-4515-b446-b177bcc5f342",
         external_source_id="camera123",
-        changes={
-            "location": {
-                "lat": 13.688632,
-                "lon": 13.783061
-            }
-        },
-        observation_type="evu"
+        changes={"location": {"lat": 13.688632, "lon": 13.783061}},
+        observation_type="evu",
     )
 
 
@@ -1629,10 +1823,8 @@ def event_update_status_resolved():
         annotations=None,
         source_id="ac1b9cdc-a193-4515-b446-b177bcc5f342",
         external_source_id="camera123",
-        changes={
-            "status": "resolved"
-        },
-        observation_type="evu"
+        changes={"status": "resolved"},
+        observation_type="evu",
     )
 
 
@@ -1770,7 +1962,7 @@ def photo_attachment_v2():
         source_id="ea2d5fca-752a-4a44-b170-668d780db85e",
         external_source_id="gunditest",
         file_path="attachments/9bedc03e-8415-46db-aa70-782490cdff31_elephant.jpg",
-        observation_type="att"
+        observation_type="att",
     )
 
 
@@ -1813,16 +2005,13 @@ def animals_sign_event_update_v2():
         changes={
             "title": "Puma Sign",
             "recorded_at": "2024-08-05 13:27:10+00:00",
-            "location": {
-                "lat": 13.123456,
-                "lon": 13.123456
-            },
+            "location": {"lat": 13.123456, "lon": 13.123456},
             "event_type": "animals_sign",  # Event type and details must be changed together in SMART
             "event_details": {
                 "species": "puma",
                 "ageofsign": "weeks",
             },
-            "status": "resolved"
+            "status": "resolved",
         },
         observation_type="evu",
     )
@@ -1838,9 +2027,7 @@ def animals_sign_event_update_title_v2():
         annotations={},
         source_id="afa0d606-c143-4705-955d-68133645db6d",
         external_source_id="Xyz123",
-        changes={
-            "title": "Leopard Sign"
-        },
+        changes={"title": "Leopard Sign"},
         observation_type="evu",
     )
 
@@ -1855,12 +2042,7 @@ def animals_sign_event_update_location_v2():
         annotations={},
         source_id="afa0d606-c143-4705-955d-68133645db6d",
         external_source_id="Xyz123",
-        changes={
-            "location": {
-                "lat": 13.123457,
-                "lon": 13.123457
-            }
-        },
+        changes={"location": {"lat": 13.123457, "lon": 13.123457}},
         observation_type="evu",
     )
 
@@ -1877,9 +2059,7 @@ def animals_sign_event_update_details_v2():
         external_source_id="Xyz123",
         changes={
             "event_type": "animals_sign",  # Event type and details must be changed together in SMART
-            "event_details": {
-                "species": "leopard"
-            },
+            "event_details": {"species": "leopard"},
         },
         observation_type="evu",
     )
@@ -1897,9 +2077,7 @@ def animals_sign_event_update_details_without_event_type_v2():
         external_source_id="Xyz123",
         changes={
             # Event type intentionally left out
-            "event_details": {
-                "species": "leopard"
-            },
+            "event_details": {"species": "leopard"},
         },
         observation_type="evu",
     )
@@ -2163,7 +2341,9 @@ def destination_integration_v2_smart(integration_type_smart, smart_ca_uuid):
 
 
 @pytest.fixture
-def destination_integration_v2_smart_without_transform_rules(integration_type_smart, smart_ca_uuid):
+def destination_integration_v2_smart_without_transform_rules(
+    integration_type_smart, smart_ca_uuid
+):
     return schemas_v2.Integration(
         id=UUID("b42c9205-5228-49e0-a75b-ebe5b6a9f78e"),
         name="Integration X SMART Connect",
@@ -2385,7 +2565,7 @@ def route_config_with_event_type_mappings():
                             "provider_field": "event_details__species",
                             "destination_field": "event_type",
                         }
-                    }
+                    },
                 }
             }
         },
@@ -2436,14 +2616,14 @@ def geoevent_v1_request_payload():
                 "observation_type": "ge",
                 "tracing_context": "{}",
             },
-            "data": "eyJpZCI6IG51bGwsICJvd25lciI6ICJuYSIsICJpbnRlZ3JhdGlvbl9pZCI6ICJjMjVhNTNmNi1lMjA2LTQzZGQtOGY2Mi1hMzc1OTU2NWFlM2QiLCAiZGV2aWNlX2lkIjogIm5vbmUiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wMi0yMCAyMDozNDowOC0wMzowMCIsICJsb2NhdGlvbiI6IHsieCI6IC01MS42ODg2NzUsICJ5IjogLTcyLjcwNDQ2NSwgInoiOiAwLjAsICJoZG9wIjogbnVsbCwgInZkb3AiOiBudWxsfSwgImFkZGl0aW9uYWwiOiBudWxsLCAidGl0bGUiOiAiUG9hY2hlcnMgQWN0aXZpdHkiLCAiZXZlbnRfdHlwZSI6ICJodW1hbmFjdGl2aXR5X3BvYWNoaW5nIiwgImV2ZW50X2RldGFpbHMiOiB7fSwgImdlb21ldHJ5IjogbnVsbCwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZ2UifQ==",
+            "data": "eyJpZCI6IG51bGwsICJvd25lciI6ICJuYSIsICJpbnRlZ3JhdGlvbl9pZCI6ICJjMjVhNTNmNi1lMjA2LTQzZGQtOGY2Mi1hMzc1OTU2NWFlM2QiLCAiZGV2aWNlX2lkIjogIm5vbmUiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wMi0yMCAyMDozNDowOC0wMzowMCIsICJsb2NhdGlvbiI6IHsieCI6IC01MS42ODg2NzUsICJ5IjogLTcyLjcwNDQ2NSwgInoiOiAwLjAsICJoZG9wIjogbnVsbCwgInZkb3AiOiBudWxsfSwgImFkZGl0aW9uYWwiOiBudWxsLCAidGl0bGUiOiAiUG9hY2hlcnMgQWN0aXZpdHkiLCAiZXZlbnRfdHlwZSI6ICJodW1hbmFjdGl2aXR5X3BvYWNoaW5nIiwgImV2ZW50X2RldGFpbHMiOiB7fSwgImdlb21ldHJ5IjogbnVsbCwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZ2UifQ==",  # pragma: allowlist secret
             # pragma: allowlist secret
             "messageId": "8255786613739821",
             "message_id": "8255786613739821",
             "publishTime": timestamp,
             "publish_time": timestamp,
         },
-        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB",
+        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB",  # pragma: allowlist secret
     }
 
 
@@ -2455,12 +2635,11 @@ def geoevent_v1_eventarc_request_payload():
                 "observation_type": "ge",
                 "tracing_context": "{}",
             },
-            "data": "eyJpZCI6IG51bGwsICJvd25lciI6ICJuYSIsICJpbnRlZ3JhdGlvbl9pZCI6ICJjMjVhNTNmNi1lMjA2LTQzZGQtOGY2Mi1hMzc1OTU2NWFlM2QiLCAiZGV2aWNlX2lkIjogIm5vbmUiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wMi0yMCAyMDozNDowOC0wMzowMCIsICJsb2NhdGlvbiI6IHsieCI6IC01MS42ODg2NzUsICJ5IjogLTcyLjcwNDQ2NSwgInoiOiAwLjAsICJoZG9wIjogbnVsbCwgInZkb3AiOiBudWxsfSwgImFkZGl0aW9uYWwiOiBudWxsLCAidGl0bGUiOiAiUG9hY2hlcnMgQWN0aXZpdHkiLCAiZXZlbnRfdHlwZSI6ICJodW1hbmFjdGl2aXR5X3BvYWNoaW5nIiwgImV2ZW50X2RldGFpbHMiOiB7fSwgImdlb21ldHJ5IjogbnVsbCwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZ2UifQ==",
-            # pragma: allowlist secret
+            "data": "eyJpZCI6IG51bGwsICJvd25lciI6ICJuYSIsICJpbnRlZ3JhdGlvbl9pZCI6ICJjMjVhNTNmNi1lMjA2LTQzZGQtOGY2Mi1hMzc1OTU2NWFlM2QiLCAiZGV2aWNlX2lkIjogIm5vbmUiLCAicmVjb3JkZWRfYXQiOiAiMjAyNC0wMi0yMCAyMDozNDowOC0wMzowMCIsICJsb2NhdGlvbiI6IHsieCI6IC01MS42ODg2NzUsICJ5IjogLTcyLjcwNDQ2NSwgInoiOiAwLjAsICJoZG9wIjogbnVsbCwgInZkb3AiOiBudWxsfSwgImFkZGl0aW9uYWwiOiBudWxsLCAidGl0bGUiOiAiUG9hY2hlcnMgQWN0aXZpdHkiLCAiZXZlbnRfdHlwZSI6ICJodW1hbmFjdGl2aXR5X3BvYWNoaW5nIiwgImV2ZW50X2RldGFpbHMiOiB7fSwgImdlb21ldHJ5IjogbnVsbCwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZ2UifQ==",  # pragma: allowlist secret
             "messageId": "8255786613739821",
-            "message_id": "8255786613739821"
+            "message_id": "8255786613739821",
         },
-        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB",
+        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB",  # pragma: allowlist secret
     }
 
 
@@ -2468,38 +2647,38 @@ def geoevent_v1_eventarc_request_payload():
 def event_v2_request_payload(animals_sign_event_v2):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     return {
-       "message": {
-          "attributes": {
-             "gundi_id": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
-             "gundi_version": "v2",
-             "observation_type": "ev",
-             "tracing_context": "{}"
-          },
-          "data": "eyJldmVudF9pZCI6ICI0Y2M5NjVmZS04ZGQxLTQxZjEtODc1ZC0wYTdmNWIyMjI5ZDMiLCAidGltZXN0YW1wIjogIjIwMjQtMDgtMTIgMTI6Mjk6MjkuNDc2NDA1KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Imd1bmRpX2lkIjogIjQ1N2MwYmZkLWUyMDgtNGQ2NS1iYjllLWE3MjgwODIyY2I0MiIsICJvd25lciI6ICI0NTAxODM5OC03YTJhLTRmNDgtODk3MS0zOWEyNzEwZDVkYmQiLCAiZGF0YV9wcm92aWRlcl9pZCI6ICI3Y2M4MGU4NS01YTk3LTRmYjQtYWE5Yy0zMTVhNjg0YjU2NDYiLCAiYW5ub3RhdGlvbnMiOiB7fSwgInNvdXJjZV9pZCI6ICIzYjNjMjk5My04MjAxLTQ0MzQtOTMzNy0yMzBiODkxN2Y2NTIiLCAiZXh0ZXJuYWxfc291cmNlX2lkIjogImRlZmF1bHQtc291cmNlIiwgInJlY29yZGVkX2F0IjogIjIwMjQtMDgtMTIgMTI6Mjk6MTArMDA6MDAiLCAibG9jYXRpb24iOiB7ImxhdCI6IDEzLjY4ODYzMiwgImxvbiI6IDEzLjc4MzA2OCwgImFsdCI6IDAuMH0sICJ0aXRsZSI6ICJBbmltYWxzIERldGVjdGVkIiwgImV2ZW50X3R5cGUiOiAiYW5pbWFscyIsICJldmVudF9kZXRhaWxzIjogeyJ0YXJnZXRzcGVjaWVzIjogInJlcHRpbGVzLnB5dGhvbnNwcCIsICJ3aWxkbGlmZW9ic2VydmF0aW9udHlwZSI6ICJkaXJlY3RvYnNlcnZhdGlvbiIsICJhZ2VvZnNpZ25hbmltYWwiOiAiZnJlc2giLCAibnVtYmVyb2ZhbmltYWwiOiAyfSwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZXYifSwgImV2ZW50X3R5cGUiOiAiRXZlbnRSZWNlaXZlZCJ9",
-          "messageId": "11960027960451651",
-          "message_id": "11960027960451651",
-          "publishTime": timestamp,
-          "publish_time": timestamp
-       },
-       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+        "message": {
+            "attributes": {
+                "gundi_id": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
+                "gundi_version": "v2",
+                "observation_type": "ev",
+                "tracing_context": "{}",
+            },
+            "data": "eyJldmVudF9pZCI6ICI0Y2M5NjVmZS04ZGQxLTQxZjEtODc1ZC0wYTdmNWIyMjI5ZDMiLCAidGltZXN0YW1wIjogIjIwMjQtMDgtMTIgMTI6Mjk6MjkuNDc2NDA1KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Imd1bmRpX2lkIjogIjQ1N2MwYmZkLWUyMDgtNGQ2NS1iYjllLWE3MjgwODIyY2I0MiIsICJvd25lciI6ICI0NTAxODM5OC03YTJhLTRmNDgtODk3MS0zOWEyNzEwZDVkYmQiLCAiZGF0YV9wcm92aWRlcl9pZCI6ICI3Y2M4MGU4NS01YTk3LTRmYjQtYWE5Yy0zMTVhNjg0YjU2NDYiLCAiYW5ub3RhdGlvbnMiOiB7fSwgInNvdXJjZV9pZCI6ICIzYjNjMjk5My04MjAxLTQ0MzQtOTMzNy0yMzBiODkxN2Y2NTIiLCAiZXh0ZXJuYWxfc291cmNlX2lkIjogImRlZmF1bHQtc291cmNlIiwgInJlY29yZGVkX2F0IjogIjIwMjQtMDgtMTIgMTI6Mjk6MTArMDA6MDAiLCAibG9jYXRpb24iOiB7ImxhdCI6IDEzLjY4ODYzMiwgImxvbiI6IDEzLjc4MzA2OCwgImFsdCI6IDAuMH0sICJ0aXRsZSI6ICJBbmltYWxzIERldGVjdGVkIiwgImV2ZW50X3R5cGUiOiAiYW5pbWFscyIsICJldmVudF9kZXRhaWxzIjogeyJ0YXJnZXRzcGVjaWVzIjogInJlcHRpbGVzLnB5dGhvbnNwcCIsICJ3aWxkbGlmZW9ic2VydmF0aW9udHlwZSI6ICJkaXJlY3RvYnNlcnZhdGlvbiIsICJhZ2VvZnNpZ25hbmltYWwiOiAiZnJlc2giLCAibnVtYmVyb2ZhbmltYWwiOiAyfSwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZXYifSwgImV2ZW50X3R5cGUiOiAiRXZlbnRSZWNlaXZlZCJ9",  # pragma: allowlist secret
+            "messageId": "11960027960451651",
+            "message_id": "11960027960451651",
+            "publishTime": timestamp,
+            "publish_time": timestamp,
+        },
+        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB",  # pragma: allowlist secret
     }
 
 
 @pytest.fixture
 def event_v2_eventarc_request_payload(animals_sign_event_v2):
     return {
-       "message": {
-          "attributes": {
-             "gundi_id": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
-             "gundi_version": "v2",
-             "observation_type": "ev",
-             "tracing_context": "{}"
-          },
-          "data": "eyJldmVudF9pZCI6ICI0Y2M5NjVmZS04ZGQxLTQxZjEtODc1ZC0wYTdmNWIyMjI5ZDMiLCAidGltZXN0YW1wIjogIjIwMjQtMDgtMTIgMTI6Mjk6MjkuNDc2NDA1KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Imd1bmRpX2lkIjogIjQ1N2MwYmZkLWUyMDgtNGQ2NS1iYjllLWE3MjgwODIyY2I0MiIsICJvd25lciI6ICI0NTAxODM5OC03YTJhLTRmNDgtODk3MS0zOWEyNzEwZDVkYmQiLCAiZGF0YV9wcm92aWRlcl9pZCI6ICI3Y2M4MGU4NS01YTk3LTRmYjQtYWE5Yy0zMTVhNjg0YjU2NDYiLCAiYW5ub3RhdGlvbnMiOiB7fSwgInNvdXJjZV9pZCI6ICIzYjNjMjk5My04MjAxLTQ0MzQtOTMzNy0yMzBiODkxN2Y2NTIiLCAiZXh0ZXJuYWxfc291cmNlX2lkIjogImRlZmF1bHQtc291cmNlIiwgInJlY29yZGVkX2F0IjogIjIwMjQtMDgtMTIgMTI6Mjk6MTArMDA6MDAiLCAibG9jYXRpb24iOiB7ImxhdCI6IDEzLjY4ODYzMiwgImxvbiI6IDEzLjc4MzA2OCwgImFsdCI6IDAuMH0sICJ0aXRsZSI6ICJBbmltYWxzIERldGVjdGVkIiwgImV2ZW50X3R5cGUiOiAiYW5pbWFscyIsICJldmVudF9kZXRhaWxzIjogeyJ0YXJnZXRzcGVjaWVzIjogInJlcHRpbGVzLnB5dGhvbnNwcCIsICJ3aWxkbGlmZW9ic2VydmF0aW9udHlwZSI6ICJkaXJlY3RvYnNlcnZhdGlvbiIsICJhZ2VvZnNpZ25hbmltYWwiOiAiZnJlc2giLCAibnVtYmVyb2ZhbmltYWwiOiAyfSwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZXYifSwgImV2ZW50X3R5cGUiOiAiRXZlbnRSZWNlaXZlZCJ9",
-          "messageId": "11960027960451651",
-          "message_id": "11960027960451651",
-       },
-       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+        "message": {
+            "attributes": {
+                "gundi_id": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
+                "gundi_version": "v2",
+                "observation_type": "ev",
+                "tracing_context": "{}",
+            },
+            "data": "eyJldmVudF9pZCI6ICI0Y2M5NjVmZS04ZGQxLTQxZjEtODc1ZC0wYTdmNWIyMjI5ZDMiLCAidGltZXN0YW1wIjogIjIwMjQtMDgtMTIgMTI6Mjk6MjkuNDc2NDA1KzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Imd1bmRpX2lkIjogIjQ1N2MwYmZkLWUyMDgtNGQ2NS1iYjllLWE3MjgwODIyY2I0MiIsICJvd25lciI6ICI0NTAxODM5OC03YTJhLTRmNDgtODk3MS0zOWEyNzEwZDVkYmQiLCAiZGF0YV9wcm92aWRlcl9pZCI6ICI3Y2M4MGU4NS01YTk3LTRmYjQtYWE5Yy0zMTVhNjg0YjU2NDYiLCAiYW5ub3RhdGlvbnMiOiB7fSwgInNvdXJjZV9pZCI6ICIzYjNjMjk5My04MjAxLTQ0MzQtOTMzNy0yMzBiODkxN2Y2NTIiLCAiZXh0ZXJuYWxfc291cmNlX2lkIjogImRlZmF1bHQtc291cmNlIiwgInJlY29yZGVkX2F0IjogIjIwMjQtMDgtMTIgMTI6Mjk6MTArMDA6MDAiLCAibG9jYXRpb24iOiB7ImxhdCI6IDEzLjY4ODYzMiwgImxvbiI6IDEzLjc4MzA2OCwgImFsdCI6IDAuMH0sICJ0aXRsZSI6ICJBbmltYWxzIERldGVjdGVkIiwgImV2ZW50X3R5cGUiOiAiYW5pbWFscyIsICJldmVudF9kZXRhaWxzIjogeyJ0YXJnZXRzcGVjaWVzIjogInJlcHRpbGVzLnB5dGhvbnNwcCIsICJ3aWxkbGlmZW9ic2VydmF0aW9udHlwZSI6ICJkaXJlY3RvYnNlcnZhdGlvbiIsICJhZ2VvZnNpZ25hbmltYWwiOiAiZnJlc2giLCAibnVtYmVyb2ZhbmltYWwiOiAyfSwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZXYifSwgImV2ZW50X3R5cGUiOiAiRXZlbnRSZWNlaXZlZCJ9",  # pragma: allowlist secret
+            "messageId": "11960027960451651",
+            "message_id": "11960027960451651",
+        },
+        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB",  # pragma: allowlist secret
     }
 
 
@@ -2507,40 +2686,40 @@ def event_v2_eventarc_request_payload(animals_sign_event_v2):
 def event_update_v2_request_payload():
     timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     return {
-       "message": {
-          "attributes": {
-             "gundi_id": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
-             "gundi_version": "v2",
-             "observation_type": "evu",
-             "tracing_context": "{}"
-          },
-          "data": "eyJldmVudF9pZCI6ICI1ZDU4NjQ5ZC00YWQ1LTQ2YmUtOWEwZS1mMGJmZmYxMWMwMjQiLCAidGltZXN0YW1wIjogIjIwMjQtMDgtMTIgMTI6NDg6MDcuMzM2NzIwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Imd1bmRpX2lkIjogIjQ1N2MwYmZkLWUyMDgtNGQ2NS1iYjllLWE3MjgwODIyY2I0MiIsICJyZWxhdGVkX3RvIjogIk5vbmUiLCAib3duZXIiOiAiNDUwMTgzOTgtN2EyYS00ZjQ4LTg5NzEtMzlhMjcxMGQ1ZGJkIiwgImRhdGFfcHJvdmlkZXJfaWQiOiAiN2NjODBlODUtNWE5Ny00ZmI0LWFhOWMtMzE1YTY4NGI1NjQ2IiwgInNvdXJjZV9pZCI6ICIzYjNjMjk5My04MjAxLTQ0MzQtOTMzNy0yMzBiODkxN2Y2NTIiLCAiZXh0ZXJuYWxfc291cmNlX2lkIjogImRlZmF1bHQtc291cmNlIiwgImNoYW5nZXMiOiB7InRpdGxlIjogIlNuZWFrcyBkZXRlY3RlZCIsICJyZWNvcmRlZF9hdCI6ICIyMDI0LTA4LTEyIDEyOjEyOjEwKzAwOjAwIiwgImxvY2F0aW9uIjogeyJsYXQiOiAxMy42ODg2MzUsICJsb24iOiAxMy43ODMwNjh9LCAiZXZlbnRfdHlwZSI6ICJhbmltYWxzIiwgImV2ZW50X2RldGFpbHMiOiB7InRhcmdldHNwZWNpZXMiOiAicmVwdGlsZXMucHl0aG9uc3BwIiwgIndpbGRsaWZlb2JzZXJ2YXRpb250eXBlIjogImRpcmVjdG9ic2VydmF0aW9uIiwgImFnZW9mc2lnbmFuaW1hbCI6ICJmcmVzaCIsICJudW1iZXJvZmFuaW1hbCI6IDJ9fSwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZXZ1In0sICJldmVudF90eXBlIjogIkV2ZW50VXBkYXRlUmVjZWl2ZWQifQ==",
-          "messageId": "11960897894856249",
-          "message_id": "11960897894856249",
-          "orderingKey": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
-          "publishTime": timestamp,
-          "publish_time": timestamp
-       },
-       "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB"
+        "message": {
+            "attributes": {
+                "gundi_id": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
+                "gundi_version": "v2",
+                "observation_type": "evu",
+                "tracing_context": "{}",
+            },
+            "data": "eyJldmVudF9pZCI6ICI1ZDU4NjQ5ZC00YWQ1LTQ2YmUtOWEwZS1mMGJmZmYxMWMwMjQiLCAidGltZXN0YW1wIjogIjIwMjQtMDgtMTIgMTI6NDg6MDcuMzM2NzIwKzAwOjAwIiwgInNjaGVtYV92ZXJzaW9uIjogInYxIiwgInBheWxvYWQiOiB7Imd1bmRpX2lkIjogIjQ1N2MwYmZkLWUyMDgtNGQ2NS1iYjllLWE3MjgwODIyY2I0MiIsICJyZWxhdGVkX3RvIjogIk5vbmUiLCAib3duZXIiOiAiNDUwMTgzOTgtN2EyYS00ZjQ4LTg5NzEtMzlhMjcxMGQ1ZGJkIiwgImRhdGFfcHJvdmlkZXJfaWQiOiAiN2NjODBlODUtNWE5Ny00ZmI0LWFhOWMtMzE1YTY4NGI1NjQ2IiwgInNvdXJjZV9pZCI6ICIzYjNjMjk5My04MjAxLTQ0MzQtOTMzNy0yMzBiODkxN2Y2NTIiLCAiZXh0ZXJuYWxfc291cmNlX2lkIjogImRlZmF1bHQtc291cmNlIiwgImNoYW5nZXMiOiB7InRpdGxlIjogIlNuZWFrcyBkZXRlY3RlZCIsICJyZWNvcmRlZF9hdCI6ICIyMDI0LTA4LTEyIDEyOjEyOjEwKzAwOjAwIiwgImxvY2F0aW9uIjogeyJsYXQiOiAxMy42ODg2MzUsICJsb24iOiAxMy43ODMwNjh9LCAiZXZlbnRfdHlwZSI6ICJhbmltYWxzIiwgImV2ZW50X2RldGFpbHMiOiB7InRhcmdldHNwZWNpZXMiOiAicmVwdGlsZXMucHl0aG9uc3BwIiwgIndpbGRsaWZlb2JzZXJ2YXRpb250eXBlIjogImRpcmVjdG9ic2VydmF0aW9uIiwgImFnZW9mc2lnbmFuaW1hbCI6ICJmcmVzaCIsICJudW1iZXJvZmFuaW1hbCI6IDJ9fSwgIm9ic2VydmF0aW9uX3R5cGUiOiAiZXZ1In0sICJldmVudF90eXBlIjogIkV2ZW50VXBkYXRlUmVjZWl2ZWQifQ==",  # pragma: allowlist secret
+            "messageId": "11960897894856249",
+            "message_id": "11960897894856249",
+            "orderingKey": "457c0bfd-e208-4d65-bb9e-a7280822cb42",
+            "publishTime": timestamp,
+            "publish_time": timestamp,
+        },
+        "subscription": "projects/MY-PROJECT/subscriptions/MY-SUB",  # pragma: allowlist secret
     }
 
 
 @pytest.fixture
 def pubsub_request_headers():
     return {
-       "host": "routing-transformer-service-dev-jba4og2dyq-uc.a.run.app",
-       "content-type": "application/json",
-       "authorization": "Bearer test-token",
-       "content-length": "1524",
-       "accept": "application/json",
-       "from": "noreply@google.com",
-       "user-agent":"APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)",
-       "x-cloud-trace-context": "cb94e62c4850655436ac78b7e9466b18/12389870433059380709;o=1",
-       "traceparent": "00-cb94e62c4850655436ac78b7e9466b18-abf1a983b79e9de5-01",
-       "x-forwarded-for": "66.102.6.198",
-       "x-forwarded-proto": "https",
-       "forwarded": "for=\"66.102.6.198\";proto=https",
-       "accept-encoding": "gzip, deflate, br"
+        "host": "routing-transformer-service-dev-jba4og2dyq-uc.a.run.app",
+        "content-type": "application/json",
+        "authorization": "Bearer test-token",
+        "content-length": "1524",
+        "accept": "application/json",
+        "from": "noreply@google.com",
+        "user-agent": "APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)",
+        "x-cloud-trace-context": "cb94e62c4850655436ac78b7e9466b18/12389870433059380709;o=1",
+        "traceparent": "00-cb94e62c4850655436ac78b7e9466b18-abf1a983b79e9de5-01",
+        "x-forwarded-for": "66.102.6.198",
+        "x-forwarded-proto": "https",
+        "forwarded": 'for="66.102.6.198";proto=https',
+        "accept-encoding": "gzip, deflate, br",
     }
 
 
@@ -2548,22 +2727,22 @@ def pubsub_request_headers():
 def eventarc_request_headers():
     timestamp = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     return {
-       "host": "routing-transformer-service-prod-nhgde2snxa-uc.a.run.app",
-       "content-type": "application/json",
-       "authorization": "Bearer F4keT0k3n",
-       "content-length": "1733",
-       "accept": "application/json",
-       "from": "noreply@google.com",
-       "user-agent": "APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)",
-       "x-cloud-trace-context": "fa75a3bf8bed02e44d18cb795acf931b/10784891745238219625",
-       "traceparent": "00-fa75a3bf8bed02e44d18cb795acf931b-95aba1e6c7f77b69-00",
-       "x-forwarded-for": "64.233.172.66",
-       "x-forwarded-proto": "https",
-       "forwarded": "for=\"64.233.172.66\";proto=https",
-       "accept-encoding": "gzip, deflate, br",
-       "ce-id": "12180675488418773",
-       "ce-source": "//pubsub.googleapis.com/projects/cdip-prod1-78ca/topics/raw-observations-prod",
-       "ce-specversion": "1.0",
-       "ce-type": "google.cloud.pubsub.topic.v1.messagePublished",
-       "ce-time": timestamp
+        "host": "routing-transformer-service-prod-nhgde2snxa-uc.a.run.app",
+        "content-type": "application/json",
+        "authorization": "Bearer F4keT0k3n",
+        "content-length": "1733",
+        "accept": "application/json",
+        "from": "noreply@google.com",
+        "user-agent": "APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)",
+        "x-cloud-trace-context": "fa75a3bf8bed02e44d18cb795acf931b/10784891745238219625",
+        "traceparent": "00-fa75a3bf8bed02e44d18cb795acf931b-95aba1e6c7f77b69-00",
+        "x-forwarded-for": "64.233.172.66",
+        "x-forwarded-proto": "https",
+        "forwarded": 'for="64.233.172.66";proto=https',
+        "accept-encoding": "gzip, deflate, br",
+        "ce-id": "12180675488418773",
+        "ce-source": "//pubsub.googleapis.com/projects/cdip-prod1-78ca/topics/raw-observations-prod",
+        "ce-specversion": "1.0",
+        "ce-type": "google.cloud.pubsub.topic.v1.messagePublished",
+        "ce-time": timestamp,
     }
