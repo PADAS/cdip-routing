@@ -1076,6 +1076,7 @@ def destination_integration_v2():
                 "name": "Mukutan - Load Testing",
             },
             "status": "healthy",
+            "status_details": "",
         }
     )
 
@@ -1157,6 +1158,7 @@ def destination_integration_v2_wpswatch():
             },
             "default_route": None,
             "status": "healthy",
+            "status_details": "",
         }
     )
 
@@ -1290,6 +1292,7 @@ def destination_integration_v2_smart():
             },
             "default_route": None,
             "status": "healthy",
+            "status_details": "",
         }
     )
 
@@ -1313,6 +1316,7 @@ def connection_v2():
                 },
                 "base_url": "https://test.traptagger.com",
                 "status": "healthy",
+                "status_details": "",
             },
             "destinations": [
                 {
@@ -1329,6 +1333,7 @@ def connection_v2():
                     },
                     "base_url": "https://gundi-load-testing.pamdas.org",
                     "status": "healthy",
+                    "status_details": "",
                 }
             ],
             "routing_rules": [
@@ -1370,6 +1375,7 @@ def connection_v2_traptagger_to_wpswatch():
                 },
                 "base_url": "https://test.traptagger.com",
                 "status": "healthy",
+                "status_details": "",
             },
             "destinations": [
                 {
@@ -1386,6 +1392,7 @@ def connection_v2_traptagger_to_wpswatch():
                     },
                     "base_url": "https://wpswatch-api-qa.azurewebsites.net",
                     "status": "healthy",
+                    "status_details": "",
                 }
             ],
             "routing_rules": [
@@ -1427,6 +1434,7 @@ def connection_v2_traptagger_to_smart():
                 },
                 "base_url": "https://test.traptagger.com",
                 "status": "healthy",
+                "status_details": "",
             },
             "destinations": [
                 {
@@ -1443,6 +1451,7 @@ def connection_v2_traptagger_to_smart():
                     },
                     "base_url": "https://smartdemoconnect.smartconservationtools.org:443/server",
                     "status": "healthy",
+                    "status_details": "",
                 }
             ],
             "routing_rules": [
@@ -1487,6 +1496,7 @@ def route_v2():
                     },
                     "base_url": "https://test.traptagger.com",
                     "status": "healthy",
+                    "status_details": "",
                 }
             ],
             "destinations": [
@@ -1504,6 +1514,7 @@ def route_v2():
                     },
                     "base_url": "https://gundi-load-testing.pamdas.org",
                     "status": "healthy",
+                    "status_details": "",
                 }
             ],
             "configuration": {
@@ -2089,6 +2100,7 @@ def destination_integration_v2_er(integration_type_er):
         type=integration_type_er,
         base_url="https://gundi-load-testing.pamdas.org",
         status="healthy",
+        status_details="",
     )
 
 
@@ -2114,6 +2126,7 @@ def destination_integration_v2_movebank(integration_type_movebank):
         type=integration_type_movebank,
         base_url="https://mb-load-testing.pamdas.org",
         status="healthy",
+        status_details="",
     )
 
 
@@ -2313,6 +2326,7 @@ def destination_integration_v2_smart(integration_type_smart, smart_ca_uuid):
         default_route=None,
         additional={},
         status="healthy",
+        status_details="",
     )
 
 
@@ -2501,6 +2515,7 @@ def destination_integration_v2_smart_without_transform_rules(
         default_route=None,
         additional={},
         status="healthy",
+        status_details="",
     )
 
 
