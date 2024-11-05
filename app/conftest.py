@@ -1075,13 +1075,8 @@ def destination_integration_v2():
                 "id": "38dd8ec2-b3ee-4c31-940e-b6cc9c1f4326",
                 "name": "Mukutan - Load Testing",
             },
-            "status": {
-                "id": "mockid-b16a-4dbd-ad32-197c58aeef59",
-                "is_healthy": True,
-                "details": "Last observation has been delivered with success.",
-                "observation_delivered_24hrs": 50231,
-                "last_observation_delivered_at": "2023-03-31T11:20:00+0200",
-            },
+            "status": "healthy",
+            "status_details": "",
         }
     )
 
@@ -1162,13 +1157,8 @@ def destination_integration_v2_wpswatch():
                 "broker": "gcp_pubsub",
             },
             "default_route": None,
-            "status": {
-                "id": "mockid-b16a-4dbd-ad32-197c58aeef59",
-                "is_healthy": True,
-                "details": "Last observation has been delivered with success.",
-                "observation_delivered_24hrs": 50231,
-                "last_observation_delivered_at": "2023-03-31T11:20:00+0200",
-            },
+            "status": "healthy",
+            "status_details": "",
         }
     )
 
@@ -1301,13 +1291,8 @@ def destination_integration_v2_smart():
                 "broker": "gcp_pubsub",
             },
             "default_route": None,
-            "status": {
-                "id": "mockid-b16a-4dbd-ad32-197c58aeef59",
-                "is_healthy": True,
-                "details": "Last observation has been delivered with success.",
-                "observation_delivered_24hrs": 50231,
-                "last_observation_delivered_at": "2023-03-31T11:20:00+0200",
-            },
+            "status": "healthy",
+            "status_details": "",
         }
     )
 
@@ -1331,6 +1316,7 @@ def connection_v2():
                 },
                 "base_url": "https://test.traptagger.com",
                 "status": "healthy",
+                "status_details": "",
             },
             "destinations": [
                 {
@@ -1347,6 +1333,7 @@ def connection_v2():
                     },
                     "base_url": "https://gundi-load-testing.pamdas.org",
                     "status": "healthy",
+                    "status_details": "",
                 }
             ],
             "routing_rules": [
@@ -1388,6 +1375,7 @@ def connection_v2_traptagger_to_wpswatch():
                 },
                 "base_url": "https://test.traptagger.com",
                 "status": "healthy",
+                "status_details": "",
             },
             "destinations": [
                 {
@@ -1404,6 +1392,7 @@ def connection_v2_traptagger_to_wpswatch():
                     },
                     "base_url": "https://wpswatch-api-qa.azurewebsites.net",
                     "status": "healthy",
+                    "status_details": "",
                 }
             ],
             "routing_rules": [
@@ -1445,6 +1434,7 @@ def connection_v2_traptagger_to_smart():
                 },
                 "base_url": "https://test.traptagger.com",
                 "status": "healthy",
+                "status_details": "",
             },
             "destinations": [
                 {
@@ -1461,6 +1451,7 @@ def connection_v2_traptagger_to_smart():
                     },
                     "base_url": "https://smartdemoconnect.smartconservationtools.org:443/server",
                     "status": "healthy",
+                    "status_details": "",
                 }
             ],
             "routing_rules": [
@@ -1505,6 +1496,7 @@ def route_v2():
                     },
                     "base_url": "https://test.traptagger.com",
                     "status": "healthy",
+                    "status_details": "",
                 }
             ],
             "destinations": [
@@ -1522,6 +1514,7 @@ def route_v2():
                     },
                     "base_url": "https://gundi-load-testing.pamdas.org",
                     "status": "healthy",
+                    "status_details": "",
                 }
             ],
             "configuration": {
@@ -2107,6 +2100,7 @@ def destination_integration_v2_er(integration_type_er):
         type=integration_type_er,
         base_url="https://gundi-load-testing.pamdas.org",
         status="healthy",
+        status_details="",
     )
 
 
@@ -2132,6 +2126,7 @@ def destination_integration_v2_movebank(integration_type_movebank):
         type=integration_type_movebank,
         base_url="https://mb-load-testing.pamdas.org",
         status="healthy",
+        status_details="",
     )
 
 
@@ -2330,13 +2325,8 @@ def destination_integration_v2_smart(integration_type_smart, smart_ca_uuid):
         ],
         default_route=None,
         additional={},
-        status={
-            "id": "mockid-b16a-4dbd-ad32-197c58aeef59",
-            "is_healthy": True,
-            "details": "Last observation has been delivered with success.",
-            "observation_delivered_24hrs": 50231,
-            "last_observation_delivered_at": "2023-03-31T11:20:00+0200",
-        },
+        status="healthy",
+        status_details="",
     )
 
 
@@ -2524,13 +2514,8 @@ def destination_integration_v2_smart_without_transform_rules(
         ],
         default_route=None,
         additional={},
-        status={
-            "id": "mockid-b16a-4dbd-ad32-197c58aeef59",
-            "is_healthy": True,
-            "details": "Last observation has been delivered with success.",
-            "observation_delivered_24hrs": 50231,
-            "last_observation_delivered_at": "2023-03-31T11:20:00+0200",
-        },
+        status="healthy",
+        status_details="",
     )
 
 
