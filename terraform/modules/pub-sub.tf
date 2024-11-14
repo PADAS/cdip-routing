@@ -9,11 +9,11 @@ resource "google_pubsub_topic" "transformer-dead-letter" {
 }
 
 resource "google_pubsub_subscription" "transformer-subscription" {
-  name  = "raw-observations-transformer-${var.env}"
-  topic = google_pubsub_topic.raw-observations.id
+  name    = "raw-observations-transformer-${var.env}"
+  topic   = google_pubsub_topic.raw-observations.id
   project = var.project_id
 
-  ack_deadline_seconds = 600
+  ack_deadline_seconds    = 600
   enable_message_ordering = true
 
   expiration_policy {
