@@ -33,3 +33,23 @@ resource "google_pubsub_subscription" "transformer-subscription" {
     }
   }
 }
+
+resource "google_pubsub_subscription" "transformer-dead-letter-subscription" {
+  name    = "transformer-dead-letter-subscription-${var.env}"
+  topic   = google_pubsub_topic.transformer-dead-letter.id
+  project = var.project_id
+
+  ack_deadline_seconds    = 60
+  enable_message_ordering = false
+
+  expiration_policy {
+    ttl = ""
+  }
+
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  message_retention_duration = "604800s" # 7 days in seconds
+}
