@@ -95,7 +95,7 @@ async def transform_and_route_observation(observation):
                     },
                 )
 
-            provider_str = f"'{connection.provider.owner} - {connection.provider.name}'({connection.provider.id})"
+            provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
             for destination in destinations:
                 # Get additional configuration for the destination
                 destination_integration = await get_integration(
@@ -118,11 +118,19 @@ async def transform_and_route_observation(observation):
                     error_msg = f"Error transforming observation {observation.gundi_id} from {provider_str} for destination {destination_str}: {type(e).__name__}: {e}. Discarded."
                     logger.exception(error_msg)
                     current_span.set_attribute("error", error_msg)
+                    current_span.set_attribute("is_discarded", True)
+                    current_span.add_event(
+                        name="routing_service.observation_discarded_on_transformer_error"
+                    )
                     continue  # Skip this destination and try the next one
 
                 if not transformed_observation:
                     logger.warning(
                         f"Observation {observation.gundi_id} from {provider_str} could not be transformed for destination {destination_str}. Discarded."
+                    )
+                    current_span.set_attribute("is_discarded", True)
+                    current_span.add_event(
+                        name="routing_service.observation_discarded_by_transformer"
                     )
                     continue
 
