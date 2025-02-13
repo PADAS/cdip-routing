@@ -103,7 +103,7 @@ async def transform_and_route_observation(observation):
                 )
                 broker_config = destination_integration.additional
                 destination_str = (
-                    f"'{destination.owner} - {destination.name}'({destination.id})"
+                    f"'{destination.owner.name} - {destination.name}'({destination.id})"
                 )
 
                 # Transform the observation for the destination
