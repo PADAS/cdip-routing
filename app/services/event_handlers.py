@@ -115,16 +115,14 @@ async def transform_and_route_observation(observation):
                         route_configuration=route_configuration,
                     )
                 except Exception as e:
-                    error_msg = (
-                        f"Error transforming observation {observation.gundi_id} from {provider_str} for destination {destination_str}: {type(e).__name__}: {e}. Discarded.",
-                    )
+                    error_msg = f"Error transforming observation {observation.gundi_id} from {provider_str} for destination {destination_str}: {type(e).__name__}: {e}. Discarded."
                     logger.exception(error_msg)
                     current_span.set_attribute("error", error_msg)
                     continue  # Skip this destination and try the next one
 
                 if not transformed_observation:
                     logger.warning(
-                        f"Observation {observation.gundi_id} from {provider_str} could not be transformed for destination {destination_str}. Discarded.",
+                        f"Observation {observation.gundi_id} from {provider_str} could not be transformed for destination {destination_str}. Discarded."
                     )
                     continue
 
