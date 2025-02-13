@@ -1,5 +1,10 @@
 import logging
-from gundi_core.events import ObservationReceived, EventReceived, EventUpdateReceived, AttachmentReceived
+from gundi_core.events import (
+    ObservationReceived,
+    EventReceived,
+    EventUpdateReceived,
+    AttachmentReceived,
+)
 from gundi_core.schemas.v2 import StreamPrefixEnum
 from gundi_core.events.transformers import (
     EventTransformedER,
@@ -9,7 +14,7 @@ from gundi_core.events.transformers import (
     EventTransformedSMART,
     EventUpdateTransformedSMART,
     EventTransformedWPSWatch,
-    AttachmentTransformedWPSWatch
+    AttachmentTransformedWPSWatch,
 )
 from opentelemetry.trace import SpanKind
 from app.core import tracing
@@ -24,7 +29,7 @@ from app.services.transformers import (
     build_gcp_pubsub_message,
     get_source_id,
     get_data_provider_id,
-    transform_observation_v2
+    transform_observation_v2,
 )
 
 
@@ -39,24 +44,24 @@ transformer_events_by_data_type = {
     "SMARTCompositeRequest": EventTransformedSMART,
     "SMARTUpdateRequest": EventUpdateTransformedSMART,
     "WPSWatchImageMetadata": EventTransformedWPSWatch,
-    "WPSWatchImage": AttachmentTransformedWPSWatch
+    "WPSWatchImage": AttachmentTransformedWPSWatch,
 }
 
 
 def build_transformer_event(transformed_observation):
     Event = transformer_events_by_data_type[type(transformed_observation).__name__]
-    return Event(
-        payload=transformed_observation
-    )
+    return Event(payload=transformed_observation)
 
 
 async def transform_and_route_observation(observation):
     with tracing.tracer.start_as_current_span(
-            "routing_service.transform_and_route_observation", kind=SpanKind.CONSUMER
+        "routing_service.transform_and_route_observation", kind=SpanKind.CONSUMER
     ) as current_span:
         try:
             # ToDo: Implement a destination resolution algorithm considering all the routes and filters
-            connection = await get_connection(connection_id=observation.data_provider_id)
+            connection = await get_connection(
+                connection_id=observation.data_provider_id
+            )
             if not connection:
                 error = f"Connection '{observation.data_provider_id}' not found."
                 current_span.set_attribute("error", error)
@@ -90,25 +95,42 @@ async def transform_and_route_observation(observation):
                     },
                 )
 
+            provider_str = f"'{connection.provider.owner} - {connection.provider.name}'({connection.provider.id})"
             for destination in destinations:
                 # Get additional configuration for the destination
-                destination_integration = await get_integration(integration_id=destination.id)
+                destination_integration = await get_integration(
+                    integration_id=destination.id
+                )
                 broker_config = destination_integration.additional
+                destination_str = (
+                    f"'{destination.owner} - {destination.name}'({destination.id})"
+                )
 
                 # Transform the observation for the destination
-                transformed_observation = await transform_observation_v2(
-                    observation=observation,
-                    destination=destination_integration,
-                    provider=provider,
-                    route_configuration=route_configuration,
-                )
+                try:
+                    transformed_observation = await transform_observation_v2(
+                        observation=observation,
+                        destination=destination_integration,
+                        provider=provider,
+                        route_configuration=route_configuration,
+                    )
+                except Exception as e:
+                    error_msg = (
+                        f"Error transforming observation {observation.gundi_id} from {provider_str} for destination {destination_str}: {type(e).__name__}: {e}. Discarded.",
+                    )
+                    logger.exception(error_msg)
+                    current_span.set_attribute("error", error_msg)
+                    continue  # Skip this destination and try the next one
 
                 if not transformed_observation:
                     logger.warning(
-                        f"Observation {observation.gundi_id} could not be transformed for destination {destination.id}. Discarded.",
+                        f"Observation {observation.gundi_id} from {provider_str} could not be transformed for destination {destination_str}. Discarded.",
                     )
                     continue
 
+                logger.debug(
+                    f"Observation {observation.gundi_id} from {provider_str} transformed for destination {destination_str}."
+                )
                 # Add metadata used to dispatch the observation
                 attributes = build_transformed_message_attributes(
                     observation=observation,
@@ -120,7 +142,12 @@ async def transform_and_route_observation(observation):
                     f"Transformed observation: {repr(transformed_observation)}, attributes: {attributes}"
                 )
 
-                if broker_type := broker_config.get("broker", Broker.GCP_PUBSUB.value).strip().lower() != Broker.GCP_PUBSUB.value:
+                if (
+                    broker_type := broker_config.get("broker", Broker.GCP_PUBSUB.value)
+                    .strip()
+                    .lower()
+                    != Broker.GCP_PUBSUB.value
+                ):
                     current_span.set_attribute("broker", broker_type)
                     raise ReferenceDataError(
                         f"Broker '{broker_type}' is no longer supported. Please use `{Broker.GCP_PUBSUB.value}` instead."
@@ -133,17 +160,22 @@ async def transform_and_route_observation(observation):
                     payload=transformer_event.dict(exclude_none=True)
                 )
                 # Set ordering key only for updates
-                ordering_key = str(observation.gundi_id) if observation.observation_type == StreamPrefixEnum.event_update.value else ""
+                ordering_key = (
+                    str(observation.gundi_id)
+                    if observation.observation_type
+                    == StreamPrefixEnum.event_update.value
+                    else ""
+                )
                 await send_message_to_gcp_pubsub_dispatcher(
                     message=pubsub_message,
                     attributes=attributes,
                     destination=destination,
                     broker_config=broker_config,
-                    ordering_key=ordering_key
+                    ordering_key=ordering_key,
                 )
                 logger.info(
                     f"Observation {observation.gundi_id} transformed and sent to pubsub topic successfully.",
-                    extra=attributes
+                    extra=attributes,
                 )
         except ReferenceDataError as e:
             error_msg = (
@@ -181,7 +213,7 @@ async def transform_and_route_observation(observation):
 async def handle_observation_received(event: ObservationReceived):
     # Trace observations with Open Telemetry
     with tracing.tracer.start_as_current_span(
-            "routing_service.handle_observation_received", kind=SpanKind.CONSUMER
+        "routing_service.handle_observation_received", kind=SpanKind.CONSUMER
     ) as current_span:
         current_span.set_attribute("payload", repr(event.payload))
         await transform_and_route_observation(observation=event.payload)
@@ -189,7 +221,7 @@ async def handle_observation_received(event: ObservationReceived):
 
 async def handle_event_received(event: EventReceived):
     with tracing.tracer.start_as_current_span(
-            "routing_service.handle_event_received", kind=SpanKind.CONSUMER
+        "routing_service.handle_event_received", kind=SpanKind.CONSUMER
     ) as current_span:
         current_span.set_attribute("payload", repr(event.payload))
         await transform_and_route_observation(observation=event.payload)
@@ -197,7 +229,7 @@ async def handle_event_received(event: EventReceived):
 
 async def handle_event_update(event: EventUpdateReceived):
     with tracing.tracer.start_as_current_span(
-            "routing_service.handle_event_update", kind=SpanKind.CONSUMER
+        "routing_service.handle_event_update", kind=SpanKind.CONSUMER
     ) as current_span:
         event_update = event.payload
         current_span.set_attribute("payload", repr(event.payload))
@@ -207,10 +239,11 @@ async def handle_event_update(event: EventUpdateReceived):
 
 async def handle_attachment_received(event: AttachmentReceived):
     with tracing.tracer.start_as_current_span(
-            "routing_service.handle_attachment_received", kind=SpanKind.CONSUMER
+        "routing_service.handle_attachment_received", kind=SpanKind.CONSUMER
     ) as current_span:
         current_span.set_attribute("payload", repr(event.payload))
         await transform_and_route_observation(observation=event.payload)
+
 
 event_handlers = {
     "ObservationReceived": handle_observation_received,
