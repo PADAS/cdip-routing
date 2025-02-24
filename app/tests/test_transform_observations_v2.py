@@ -65,7 +65,10 @@ async def test_event_type_mapping_with_empty_event_details(
         route_configuration=route_config_with_event_type_mappings,
     )
     # If event_details is empty, expect the event_type to be the same as the original one
-    assert transformed_observation.event_type == event_v2_with_empty_event_details.event_type
+    assert (
+        transformed_observation.event_type
+        == event_v2_with_empty_event_details.event_type
+    )
 
 
 @pytest.mark.asyncio
@@ -117,7 +120,10 @@ async def test_transform_observations_for_earthranger(
         route_configuration=route_config_with_no_mappings,
     )
     assert transformed_observation
-    assert transformed_observation.manufacturer_id == observation_object_v2.external_source_id
+    assert (
+        transformed_observation.manufacturer_id
+        == observation_object_v2.external_source_id
+    )
     assert transformed_observation.source_type == observation_object_v2.type
     assert transformed_observation.subject_name == observation_object_v2.source_name
     assert transformed_observation.recorded_at == observation_object_v2.recorded_at
@@ -270,7 +276,10 @@ async def test_transform_events_for_smart(
     waypoint = transformed_observation.waypoint_requests[0]
     location = waypoint.geometry.coordinates
     assert location
-    assert location == [animals_sign_event_v2.location.lon, animals_sign_event_v2.location.lat]
+    assert location == [
+        animals_sign_event_v2.location.lon,
+        animals_sign_event_v2.location.lat,
+    ]
     properties = waypoint.properties
     assert properties
     assert properties.smartDataType == "incident"
@@ -316,7 +325,9 @@ async def test_transform_event_update_full_for_smart(
     connection_v2,
     destination_integration_v2_smart,
 ):
-    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
     transformed_observation = await transform_observation_v2(
         observation=animals_sign_event_update_v2,
         destination=destination_integration_v2_smart,
@@ -327,7 +338,9 @@ async def test_transform_event_update_full_for_smart(
     gundi_id = str(animals_sign_event_update_v2.gundi_id)
     assert transformed_observation
     assert transformed_observation.ca_uuid == smart_ca_uuid
-    assert len(transformed_observation.waypoint_requests) == 2  # When changing event details, two requests are expected
+    assert (
+        len(transformed_observation.waypoint_requests) == 2
+    )  # When changing event details, two requests are expected
     # Changes in base attributes like title must generate an incident update request
     waypoint_1 = transformed_observation.waypoint_requests[0]
     assert waypoint_1.geometry  # Location is mapped to geometry.coordinates
@@ -369,7 +382,9 @@ async def test_transform_event_update_title_for_smart(
     connection_v2,
     destination_integration_v2_smart,
 ):
-    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
     transformed_observation = await transform_observation_v2(
         observation=animals_sign_event_update_title_v2,
         destination=destination_integration_v2_smart,
@@ -403,7 +418,9 @@ async def test_transform_event_update_location_for_smart(
     connection_v2,
     destination_integration_v2_smart,
 ):
-    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
     transformed_observation = await transform_observation_v2(
         observation=animals_sign_event_update_location_v2,
         destination=destination_integration_v2_smart,
@@ -439,7 +456,9 @@ async def test_transform_event_update_details_for_smart(
     connection_v2,
     destination_integration_v2_smart,
 ):
-    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
     transformed_observation = await transform_observation_v2(
         observation=animals_sign_event_update_details_v2,
         destination=destination_integration_v2_smart,
@@ -471,7 +490,9 @@ async def test_transform_event_update_details_requires_event_type_for_smart(
     connection_v2,
     destination_integration_v2_smart,
 ):
-    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_async_client_class)
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
     with pytest.raises(ValueError):
         transformed_observation = await transform_observation_v2(
             observation=animals_sign_event_update_details_without_event_type_v2,
@@ -542,7 +563,7 @@ async def test_transform_event_update_full_location_with_type_mapping_for_earthr
     )
     er_location_changes = {
         "longitude": event_update_location_full.changes["location"]["lon"],
-        "latitude": event_update_location_full.changes["location"]["lat"]
+        "latitude": event_update_location_full.changes["location"]["lat"],
     }
     assert transformed_observation.changes.get("location") == er_location_changes
     assert "event_type" not in transformed_observation.changes
@@ -587,12 +608,12 @@ async def test_transform_event_for_wpswatch(
 
 @pytest.mark.asyncio
 async def test_transform_attachment_for_wpswatch(
-    photo_attachment_v2,
+    photo_attachment_v2_jpg,
     connection_v2_traptagger_to_wpswatch,
     destination_integration_v2_wpswatch,
 ):
     transformed_observation = await transform_observation_v2(
-        observation=photo_attachment_v2,
+        observation=photo_attachment_v2_jpg,
         destination=destination_integration_v2_wpswatch,
         provider=connection_v2_traptagger_to_wpswatch.provider,
         route_configuration=None,
@@ -600,17 +621,32 @@ async def test_transform_attachment_for_wpswatch(
     assert transformed_observation
     # Attachments are images for WPS Watch
     assert type(transformed_observation) == schemas.v2.WPSWatchImage
-    assert transformed_observation.file_path == photo_attachment_v2.file_path
+    assert transformed_observation.file_path == photo_attachment_v2_jpg.file_path
+
+
+@pytest.mark.asyncio
+async def test_transform_attachment_for_wpswatch_with_invalid_format(
+    photo_attachment_v2_svg,
+    connection_v2_traptagger_to_wpswatch,
+    destination_integration_v2_wpswatch,
+):
+    with pytest.raises(ValueError):
+        await transform_observation_v2(
+            observation=photo_attachment_v2_svg,
+            destination=destination_integration_v2_wpswatch,
+            provider=connection_v2_traptagger_to_wpswatch.provider,
+            route_configuration=None,
+        )
 
 
 @pytest.mark.asyncio
 async def test_transform_attachment_for_smart(
-    photo_attachment_v2,
+    photo_attachment_v2_jpg,
     connection_v2_traptagger_to_smart,
     destination_integration_v2_smart,
 ):
     transformed_observation = await transform_observation_v2(
-        observation=photo_attachment_v2,
+        observation=photo_attachment_v2_jpg,
         destination=destination_integration_v2_smart,
         provider=connection_v2_traptagger_to_smart.provider,
         route_configuration=None,
@@ -620,7 +656,8 @@ async def test_transform_attachment_for_smart(
     assert type(transformed_observation) == schemas.v2.SMARTUpdateRequest
     assert transformed_observation.waypoint_requests
     assert len(transformed_observation.waypoint_requests) == 1
-    attachment = transformed_observation.waypoint_requests[0].properties.smartAttributes.attachments[0]
-    assert attachment.filename == os.path.basename(photo_attachment_v2.file_path)
-    assert attachment.data == f"gundi:storage:{photo_attachment_v2.file_path}"
-
+    attachment = transformed_observation.waypoint_requests[
+        0
+    ].properties.smartAttributes.attachments[0]
+    assert attachment.filename == os.path.basename(photo_attachment_v2_jpg.file_path)
+    assert attachment.data == f"gundi:storage:{photo_attachment_v2_jpg.file_path}"
