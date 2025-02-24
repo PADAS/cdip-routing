@@ -1586,6 +1586,12 @@ class WPSWatchAttachmentTransformerV2(Transformer):
         if rules:
             for rule in rules:
                 rule.apply(message=transformed_attachment_fields)
+        # Check file extension in supported formats
+        ext = transformed_attachment_fields["file_path"].split(".")[-1]
+        if ext not in ["jpg", "jpeg", "png", "gif", "bmp"]:
+            msg = f"Unsupported file format: {ext}"
+            logger.error(msg)
+            raise ValueError(msg)
         wps_image = schemas.v2.WPSWatchImage(**transformed_attachment_fields)
         return wps_image
 
