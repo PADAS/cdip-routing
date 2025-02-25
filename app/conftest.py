@@ -1946,7 +1946,7 @@ def animals_sign_event_with_status():
 
 
 @pytest.fixture
-def photo_attachment_v2():
+def photo_attachment_v2_jpg():
     return schemas_v2.Attachment(
         gundi_id="9bedc03e-8415-46db-aa70-782490cdff31",
         related_to="b9b46dc1-e033-447d-a99b-0fe373ca04c9",
@@ -1955,6 +1955,20 @@ def photo_attachment_v2():
         source_id="ea2d5fca-752a-4a44-b170-668d780db85e",
         external_source_id="gunditest",
         file_path="attachments/9bedc03e-8415-46db-aa70-782490cdff31_elephant.jpg",
+        observation_type="att",
+    )
+
+
+@pytest.fixture
+def photo_attachment_v2_svg():
+    return schemas_v2.Attachment(
+        gundi_id="9bedc03e-8415-46db-aa70-782490cdff31",
+        related_to="b9b46dc1-e033-447d-a99b-0fe373ca04c9",
+        owner="a91b400b-482a-4546-8fcb-ee42b01deeb6",
+        data_provider_id="d88ac520-2bf6-4e6b-ab09-38ed1ec6947a",
+        source_id="ea2d5fca-752a-4a44-b170-668d780db85e",
+        external_source_id="gunditest",
+        file_path="attachments/1aedc03e-8415-46db-aa70-782490cdff31_elephant.svg",
         observation_type="att",
     )
 

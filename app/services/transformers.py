@@ -21,7 +21,8 @@ from gundi_core.schemas import ERPatrol, ERPatrolSegment
 from gundi_core.schemas.v2 import (
     SMARTTransformationRules,
     SMARTPushEventActionConfig,
-    SMARTAuthActionConfig, EREventUpdate,
+    SMARTAuthActionConfig,
+    EREventUpdate,
 )
 from pydantic import BaseModel
 from smartconnect import AsyncSmartClient
@@ -959,8 +960,8 @@ class SMARTTransformerV2(Transformer, ABC):
         path = url_parse.path or "/server"
         path = path.replace("//", "/")
         api_url = (
-                getattr(auth_config, "endpoint", None)
-                or f"{url_parse.scheme}://{domain}{path}"
+            getattr(auth_config, "endpoint", None)
+            or f"{url_parse.scheme}://{domain}{path}"
         )
         self.smartconnect_client = AsyncSmartClient(
             api=api_url,
@@ -1047,9 +1048,7 @@ class SMARTTransformerV2(Transformer, ABC):
         except:
             return self._default_timezone
 
-    async def resolve_category_path_for_event(
-        self, *, event_type: str = None
-    ) -> str:
+    async def resolve_category_path_for_event(self, *, event_type: str = None) -> str:
         """
         Favor finding a match in the Config CA Datamodel, then CA Datamodel.
         """
@@ -1150,14 +1149,18 @@ class SMARTTransformerV2(Transformer, ABC):
             )
 
         # Apply SMART Transformation Rules
-        category_path = await self.resolve_category_path_for_event(event_type=event.event_type)
+        category_path = await self.resolve_category_path_for_event(
+            event_type=event.event_type
+        )
         if not category_path:
             logger.error(f"No category found for event_type: {event.event_type}")
             raise ReferenceDataError(
                 f"No category found for event_type: {event.event_type}"
             )
 
-        attributes = await self._resolve_attributes_for_event_details(event_details=event.event_details)
+        attributes = await self._resolve_attributes_for_event_details(
+            event_details=event.event_details
+        )
 
         present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
         event_localtime = event.recorded_at.astimezone(location_timezone)
@@ -1250,9 +1253,7 @@ class SMARTTransformerV2(Transformer, ABC):
         incident_uuid = event_id
         smart_feature_type = "waypoint"
         smart_data_type = "incident"
-        request_kwargs = {
-            "type": "Feature"
-        }
+        request_kwargs = {"type": "Feature"}
         smart_attributes = {
             "incidentId": incident_id,
             "incidentUuid": incident_uuid,
@@ -1267,21 +1268,29 @@ class SMARTTransformerV2(Transformer, ABC):
         present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
 
         if title := changes.get("title"):
-            smart_attributes["comment"] = f"Report: {title} \nUpdated: {present_localtime.isoformat()}"
+            smart_attributes[
+                "comment"
+            ] = f"Report: {title} \nUpdated: {present_localtime.isoformat()}"
 
         if location := changes.get("location"):
             lon, lat = location.get("lon"), location.get("lat")
             if not lon or not lat:
-                raise ValueError("Both lat and lon are required for SMART when updating location.")
+                raise ValueError(
+                    "Both lat and lon are required for SMART when updating location."
+                )
             coordinates = [lon, lat]
-            location_timezone = self.guess_location_timezone(longitude=lon, latitude=lat)
+            location_timezone = self.guess_location_timezone(
+                longitude=lon, latitude=lat
+            )
             request_kwargs["geometry"] = Geometry(coordinates=coordinates, type="Point")
 
         if recorded_at := changes.get("recorded_at"):
             recorded_at_datetime = datetime.fromisoformat(recorded_at)
             # Localize and remove tz. SMART doesn't accept the timezone (e.g +01:00) in the datetime string
             waypoint_local_datetime = recorded_at_datetime.astimezone(location_timezone)
-            smart_properties["dateTime"] = waypoint_local_datetime.strftime(SMARTCONNECT_DATFORMAT)
+            smart_properties["dateTime"] = waypoint_local_datetime.strftime(
+                SMARTCONNECT_DATFORMAT
+            )
 
         # Build the final request
         smart_request = SMARTRequest(
@@ -1294,9 +1303,9 @@ class SMARTTransformerV2(Transformer, ABC):
         return smart_request
 
     async def event_update_to_waypoint_observation_update(
-            self,
-            *,
-            event_update: schemas.v2.EventUpdate = None,
+        self,
+        *,
+        event_update: schemas.v2.EventUpdate = None,
     ) -> SMARTRequest:
         observation_uuid = str(event_update.gundi_id)
         smart_feature_type = "waypoint/observation"
@@ -1304,16 +1313,20 @@ class SMARTTransformerV2(Transformer, ABC):
         changes = event_update.changes
 
         if "event_type" not in changes or "event_details" not in changes:
-            raise ValueError("event_type and event_details are both required for SMART when updating one of these attributes.")
+            raise ValueError(
+                "event_type and event_details are both required for SMART when updating one of these attributes."
+            )
 
         event_type = changes.get("event_type")
-        category_path = await self.resolve_category_path_for_event(event_type=event_type)
+        category_path = await self.resolve_category_path_for_event(
+            event_type=event_type
+        )
         if not category_path:
             logger.error(f"No category found for event_type: {event_type}")
-            raise ReferenceDataError(
-                f"No category found for event_type: {event_type}"
-            )
-        attributes = await self._resolve_attributes_for_event_details(event_details=changes.get("event_details"))
+            raise ReferenceDataError(f"No category found for event_type: {event_type}")
+        attributes = await self._resolve_attributes_for_event_details(
+            event_details=changes.get("event_details")
+        )
 
         smart_request = SMARTRequest(
             type="Feature",
@@ -1350,8 +1363,7 @@ class SMARTTransformerV2(Transformer, ABC):
                 smartDataType="incident",
                 smartFeatureType="waypoint",
                 smartAttributes=SmartAttributes(
-                    incidentUuid=incident_uuid,
-                    attachments=[file_reference]
+                    incidentUuid=incident_uuid, attachments=[file_reference]
                 ),
             ),
         )
@@ -1394,18 +1406,26 @@ class SmartEventUpdateTransformerV2(SMARTTransformerV2):
         super().__init__(config=config, **kwargs)
 
     async def transform(
-            self, message: schemas.v2.EventUpdate, rules: list = None, **kwargs
+        self, message: schemas.v2.EventUpdate, rules: list = None, **kwargs
     ) -> SMARTUpdateRequest:
         if self._version and version.parse(self._version) < version.parse("7.5"):
             raise ValueError("Smart version < 7.5 is not supported")
         waypoint_requests = []
-        if "title" in message.changes or "location" in message.changes or "recorded_at" in message.changes:
+        if (
+            "title" in message.changes
+            or "location" in message.changes
+            or "recorded_at" in message.changes
+        ):
             # Update properties in Incident
-            incident_update = await self.event_update_to_waypoint_update(event_update=message)
+            incident_update = await self.event_update_to_waypoint_update(
+                event_update=message
+            )
             waypoint_requests.append(incident_update)
         if "event_type" in message.changes or "event_details" in message.changes:
             # Update attributes in related Observation
-            observation_update = await self.event_update_to_waypoint_observation_update(event_update=message)
+            observation_update = await self.event_update_to_waypoint_observation_update(
+                event_update=message
+            )
             waypoint_requests.append(observation_update)
         smart_request = SMARTUpdateRequest(
             waypoint_requests=waypoint_requests, ca_uuid=self.ca_uuid
@@ -1422,7 +1442,7 @@ class SmartAttachmentTransformerV2(SMARTTransformerV2):
         super().__init__(config=config, **kwargs)
 
     async def transform(
-            self, message: schemas.v2.Attachment, rules: list = None, **kwargs
+        self, message: schemas.v2.Attachment, rules: list = None, **kwargs
     ) -> SMARTUpdateRequest:
         if self._version and version.parse(self._version) < version.parse("7.5"):
             raise ValueError("Smart version < 7.5 is not supported")
@@ -1462,7 +1482,9 @@ class FieldMappingRule(TransformationRule):
 
         source_value = self._extract_value(message=message, source=self.source)
         if not source_value:
-            logger.warning(f"Field Mappings: Couldn't find a valid value for '{self.source}'. Value:'{source_value}'")
+            logger.warning(
+                f"Field Mappings: Couldn't find a valid value for '{self.source}'. Value:'{source_value}'"
+            )
             return
 
         if not self.map:
@@ -1473,7 +1495,6 @@ class FieldMappingRule(TransformationRule):
 
 
 class EREventTransformer(Transformer):
-
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
     ) -> schemas.v2.EREvent:
@@ -1486,20 +1507,17 @@ class EREventTransformer(Transformer):
                 longitude=message.location.lon, latitude=message.location.lat
             ),
             geometry=message.geometry,
-            state=message.status
+            state=message.status,
         )
         # Apply extra transformation rules as needed
         if rules:
             for rule in rules:
                 rule.apply(message=transformed_event_fields)
-        er_event = schemas.v2.EREvent(
-            **transformed_event_fields
-        )
+        er_event = schemas.v2.EREvent(**transformed_event_fields)
         return er_event
 
 
 class EREventUpdateTransformer(Transformer):
-
     def __init__(self, *, config=None, **kwargs):
         super().__init__(config=config, **kwargs)
         self.field_map = {
@@ -1530,9 +1548,7 @@ class EREventUpdateTransformer(Transformer):
         if rules:
             for rule in rules:
                 rule.apply(message=er_changes)
-        er_event_update = schemas.v2.EREventUpdate(
-            changes=er_changes
-        )
+        er_event_update = schemas.v2.EREventUpdate(changes=er_changes)
         return er_event_update
 
     def map_to_er_field(self, field):
@@ -1543,19 +1559,14 @@ class ERAttachmentTransformer(Transformer):
     async def transform(
         self, message: schemas.v2.Attachment, rules: list = None, **kwargs
     ) -> schemas.v2.ERAttachment:
-        return schemas.v2.ERAttachment(
-            file_path=message.file_path
-        )
+        return schemas.v2.ERAttachment(file_path=message.file_path)
 
 
 class WPSWatchEventTransformerV2(Transformer):
-
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
     ) -> schemas.v2.WPSWatchImageMetadata:
-        transformed_event_fields = dict(
-            camera_id=message.external_source_id
-        )
+        transformed_event_fields = dict(camera_id=message.external_source_id)
         # Apply extra transformation rules as needed
         if rules:
             for rule in rules:
@@ -1567,20 +1578,21 @@ class WPSWatchEventTransformerV2(Transformer):
 
 
 class WPSWatchAttachmentTransformerV2(Transformer):
-
     async def transform(
         self, message: schemas.v2.Attachment, rules: list = None, **kwargs
     ) -> schemas.v2.WPSWatchImage:
-        transformed_attachment_fields = dict(
-            file_path=message.file_path
-        )
+        transformed_attachment_fields = dict(file_path=message.file_path)
         # Apply extra transformation rules as needed
         if rules:
             for rule in rules:
                 rule.apply(message=transformed_attachment_fields)
-        wps_image = schemas.v2.WPSWatchImage(
-            **transformed_attachment_fields
-        )
+        # Check file extension in supported formats
+        ext = transformed_attachment_fields["file_path"].split(".")[-1]
+        if ext not in ["jpg", "jpeg", "png", "gif", "bmp"]:
+            msg = f"Unsupported file format: {ext}"
+            logger.error(msg)
+            raise ValueError(msg)
+        wps_image = schemas.v2.WPSWatchImage(**transformed_attachment_fields)
         return wps_image
 
 
@@ -1611,9 +1623,7 @@ class ERObservationTransformer(Transformer):
         if rules:
             for rule in rules:
                 rule.apply(message=transformed_message)
-        er_observation = schemas.v2.ERObservation(
-            **transformed_message
-        )
+        er_observation = schemas.v2.ERObservation(**transformed_message)
         return er_observation
 
 
@@ -1792,7 +1802,7 @@ def get_data_provider_id(observation, gundi_version="v1"):
     )
 
 
-@backoff.on_exception(backoff.expo, (Exception, ), max_tries=3)
+@backoff.on_exception(backoff.expo, (Exception,), max_tries=3)
 async def transform_observation_to_destination_schema(
     *,
     observation,
@@ -1890,7 +1900,7 @@ async def transform_observation_v2(
 
     if not Transformer:
         logger.error(
-            "No transformer found for stream type & destination type",
+            f"No transformer found for stream type '{stream_type}' & destination type '{destination_type}'",
             extra={
                 ExtraKeys.StreamType: stream_type,
                 ExtraKeys.DestinationType: destination_type,
@@ -1936,9 +1946,14 @@ async def transform_observation_v2(
 
     # Apply the transformer
     transformer = Transformer(config=destination)
-    return await transformer.transform(
-        message=observation, rules=rules, provider=provider, gundi_version=GUNDI_V2
-    )
+    try:
+        return await transformer.transform(
+            message=observation, rules=rules, provider=provider, gundi_version=GUNDI_V2
+        )
+    except Exception as e:
+        msg = f"{Transformer.__name__} failed to transform observation {observation.gundi_id}: {type(e).__name__}:{e}"
+        logger.exception(msg)
+        raise e
 
 
 # Map to get the right transformer for the observation type and destination
@@ -1946,7 +1961,7 @@ transformers_map = {
     schemas.v2.StreamPrefixEnum.event.value: {
         schemas.DestinationTypes.EarthRanger.value: EREventTransformer,
         schemas.DestinationTypes.SmartConnect.value: SmartEventTransformerV2,
-        schemas.DestinationTypes.WPSWatch.value: WPSWatchEventTransformerV2
+        schemas.DestinationTypes.WPSWatch.value: WPSWatchEventTransformerV2,
     },
     schemas.v2.StreamPrefixEnum.event_update.value: {
         schemas.DestinationTypes.EarthRanger.value: EREventUpdateTransformer,
