@@ -1596,6 +1596,48 @@ class WPSWatchAttachmentTransformerV2(Transformer):
         return wps_image
 
 
+class TrapTaggerEventTransformerV2(Transformer):
+    async def transform(
+        self, message: schemas.v2.Event, rules: list = None, **kwargs
+    ) -> schemas.v2.TrapTaggerImageMetadata:
+        recorded_at = message.recorded_at
+        # Convert to UTC and remove TZ offset. Format as YYYY-MM-DD HH:MM:SS
+        timestamp = recorded_at.astimezone(tz=pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+        transformed_event_fields = {
+            "camera_id": message.external_source_id,
+            "latitude": message.location.lat,
+            "longitude": message.location.lon,
+            "timestamp": timestamp,
+        }
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_event_fields)
+        traptagger_image_metadata = schemas.v2.TrapTaggerImageMetadata(
+            **transformed_event_fields
+        )
+        return traptagger_image_metadata
+
+
+class TrapTaggerAttachmentTransformerV2(Transformer):
+    async def transform(
+        self, message: schemas.v2.Attachment, rules: list = None, **kwargs
+    ) -> schemas.v2.TrapTaggerImage:
+        transformed_attachment_fields = dict(file_path=message.file_path)
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_attachment_fields)
+        # Check file extension in supported formats
+        ext = transformed_attachment_fields["file_path"].split(".")[-1]
+        if ext not in ["jpg", "jpeg"]:
+            msg = f"Unsupported file format: {ext}"
+            logger.error(msg)
+            raise ValueError(msg)
+        traptagger_image = schemas.v2.TrapTaggerImage(**transformed_attachment_fields)
+        return traptagger_image
+
+
 class ERObservationTransformer(Transformer):
     async def transform(
         self, message: schemas.v2.Observation, rules: list = None, **kwargs
