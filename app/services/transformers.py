@@ -1604,7 +1604,7 @@ class TrapTaggerEventTransformerV2(Transformer):
         # Convert to UTC and remove TZ offset. Format as YYYY-MM-DD HH:MM:SS
         timestamp = recorded_at.astimezone(tz=pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
         transformed_event_fields = {
-            "camera_id": message.external_source_id,
+            "camera": message.external_source_id,
             "latitude": message.location.lat,
             "longitude": message.location.lon,
             "timestamp": timestamp,
