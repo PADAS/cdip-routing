@@ -2004,7 +2004,7 @@ transformers_map = {
         schemas.DestinationTypes.EarthRanger.value: EREventTransformer,
         schemas.DestinationTypes.SmartConnect.value: SmartEventTransformerV2,
         schemas.DestinationTypes.WPSWatch.value: WPSWatchEventTransformerV2,
-        "trap_tagger": TrapTaggerEventTransformerV2,  # ToDo: Add TrapTagger to destinations enum
+        schemas.DestinationTypes.TrapTagger.value: TrapTaggerEventTransformerV2,
     },
     schemas.v2.StreamPrefixEnum.event_update.value: {
         schemas.DestinationTypes.EarthRanger.value: EREventUpdateTransformer,
@@ -2014,7 +2014,7 @@ transformers_map = {
         schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer,
         schemas.DestinationTypes.WPSWatch.value: WPSWatchAttachmentTransformerV2,
         schemas.DestinationTypes.SmartConnect.value: SmartAttachmentTransformerV2,
-        "trap_tagger": TrapTaggerAttachmentTransformerV2,  # ToDo: Add TrapTagger to destinations enum
+        schemas.DestinationTypes.TrapTagger.value: TrapTaggerAttachmentTransformerV2,
     },
     schemas.v2.StreamPrefixEnum.observation.value: {
         schemas.DestinationTypes.Movebank.value: MBObservationTransformer,
