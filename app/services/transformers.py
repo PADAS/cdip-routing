@@ -1601,8 +1601,8 @@ class TrapTaggerEventTransformer(Transformer):
         self, message: schemas.v2.Event, rules: list = None, **kwargs
     ) -> schemas.v2.TrapTaggerImageMetadata:
         recorded_at = message.recorded_at
-        # Convert to UTC and remove TZ offset. Format as YYYY-MM-DD HH:MM:SS
-        timestamp = recorded_at.astimezone(tz=pytz.utc).strftime("%Y-%m-%d %H:%M:%S")
+        # Ignore TZ offset if present, and format as YYYY-MM-DD HH:MM:SS
+        timestamp = recorded_at.strftime("%Y-%m-%d %H:%M:%S")
         transformed_event_fields = {
             "camera": message.external_source_id,
             "latitude": message.location.lat,
