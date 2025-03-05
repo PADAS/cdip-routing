@@ -602,7 +602,7 @@ async def test_transform_event_for_wpswatch(
     )
     assert transformed_observation
     # The external source/device id is used as metadata when uploading images to for WPS Watch
-    assert type(transformed_observation) == schemas.v2.WPSWatchImageMetadata
+    assert isinstance(transformed_observation, schemas.v2.WPSWatchImageMetadata)
     assert transformed_observation.camera_id == animals_sign_event_v2.external_source_id
 
 
@@ -620,7 +620,7 @@ async def test_transform_attachment_for_wpswatch(
     )
     assert transformed_observation
     # Attachments are images for WPS Watch
-    assert type(transformed_observation) == schemas.v2.WPSWatchImage
+    assert isinstance(transformed_observation, schemas.v2.WPSWatchImage)
     assert transformed_observation.file_path == photo_attachment_v2_jpg.file_path
 
 
@@ -635,6 +635,73 @@ async def test_transform_attachment_for_wpswatch_with_invalid_format(
             observation=photo_attachment_v2_svg,
             destination=destination_integration_v2_wpswatch,
             provider=connection_v2_traptagger_to_wpswatch.provider,
+            route_configuration=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_transform_event_for_traptagger(
+    animals_sign_event_v2,
+    connection_v2_wpswatch_to_traptagger,
+    destination_integration_v2_traptagger,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_v2,
+        destination=destination_integration_v2_traptagger,
+        provider=connection_v2_wpswatch_to_traptagger.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    assert isinstance(transformed_observation, schemas.v2.TrapTaggerImageMetadata)
+    assert transformed_observation.camera == animals_sign_event_v2.external_source_id
+    assert transformed_observation.latitude == str(animals_sign_event_v2.location.lat)
+    assert transformed_observation.longitude == str(animals_sign_event_v2.location.lon)
+    assert (
+        transformed_observation.timestamp
+        == animals_sign_event_v2.recorded_at.strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+
+@pytest.mark.asyncio
+async def test_transform_attachment_for_traptagger(
+    photo_attachment_v2_jpg,
+    connection_v2_wpswatch_to_traptagger,
+    destination_integration_v2_traptagger,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=photo_attachment_v2_jpg,
+        destination=destination_integration_v2_traptagger,
+        provider=connection_v2_wpswatch_to_traptagger.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    # Attachments are images for WPS Watch
+    assert isinstance(transformed_observation, schemas.v2.TrapTaggerImage)
+    assert transformed_observation.file_path == photo_attachment_v2_jpg.file_path
+
+
+@pytest.mark.parametrize(
+    "attachment",  # Only jpg is supported by TrapTagger
+    [
+        "photo_attachment_v2_svg",
+        "photo_attachment_v2_png",
+        "photo_attachment_v2_gif",
+        "photo_attachment_v2_bmp",
+    ],
+)
+@pytest.mark.asyncio
+async def test_transform_attachment_for_traptagger_with_invalid_format(
+    request,
+    attachment,
+    connection_v2_wpswatch_to_traptagger,
+    destination_integration_v2_traptagger,
+):
+    attachment = request.getfixturevalue(attachment)
+    with pytest.raises(ValueError):
+        await transform_observation_v2(
+            observation=attachment,
+            destination=destination_integration_v2_traptagger,
+            provider=connection_v2_wpswatch_to_traptagger.provider,
             route_configuration=None,
         )
 
