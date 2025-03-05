@@ -1596,7 +1596,7 @@ class WPSWatchAttachmentTransformerV2(Transformer):
         return wps_image
 
 
-class TrapTaggerEventTransformerV2(Transformer):
+class TrapTaggerEventTransformer(Transformer):
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
     ) -> schemas.v2.TrapTaggerImageMetadata:
@@ -1619,7 +1619,7 @@ class TrapTaggerEventTransformerV2(Transformer):
         return traptagger_image_metadata
 
 
-class TrapTaggerAttachmentTransformerV2(Transformer):
+class TrapTaggerAttachmentTransformer(Transformer):
     async def transform(
         self, message: schemas.v2.Attachment, rules: list = None, **kwargs
     ) -> schemas.v2.TrapTaggerImage:
@@ -2004,7 +2004,7 @@ transformers_map = {
         schemas.DestinationTypes.EarthRanger.value: EREventTransformer,
         schemas.DestinationTypes.SmartConnect.value: SmartEventTransformerV2,
         schemas.DestinationTypes.WPSWatch.value: WPSWatchEventTransformerV2,
-        schemas.DestinationTypes.TrapTagger.value: TrapTaggerEventTransformerV2,
+        schemas.DestinationTypes.TrapTagger.value: TrapTaggerEventTransformer,
     },
     schemas.v2.StreamPrefixEnum.event_update.value: {
         schemas.DestinationTypes.EarthRanger.value: EREventUpdateTransformer,
@@ -2014,7 +2014,7 @@ transformers_map = {
         schemas.DestinationTypes.EarthRanger.value: ERAttachmentTransformer,
         schemas.DestinationTypes.WPSWatch.value: WPSWatchAttachmentTransformerV2,
         schemas.DestinationTypes.SmartConnect.value: SmartAttachmentTransformerV2,
-        schemas.DestinationTypes.TrapTagger.value: TrapTaggerAttachmentTransformerV2,
+        schemas.DestinationTypes.TrapTagger.value: TrapTaggerAttachmentTransformer,
     },
     schemas.v2.StreamPrefixEnum.observation.value: {
         schemas.DestinationTypes.Movebank.value: MBObservationTransformer,
