@@ -163,11 +163,19 @@ async def transform_and_route_observation(observation):
                         f"Broker '{broker_type}' is no longer supported. Please use `{Broker.GCP_PUBSUB.value}` instead."
                     )
 
-                # Build system event for dispatchers
-                transformer_event = build_transformer_event(transformed_observation)
+                # Build message for dispatcher
+                if isinstance(transformed_observation, dict):
+                    # Pass the data as a raw dict for backward compatibility with older dispatchers (e.g. Movebank)
+                    pubsub_message_payload = transformed_observation
+                else:
+                    # Build system event using pydantic models
+                    pubsub_message_payload = build_transformer_event(
+                        transformed_observation
+                    ).dict(exclude_none=True)
+
                 # Publish to a GCP PubSub topic
                 pubsub_message = build_gcp_pubsub_message(
-                    payload=transformer_event.dict(exclude_none=True)
+                    payload=pubsub_message_payload
                 )
                 # Set ordering key only for updates
                 ordering_key = (
