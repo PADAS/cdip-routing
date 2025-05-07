@@ -1681,6 +1681,72 @@ def route_v2():
 
 
 @pytest.fixture
+def route_v2_with_provider_key_field_mapping(connection_v2):
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    return schemas_v2.Route.parse_obj(
+        {
+            "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+            "name": "Telonics Migrated Connection Default Route",
+            "owner": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+            "data_providers": [
+                {
+                    "id": provider_id,
+                    "name": "Telonics Migrated Connection",
+                    "owner": {
+                        "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                        "name": "Test Organization",
+                    },
+                    "type": {
+                        "id": "190e3710-3a29-4710-b932-f951222209a7",
+                        "name": "Telonics",
+                        "value": "telonics",
+                    },
+                    "base_url": "",
+                    "status": "healthy",
+                    "status_details": "",
+                }
+            ],
+            "destinations": [
+                {
+                    "id": destination_id,
+                    "name": "ER Load Testing",
+                    "owner": {
+                        "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                        "name": "Test Organization",
+                    },
+                    "type": {
+                        "id": "45c66a61-71e4-4664-a7f2-30d465f87aa6",
+                        "name": "EarthRanger",
+                        "value": "earth_ranger",
+                    },
+                    "base_url": "https://gundi-load-testing.pamdas.org",
+                    "status": "healthy",
+                    "status_details": "",
+                }
+            ],
+            "configuration": {
+                "id": "1a3e3e73-94ad-42cb-a765-09a7193ae0b1",
+                "name": "Telonics Migrated Connection - Provider key Mapping",
+                "data": {
+                    "field_mappings": {
+                        provider_id: {
+                            "obv": {
+                                destination_id: {
+                                    "default": "telonics-collars",
+                                    "destination_field": "provider_key",
+                                }
+                            }
+                        }
+                    }
+                },
+            },
+            "additional": {},
+        }
+    )
+
+
+@pytest.fixture
 def raw_observation_v2():
     return {
         "event_id": "d8523635-546e-4cd4-ad6a-d9fdf494698e",
