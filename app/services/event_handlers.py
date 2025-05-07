@@ -146,7 +146,9 @@ async def transform_and_route_observation(observation):
                     observation=observation,
                     destination=destination,
                     gundi_version="v2",
-                    provider_key=provider_key,
+                    provider_key=getattr(
+                        transformed_observation, "provider_key", provider_key
+                    ),  # Field mappings overrides take precedence
                 )
                 logger.debug(
                     f"Transformed observation: {repr(transformed_observation)}, attributes: {attributes}"
