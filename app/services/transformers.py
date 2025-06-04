@@ -1569,8 +1569,8 @@ class ERMessageTransformer(Transformer):
         transformed_message_fields = {
             "message_type": "inbox",
             # "sender", "receiver" and "device" fields are not used for now
-            "manufacturer_id": message.external_source_id,  # This is used as query param later
-            # subject_id and source_id query params are not used for now
+            "manufacturer_id": message.sender or message.external_source_id,
+            # "subject_id" and "source_id" query params are not used for now
             "text": message.text,
             "message_time": message.created_at,
             "additional": message.additional or {},
