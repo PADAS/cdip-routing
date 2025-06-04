@@ -1590,6 +1590,33 @@ class ERMessageTransformer(Transformer):
         return er_message
 
 
+class InReachMessageTransformer(Transformer):
+    async def transform(
+        self, message: schemas.v2.TextMessage, rules: list = None, **kwargs
+    ) -> schemas.v2.InReachIPCMessage:
+        transformed_message_fields = {
+            "Message": message.text[:160],
+            "Recipients": message.recipients,
+            "Sender": message.sender or message.external_source_id,
+            "Timestamp": message.created_at,
+        }
+        if message.location:
+            transformed_message_fields["ReferencePoint"] = {
+                "Altitude": message.location.alt,
+                "Coordinate": {
+                    "Latitude": message.location.lat,
+                    "Longitude": message.location.lon,
+                },
+                # Label and Speed are not supported by Gundi for now
+            }
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_message_fields)
+        inreach_message = schemas.v2.InReachIPCMessage(**transformed_message_fields)
+        return inreach_message
+
+
 class WPSWatchEventTransformerV2(Transformer):
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
@@ -2050,7 +2077,7 @@ transformers_map = {
     },
     schemas.v2.StreamPrefixEnum.text_message.value: {
         schemas.DestinationTypes.EarthRanger.value: ERMessageTransformer,
-        # schemas.DestinationTypes.InReach.value: InReachMessageTransformer,
+        schemas.DestinationTypes.InReach.value: InReachMessageTransformer,
     },
     # ToDo. Support patrols in SMART v2?
     # schemas.StreamPrefixEnum.earthranger_patrol : {
