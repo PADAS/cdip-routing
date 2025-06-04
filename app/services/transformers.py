@@ -1607,7 +1607,7 @@ class InReachMessageTransformer(Transformer):
                     "Latitude": message.location.lat,
                     "Longitude": message.location.lon,
                 },
-                # Label and Speed are not supported by Gundi for now
+                # Label, Speed and Course are not supported by Gundi for now
             }
         # Apply extra transformation rules as needed
         if rules:
