@@ -4,6 +4,7 @@ from gundi_core.events import (
     EventReceived,
     EventUpdateReceived,
     AttachmentReceived,
+    TextMessageReceived,
 )
 from gundi_core.schemas.v2 import StreamPrefixEnum
 from gundi_core.events.transformers import (
@@ -265,11 +266,20 @@ async def handle_attachment_received(event: AttachmentReceived):
         await transform_and_route_observation(observation=event.payload)
 
 
+async def handle_text_message_received(event: TextMessageReceived):
+    with tracing.tracer.start_as_current_span(
+        "routing_service.handle_text_message_received", kind=SpanKind.CONSUMER
+    ) as current_span:
+        current_span.set_attribute("payload", repr(event.payload))
+        await transform_and_route_observation(observation=event.payload)
+
+
 event_handlers = {
     "ObservationReceived": handle_observation_received,
     "EventReceived": handle_event_received,
     "EventUpdateReceived": handle_event_update,
     "AttachmentReceived": handle_attachment_received,
+    "TextMessageReceived": handle_text_message_received,
 }
 
 event_schemas = {
@@ -277,4 +287,5 @@ event_schemas = {
     "EventReceived": EventReceived,
     "EventUpdateReceived": EventUpdateReceived,
     "AttachmentReceived": AttachmentReceived,
+    "TextMessageReceived": TextMessageReceived,
 }
