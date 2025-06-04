@@ -728,3 +728,55 @@ async def test_transform_attachment_for_smart(
     ].properties.smartAttributes.attachments[0]
     assert attachment.filename == os.path.basename(photo_attachment_v2_jpg.file_path)
     assert attachment.data == f"gundi:storage:{photo_attachment_v2_jpg.file_path}"
+
+
+@pytest.mark.asyncio
+async def test_transform_text_message_for_earthranger(
+    text_message_from_inreach,
+    connection_v2_inreach_to_er,
+    destination_integration_v2,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=text_message_from_inreach,
+        destination=destination_integration_v2,
+        provider=connection_v2_inreach_to_er.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    assert isinstance(transformed_observation, schemas.v2.ERMessage)
+    assert transformed_observation.message_type == "inbox"
+    assert transformed_observation.manufacturer_id == text_message_from_inreach.sender
+    assert transformed_observation.text == text_message_from_inreach.text
+    assert transformed_observation.message_time == text_message_from_inreach.created_at
+    assert transformed_observation.device_location
+    assert (
+        transformed_observation.device_location.lon
+        == text_message_from_inreach.location.lon
+    )
+    assert (
+        transformed_observation.device_location.lat
+        == text_message_from_inreach.location.lat
+    )
+    assert transformed_observation.additional == text_message_from_inreach.additional
+
+
+@pytest.mark.asyncio
+async def test_transform_text_message_for_inreach(
+    text_message_from_earthranger,
+    connection_v2_er_to_inreach,
+    destination_integration_v2_inreach,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=text_message_from_earthranger,
+        destination=destination_integration_v2_inreach,
+        provider=connection_v2_er_to_inreach.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    assert isinstance(transformed_observation, schemas.v2.InReachIPCMessage)
+    assert transformed_observation.Message == text_message_from_earthranger.text
+    assert transformed_observation.Sender == text_message_from_earthranger.sender
+    assert (
+        transformed_observation.Recipients == text_message_from_earthranger.recipients
+    )
+    assert transformed_observation.Timestamp == text_message_from_earthranger.created_at

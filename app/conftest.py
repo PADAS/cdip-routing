@@ -1025,6 +1025,14 @@ def destination_integration_v2():
                             "properties": {"endpoint": {"type": "string"}},
                         },
                     },
+                    {
+                        "id": "1286bb71-9aca-425a-881f-7fe0b2dba4b5",
+                        "type": "push",
+                        "name": "Push Messages",
+                        "value": "push_messages",
+                        "description": "Push text messages to EarthRanger",
+                        "schema": {},
+                    },
                 ],
             },
             "owner": {
@@ -1075,6 +1083,82 @@ def destination_integration_v2():
                 "id": "38dd8ec2-b3ee-4c31-940e-b6cc9c1f4326",
                 "name": "Mukutan - Load Testing",
             },
+            "status": "healthy",
+            "status_details": "",
+        }
+    )
+
+
+@pytest.fixture
+def destination_integration_v2_inreach():
+    return schemas_v2.Integration.parse_obj(
+        {
+            "id": "abc0946d-15b0-4308-b93d-e0470b6d33b6",
+            "name": "InReach API",
+            "base_url": "https://test.inreach.com",
+            "enabled": True,
+            "type": {
+                "id": "f61b0c60-c863-44d7-adc6-d9b49b389e69",
+                "name": "InReach",
+                "value": "inreach",
+                "description": "Integration type for InReach API",
+                "actions": [
+                    {
+                        "id": "1c9e2383-8154-404a-90b1-f4c591627d51",
+                        "type": "auth",
+                        "name": "Authenticate",
+                        "value": "auth",
+                        "description": "",
+                        "schema": {
+                            "type": "object",
+                            "required": ["api_key"],
+                            "properties": {"api_key": {"type": "string"}},
+                        },
+                    },
+                    {
+                        "id": "1109d75f-6456-4060-b2da-385e9ddde554",
+                        "type": "push",
+                        "name": "Push Messages",
+                        "value": "push_messages",
+                        "description": "Push messages to InReach",
+                        "schema": {},
+                    },
+                ],
+            },
+            "owner": {
+                "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                "name": "Test Organization",
+            },
+            "configurations": [
+                {
+                    "id": "92d9fb49-f3c6-473f-9220-59745e854da5",
+                    "integration": "abc0946d-15b0-4308-b93d-e0470b6d33b6",
+                    "action": {
+                        "id": "1109d75f-6456-4060-b2da-385e9ddde554",
+                        "type": "push",
+                        "name": "Push Messages",
+                        "value": "push_messages",
+                    },
+                    "data": {},
+                },
+                {
+                    "id": "61a55770-0cf4-42b9-9054-ba0222ee5bc3",
+                    "integration": "abc0946d-15b0-4308-b93d-e0470b6d33b6",
+                    "action": {
+                        "id": "1c9e2383-8154-404a-90b1-f4c591627d51",
+                        "type": "auth",
+                        "name": "Authenticate",
+                        "value": "auth",
+                    },
+                    "data": {"api_key": "fakekey123"},  # pragma: allowlist secret
+                },
+            ],
+            "webhook_configuration": None,
+            "additional": {
+                "topic": "inreach-messages-topic",
+                "broker": "gcp_pubsub",
+            },
+            "default_route": None,
             "status": "healthy",
             "status_details": "",
         }
@@ -1603,6 +1687,124 @@ def connection_v2_traptagger_to_smart():
             },
             "owner": {
                 "id": "a91b400b-482a-4546-8fcb-ee42b01deeb6",
+                "name": "Test Organization",
+                "description": "",
+            },
+            "status": "healthy",
+        }
+    )
+
+
+@pytest.fixture
+def connection_v2_inreach_to_er():
+    return schemas_v2.Connection.parse_obj(
+        {
+            "id": "abc0946d-15b0-4308-b93d-e0470b6d33b6",
+            "provider": {
+                "id": "abc0946d-15b0-4308-b93d-e0470b6d33b6",
+                "name": "InReach WH",
+                "owner": {
+                    "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                    "name": "Test Organization",
+                },
+                "type": {
+                    "id": "200e3710-3a29-4710-b932-f951222209f4",
+                    "name": "InReach",
+                    "value": "inreach",
+                },
+                "base_url": "https://test.inreach.com",
+                "status": "healthy",
+                "status_details": "",
+            },
+            "destinations": [
+                {
+                    "id": f"338225f3-91f9-4fe1-b013-353a229ce504",
+                    "name": "ER Load Testing",
+                    "owner": {
+                        "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                        "name": "Test Organization",
+                    },
+                    "type": {
+                        "id": "45c66a61-71e4-4664-a7f2-30d465f87aa6",
+                        "name": "EarthRanger",
+                        "value": "earth_ranger",
+                    },
+                    "base_url": "https://gundi-load-testing.pamdas.org",
+                    "status": "healthy",
+                    "status_details": "",
+                }
+            ],
+            "routing_rules": [
+                {
+                    "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                    "name": "InReach WH Default Route",
+                }
+            ],
+            "default_route": {
+                "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                "name": "InReach WH Default Route",
+            },
+            "owner": {
+                "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                "name": "Test Organization",
+                "description": "",
+            },
+            "status": "healthy",
+        }
+    )
+
+
+@pytest.fixture
+def connection_v2_er_to_inreach():
+    return schemas_v2.Connection.parse_obj(
+        {
+            "id": "338225f3-91f9-4fe1-b013-353a229ce504",
+            "provider": {
+                "id": f"338225f3-91f9-4fe1-b013-353a229ce504",
+                "name": "ER Load Testing",
+                "owner": {
+                    "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                    "name": "Test Organization",
+                },
+                "type": {
+                    "id": "45c66a61-71e4-4664-a7f2-30d465f87aa6",
+                    "name": "EarthRanger",
+                    "value": "earth_ranger",
+                },
+                "base_url": "https://gundi-load-testing.pamdas.org",
+                "status": "healthy",
+                "status_details": "",
+            },
+            "destinations": [
+                {
+                    "id": "abc0946d-15b0-4308-b93d-e0470b6d33b6",
+                    "name": "InReach API",
+                    "owner": {
+                        "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+                        "name": "Test Organization",
+                    },
+                    "type": {
+                        "id": "200e3710-3a29-4710-b932-f951222209f4",
+                        "name": "InReach",
+                        "value": "inreach",
+                    },
+                    "base_url": "https://test.inreach.com",
+                    "status": "healthy",
+                    "status_details": "",
+                }
+            ],
+            "routing_rules": [
+                {
+                    "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                    "name": "ER Default Route",
+                }
+            ],
+            "default_route": {
+                "id": "835897f9-1ef2-4d99-9c6c-ea2663380c1f",
+                "name": "ER Default Route",
+            },
+            "owner": {
+                "id": "e2d1b0fc-69fe-408b-afc5-7f54872730c0",
                 "name": "Test Organization",
                 "description": "",
             },
@@ -2332,6 +2534,50 @@ def animals_sign_event_update_details_without_event_type_v2():
             "event_details": {"species": "leopard"},
         },
         observation_type="evu",
+    )
+
+
+@pytest.fixture
+def text_message_from_inreach():
+    return schemas_v2.TextMessage(
+        gundi_id="d2b46dc1-b144-556c-c87a-2ef373ca04c3",
+        related_to=None,
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="abc0946d-15b0-4308-b93d-e0470b6d33b6",
+        source_id="abc12345-6789-0123-4567-89abcdef0123",
+        sender="2075752244",
+        recipients=["2185852245"],
+        text="Assistance needed, please respond.",
+        created_at="2025-06-04T13:27:10+03:00",
+        location=schemas_v2.Location(
+            lon=-72.704459,
+            lat=-51.688246,
+        ),
+        additional={
+            "status": {
+                "autonomous": 0,
+                "lowBattery": 1,
+                "intervalChange": 0,
+                "resetDetected": 0,
+            }
+        },
+        observation_type=schemas_v2.StreamPrefixEnum.text_message.value,
+    )
+
+
+@pytest.fixture
+def text_message_from_earthranger():
+    return schemas_v2.TextMessage(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b2",
+        related_to=None,
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="338225f3-91f9-4fe1-b013-353a229ce504",
+        source_id="abc12345-6789-0123-4567-89abcdef0123",
+        sender="admin@sitex.pamdas.org",
+        recipients=["2075752244"],
+        text="Assistance is on the way.",
+        created_at="2025-06-04T13:35:10+03:00",
+        observation_type=schemas_v2.StreamPrefixEnum.text_message.value,
     )
 
 
