@@ -1562,6 +1562,34 @@ class ERAttachmentTransformer(Transformer):
         return schemas.v2.ERAttachment(file_path=message.file_path)
 
 
+class ERMessageTransformer(Transformer):
+    async def transform(
+        self, message: schemas.v2.TextMessage, rules: list = None, **kwargs
+    ) -> schemas.v2.ERMessage:
+        transformed_message_fields = {
+            "message_type": "inbox",
+            # "sender", "receiver" and "device" fields are not used for now
+            "manufacturer_id": message.external_source_id,  # This is used as query param later
+            # subject_id and source_id query params are not used for now
+            "text": message.text,
+            "message_time": message.created_at,
+            "additional": message.additional or {},
+        }
+        if message.location:
+            transformed_message_fields["device_location"] = {
+                "lon": message.location.lon,
+                "lat": message.location.lat,
+                # Altitude or others are not supported by ER in the /messages/ endpoint
+            }
+
+        # Apply extra transformation rules as needed
+        if rules:
+            for rule in rules:
+                rule.apply(message=transformed_message_fields)
+        er_message = schemas.v2.ERMessage(**transformed_message_fields)
+        return er_message
+
+
 class WPSWatchEventTransformerV2(Transformer):
     async def transform(
         self, message: schemas.v2.Event, rules: list = None, **kwargs
@@ -2019,6 +2047,10 @@ transformers_map = {
     schemas.v2.StreamPrefixEnum.observation.value: {
         schemas.DestinationTypes.Movebank.value: MBObservationTransformer,
         schemas.DestinationTypes.EarthRanger.value: ERObservationTransformer,
+    },
+    schemas.v2.StreamPrefixEnum.text_message.value: {
+        schemas.DestinationTypes.EarthRanger.value: ERMessageTransformer,
+        # schemas.DestinationTypes.InReach.value: InReachMessageTransformer,
     },
     # ToDo. Support patrols in SMART v2?
     # schemas.StreamPrefixEnum.earthranger_patrol : {
