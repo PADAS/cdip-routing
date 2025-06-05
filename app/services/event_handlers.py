@@ -18,6 +18,8 @@ from gundi_core.events.transformers import (
     AttachmentTransformedWPSWatch,
     EventTransformedTrapTagger,
     AttachmentTransformedTrapTagger,
+    MessageTransformedER,
+    MessageTransformedInReach,
 )
 from opentelemetry.trace import SpanKind
 from app.core import tracing
@@ -50,6 +52,8 @@ transformer_events_by_data_type = {
     "WPSWatchImage": AttachmentTransformedWPSWatch,
     "TrapTaggerImageMetadata": EventTransformedTrapTagger,
     "TrapTaggerImage": AttachmentTransformedTrapTagger,
+    "ERMessage": MessageTransformedER,
+    "InReachIPCMessage": MessageTransformedInReach,
 }
 
 
