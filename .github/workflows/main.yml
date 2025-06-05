@@ -4,6 +4,7 @@ on:
     branches:
       - main
       - 'release-**'
+      - gundi-4288-fix-messages
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -62,7 +63,7 @@ jobs:
 
   stage-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
-    if: startsWith(github.ref, 'refs/heads/release')
+    if: startsWith(github.ref, 'refs/heads/gundi-4288-fix-messages')
     needs: [vars, run_unit_tests, build]
     with:
       environment: stage
