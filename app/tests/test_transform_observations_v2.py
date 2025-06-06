@@ -750,11 +750,11 @@ async def test_transform_text_message_for_earthranger(
     assert transformed_observation.message_time == text_message_from_inreach.created_at
     assert transformed_observation.device_location
     assert (
-        transformed_observation.device_location.lon
+        transformed_observation.device_location.longitude
         == text_message_from_inreach.location.lon
     )
     assert (
-        transformed_observation.device_location.lat
+        transformed_observation.device_location.latitude
         == text_message_from_inreach.location.lat
     )
     assert transformed_observation.additional == text_message_from_inreach.additional

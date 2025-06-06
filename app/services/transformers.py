@@ -1577,8 +1577,8 @@ class ERMessageTransformer(Transformer):
         }
         if message.location:
             transformed_message_fields["device_location"] = {
-                "lon": message.location.lon,
-                "lat": message.location.lat,
+                "longitude": message.location.lon,
+                "latitude": message.location.lat,
                 # Altitude or others are not supported by ER in the /messages/ endpoint
             }
 
