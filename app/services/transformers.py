@@ -1503,12 +1503,17 @@ class EREventTransformer(Transformer):
             event_type=message.event_type,
             event_details=message.event_details,
             time=message.recorded_at,
-            location=dict(
-                longitude=message.location.lon, latitude=message.location.lat
-            ),
             geometry=message.geometry,
             state=message.status,
         )
+        if message.location:
+            transformed_event_fields["location"] = {
+                "longitude": message.location.lon,
+                "latitude": message.location.lat,
+                "altitude": message.location.alt,
+            }
+        else:
+            transformed_event_fields["location"] = None
         # Apply extra transformation rules as needed
         if rules:
             for rule in rules:
@@ -1660,8 +1665,8 @@ class TrapTaggerEventTransformer(Transformer):
         timestamp = recorded_at.strftime("%Y-%m-%d %H:%M:%S")
         transformed_event_fields = {
             "camera": message.external_source_id,
-            "latitude": message.location.lat,
-            "longitude": message.location.lon,
+            "latitude": message.location.lat if message.location else 0.0,
+            "longitude": message.location.lon if message.location else 0.0,
             "timestamp": timestamp,
         }
         # Apply extra transformation rules as needed
