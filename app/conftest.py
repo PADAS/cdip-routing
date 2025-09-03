@@ -2324,6 +2324,30 @@ def animals_sign_event_v2():
 
 
 @pytest.fixture
+def animals_sign_event_v2_with_null_location():
+    return schemas_v2.Event(
+        gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",
+        owner="e2d1b0fc-69fe-408b-afc5-7f54872730c0",
+        data_provider_id="ddd0946d-15b0-4308-b93d-e0470b6d33b6",
+        annotations={},
+        source_id="afa0d606-c143-4705-955d-68133645db6d",
+        external_source_id="Xyz123",
+        recorded_at=datetime.datetime(
+            2023, 12, 28, 19, 26, tzinfo=datetime.timezone.utc
+        ),
+        location=None,
+        title="Animal Sign",
+        event_type="animals_sign",
+        event_details={
+            "species": "lion",
+            "ageofsign": "days",
+        },
+        geometry={},
+        observation_type="ev",
+    )
+
+
+@pytest.fixture
 def animals_sign_event_with_status():
     return schemas_v2.Event(
         gundi_id="c1b46dc1-b144-556c-c87a-2ef373ca04b0",

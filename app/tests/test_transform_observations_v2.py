@@ -189,6 +189,26 @@ async def test_transform_events_with_status_for_earthranger(
 
 
 @pytest.mark.asyncio
+async def test_transform_event_with_null_location_for_earthranger(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub,
+    animals_sign_event_v2_with_null_location,
+    destination_integration_v2_er,
+    connection_v2,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_v2_with_null_location,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    # Location is set to None when null
+    assert transformed_observation.location is None
+
+
+@pytest.mark.asyncio
 async def test_provider_key_mapping_with_default(
     mock_cache,
     mock_gundi_client_v2,
@@ -290,6 +310,44 @@ async def test_transform_events_for_smart(
     observation_group = attributes.observationGroups[0]
     assert len(observation_group.observations) == 1
     observation = observation_group.observations[0]
+    assert observation.category == "animals.sign"
+    assert observation.attributes == {"ageofsign": "days", "species": "lion"}
+
+
+@pytest.mark.asyncio
+async def test_transform_event_with_null_location_for_smart(
+    mocker,
+    smart_ca_uuid,
+    mock_smart_async_client_class,
+    animals_sign_event_v2_with_null_location,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient",
+        mock_smart_async_client_class,
+    )
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_v2_with_null_location,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    assert transformed_observation.ca_uuid == smart_ca_uuid
+    assert len(transformed_observation.waypoint_requests) == 1
+    waypoint = transformed_observation.waypoint_requests[0]
+    location = waypoint.geometry.coordinates
+    # Location is set to [0, 0] when null
+    assert location == [0, 0]
+    properties = waypoint.properties
+    assert properties
+    assert properties.smartDataType == "incident"
+    assert properties.smartFeatureType == "waypoint/new"
+    attributes = properties.smartAttributes
+    assert attributes
+    assert len(attributes.observationGroups) == 1
+    observation = attributes.observationGroups[0].observations[0]
     assert observation.category == "animals.sign"
     assert observation.attributes == {"ageofsign": "days", "species": "lion"}
 
@@ -659,6 +717,34 @@ async def test_transform_event_for_traptagger(
     assert (
         transformed_observation.timestamp
         == animals_sign_event_v2.recorded_at.strftime("%Y-%m-%d %H:%M:%S")
+    )
+
+
+@pytest.mark.asyncio
+async def test_transform_event_with_null_location_for_traptagger(
+    animals_sign_event_v2_with_null_location,
+    connection_v2_wpswatch_to_traptagger,
+    destination_integration_v2_traptagger,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_v2_with_null_location,
+        destination=destination_integration_v2_traptagger,
+        provider=connection_v2_wpswatch_to_traptagger.provider,
+        route_configuration=None,
+    )
+    assert transformed_observation
+    assert isinstance(transformed_observation, schemas.v2.TrapTaggerImageMetadata)
+    assert (
+        transformed_observation.camera
+        == animals_sign_event_v2_with_null_location.external_source_id
+    )
+    assert transformed_observation.latitude == "0.0"
+    assert transformed_observation.longitude == "0.0"
+    assert (
+        transformed_observation.timestamp
+        == animals_sign_event_v2_with_null_location.recorded_at.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
     )
 
 
