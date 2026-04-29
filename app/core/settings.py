@@ -57,3 +57,10 @@ GCP_ENVIRONMENT = env.str("GCP_ENVIRONMENT", "dev")
 DEAD_LETTER_TOPIC = env.str("DEAD_LETTER_TOPIC", "transformer-dead-letter-dev")
 MAX_EVENT_AGE_SECONDS = env.int("MAX_EVENT_AGE_SECONDS", 86400)  # 24hrs
 EVENT_PROCESSING_STATUS_TTL = env.int("EVENT_PROCESSING_STATUS_TTL", 3600)
+
+# Topic for portal-visible activity logs published as gundi_core system events.
+INTEGRATION_EVENTS_TOPIC = env.str(
+    "INTEGRATION_EVENTS_TOPIC", f"integration-events-{GCP_ENVIRONMENT}"
+)
+# Suppress repeat activity logs for the same (action, resource, error) within this window.
+ACTIVITY_LOG_DEDUP_TTL = env.int("ACTIVITY_LOG_DEDUP_TTL", 3600)

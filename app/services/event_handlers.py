@@ -77,7 +77,10 @@ async def transform_and_route_observation(observation):
                 raise ReferenceDataError(error)
             provider = connection.provider
             destinations = connection.destinations
-            default_route = await get_route(route_id=connection.default_route.id)
+            default_route = await get_route(
+                route_id=connection.default_route.id,
+                data_provider_id=observation.data_provider_id,
+            )
             if not default_route:
                 error = f"Default route '{connection.default_route.id}', for provider '{observation.data_provider_id}' not found."
                 current_span.set_attribute("error", error)
