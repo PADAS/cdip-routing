@@ -65,6 +65,38 @@ async def send_message_to_gcp_pubsub_dispatcher(
         )
 
 
+async def send_event_to_integration_events_topic(event):
+    """Publish a gundi_core system event to the integration events topic.
+
+    Best-effort: any failure is logged and swallowed. The caller's path must
+    not be affected by activity-log delivery problems.
+    """
+    with tracing.tracer.start_as_current_span(
+        "routing_service.send_event_to_integration_events_topic", kind=SpanKind.PRODUCER
+    ) as current_span:
+        topic_name = settings.INTEGRATION_EVENTS_TOPIC
+        current_span.set_attribute("topic", topic_name)
+        try:
+            timeout_settings = aiohttp.ClientTimeout(
+                total=settings.INTEGRATION_EVENTS_PUBLISH_TIMEOUT_SECONDS
+            )
+            async with aiohttp.ClientSession(
+                raise_for_status=True, timeout=timeout_settings
+            ) as session:
+                client = pubsub.PublisherClient(session=session)
+                topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
+                payload = json.dumps(event.dict(), default=str).encode("utf-8")
+                messages = [pubsub.PubsubMessage(payload)]
+                await client.publish(
+                    topic, messages, timeout=int(timeout_settings.total)
+                )
+        except Exception as e:
+            logger.warning(
+                f"Failed to publish activity log to {topic_name}: {type(e).__name__}: {e}"
+            )
+            current_span.set_attribute("error", str(e))
+
+
 async def send_observation_to_dead_letter_topic(transformed_observation, attributes):
     with tracing.tracer.start_as_current_span(
         "send_message_to_dead_letter_topic", kind=SpanKind.CLIENT

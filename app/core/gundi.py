@@ -15,6 +15,7 @@ from app.core.utils import (
 from app.core.errors import ReferenceDataError
 from gundi_client import PortalApi
 from gundi_client_v2 import GundiClient
+from app.services.activity_logger import log_portal_lookup_error
 
 
 logger = logging.getLogger(__name__)
@@ -437,6 +438,11 @@ async def get_connection(*, connection_id):
                     f"Error while getting connection from the portal:\n{type(e)}: {e}",
                     extra={**extra_dict},
                 )
+                await log_portal_lookup_error(
+                    action_id="get_connection",
+                    resource_id=connection_id,
+                    exception=e,
+                )
             else:
                 await write_to_cache_safe(
                     key=cache_key, ttl=_cache_ttl, instance=connection, extra_dict=extra_dict
@@ -450,7 +456,7 @@ async def get_connection(*, connection_id):
         return connection
 
 
-async def get_route(*, route_id):
+async def get_route(*, route_id, data_provider_id=None):
     route = None
     extra_dict = {"connection_id": route_id}
     try:
@@ -474,6 +480,12 @@ async def get_route(*, route_id):
                     f"Error while getting route details from the portal: {e}",
                     extra={**extra_dict},
                 )
+                if data_provider_id:
+                    await log_portal_lookup_error(
+                        action_id="get_route",
+                        resource_id=data_provider_id,
+                        exception=e,
+                    )
             else:
                 await write_to_cache_safe(
                     key=cache_key, ttl=_cache_ttl, instance=route, extra_dict=extra_dict
@@ -516,6 +528,11 @@ async def get_integration(*, integration_id):
                 logger.exception(
                     f"Error while getting integration details from the portal: {e}",
                     extra={**extra_dict},
+                )
+                await log_portal_lookup_error(
+                    action_id="get_integration",
+                    resource_id=integration_id,
+                    exception=e,
                 )
             else:
                 await write_to_cache_safe(
