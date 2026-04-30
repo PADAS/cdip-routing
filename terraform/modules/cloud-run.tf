@@ -94,6 +94,11 @@ resource "google_cloud_run_v2_service" "default" {
       }
 
       env {
+        name  = "INTEGRATION_EVENTS_TOPIC"
+        value = "integration-events-${var.env}"
+      }
+
+      env {
         name  = "SMART_DEFAULT_TIMEOUT"
         value = var.smart_default_timeout
       }
