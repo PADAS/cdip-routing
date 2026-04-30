@@ -77,7 +77,9 @@ async def send_event_to_integration_events_topic(event):
         topic_name = settings.INTEGRATION_EVENTS_TOPIC
         current_span.set_attribute("topic", topic_name)
         try:
-            timeout_settings = aiohttp.ClientTimeout(total=10.0)
+            timeout_settings = aiohttp.ClientTimeout(
+                total=settings.INTEGRATION_EVENTS_PUBLISH_TIMEOUT_SECONDS
+            )
             async with aiohttp.ClientSession(
                 raise_for_status=True, timeout=timeout_settings
             ) as session:
