@@ -5,6 +5,8 @@ from gundi_core.events import (
     EventUpdateReceived,
     AttachmentReceived,
     TextMessageReceived,
+    GundiDelivery,
+    ProviderInfo,
 )
 from gundi_core.schemas.v2 import StreamPrefixEnum
 from gundi_core.events.transformers import (
@@ -62,6 +64,107 @@ def build_transformer_event(transformed_observation):
     return Event(payload=transformed_observation)
 
 
+def _build_provider_info(provider) -> ProviderInfo:
+    provider_type = ""
+    if getattr(provider, "type", None) is not None:
+        provider_type = getattr(provider.type, "value", "") or ""
+
+    owner_id = ""
+    owner_name = ""
+    if getattr(provider, "owner", None) is not None:
+        owner_id = str(getattr(provider.owner, "id", "") or "")
+        owner_name = getattr(provider.owner, "name", "") or ""
+
+    return ProviderInfo(
+        provider_id=str(provider.id),
+        provider_type=provider_type,
+        provider_name=getattr(provider, "name", "") or "",
+        owner_id=owner_id,
+        owner_name=owner_name,
+    )
+
+
+def _build_gundi_delivery(*, observation, provider, route_configuration) -> GundiDelivery:
+    return GundiDelivery(
+        payload=observation,
+        route_configuration=route_configuration,
+        provider=_build_provider_info(provider),
+    )
+
+
+async def _publish_gundi_delivery(
+    *,
+    observation,
+    destination,
+    destination_integration,
+    provider,
+    provider_key,
+    route_configuration,
+    broker_config,
+    destination_str,
+    provider_str,
+    current_span,
+):
+    """Generic-model publish path: wrap the Gundi payload in a GundiDelivery
+    envelope and publish to the destination's PubSub topic. The action runner
+    is responsible for transformation."""
+
+    # Validate broker — same restriction as the legacy path.
+    broker_value = (broker_config or {}).get("broker", Broker.GCP_PUBSUB.value).strip().lower()
+    if broker_value != Broker.GCP_PUBSUB.value:
+        current_span.set_attribute("broker", broker_value)
+        raise ReferenceDataError(
+            f"Broker '{broker_value}' is no longer supported. Please use `{Broker.GCP_PUBSUB.value}` instead."
+        )
+
+    try:
+        delivery = _build_gundi_delivery(
+            observation=observation,
+            provider=provider,
+            route_configuration=route_configuration,
+        )
+    except Exception as e:
+        error_msg = (
+            f"Error building GundiDelivery for observation {observation.gundi_id} "
+            f"from {provider_str} for destination {destination_str}: "
+            f"{type(e).__name__}: {e}. Discarded."
+        )
+        logger.exception(error_msg)
+        current_span.set_attribute("error", error_msg)
+        current_span.set_attribute("is_discarded", True)
+        current_span.add_event(
+            name="routing_service.observation_discarded_on_generic_envelope_error"
+        )
+        return
+
+    attributes = build_transformed_message_attributes(
+        observation=observation,
+        destination=destination,
+        gundi_version="v2",
+        provider_key=provider_key,
+    )
+
+    pubsub_message = build_gcp_pubsub_message(
+        payload=delivery.dict(exclude_none=True)
+    )
+    ordering_key = (
+        str(observation.gundi_id)
+        if observation.observation_type == StreamPrefixEnum.event_update.value
+        else ""
+    )
+    await send_message_to_gcp_pubsub_dispatcher(
+        message=pubsub_message,
+        attributes=attributes,
+        destination=destination,
+        broker_config=broker_config,
+        ordering_key=ordering_key,
+    )
+    logger.info(
+        f"Observation {observation.gundi_id} published as GundiDelivery to {destination_str}.",
+        extra=attributes,
+    )
+
+
 async def transform_and_route_observation(observation):
     with tracing.tracer.start_as_current_span(
         "routing_service.transform_and_route_observation", kind=SpanKind.CONSUMER
@@ -117,6 +220,23 @@ async def transform_and_route_observation(observation):
                 destination_str = (
                     f"'{destination.owner.name} - {destination.name}'({destination.id})"
                 )
+
+                # Generic-model path: publish a GundiDelivery envelope and let
+                # the action runner perform destination-specific transformation.
+                if (destination_integration.additional or {}).get("generic_model"):
+                    await _publish_gundi_delivery(
+                        observation=observation,
+                        destination=destination,
+                        destination_integration=destination_integration,
+                        provider=provider,
+                        provider_key=provider_key,
+                        route_configuration=route_configuration,
+                        broker_config=broker_config,
+                        destination_str=destination_str,
+                        provider_str=provider_str,
+                        current_span=current_span,
+                    )
+                    continue
 
                 # Transform the observation for the destination
                 try:
