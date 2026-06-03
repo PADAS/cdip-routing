@@ -24,7 +24,10 @@ jobs:
       - uses: actions/checkout@v4
       - id: vars
         run: |
-          echo "tag=${{ github.head_ref || github.ref_name }}-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          # Docker tags can't contain '/', so sanitize the branch name.
+          branch="${{ github.head_ref || github.ref_name }}"
+          tag="${branch//\//-}-$(git rev-parse --short HEAD)"
+          echo "tag=${tag}" >> $GITHUB_OUTPUT
           echo "repository=us-central1-docker.pkg.dev/cdip-78ca/gundi/cdip-routing" >> $GITHUB_OUTPUT
 
   run_unit_tests:
