@@ -103,7 +103,7 @@ gundi-client==1.0.4
     # via -r requirements.in
 gundi-client-v2==2.3.8
     # via -r requirements.in
-gundi-core @ git+https://github.com/PADAS/gundi-core.git@5390551461733669d68502edfdaa4bb32e11a8d0
+gundi-core==1.11.3
     # via
     #   -r requirements.in
     #   gundi-client

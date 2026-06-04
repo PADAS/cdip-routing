@@ -4,9 +4,6 @@ on:
     branches:
       - main
       - 'release-**'
-      # Temporary: deploy the generic-model rollout branch to dev.
-      # Remove after merging to main.
-      - 'feat/generic-model-publish'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -57,10 +54,7 @@ jobs:
 
   dev-deploy:
     uses: PADAS/gundi-workflows/.github/workflows/terragrunt.yml@v2
-    # Temporary: deploy the generic-model rollout branch to dev alongside main.
-    # When merging back to main, drop the feature-branch ref from this condition
-    # and from the push.branches trigger above.
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/generic-model-publish'
+    if: startsWith(github.ref, 'refs/heads/main')
     needs: [vars, run_unit_tests, build]
     with:
       environment: dev
