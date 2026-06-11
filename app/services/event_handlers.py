@@ -24,7 +24,7 @@ from gundi_core.events.transformers import (
     MessageTransformedInReach,
 )
 from opentelemetry.trace import SpanKind
-from app.core import tracing
+from app.core import settings, tracing
 from app.core.errors import ReferenceDataError
 from app.core.gundi import get_connection, get_route, get_integration
 from app.core.local_logging import ExtraKeys
@@ -41,6 +41,22 @@ from app.services.transformers import (
 
 
 logger = logging.getLogger(__name__)
+
+
+def _uses_generic_model(destination_integration) -> bool:
+    """Whether a destination uses the generic-model path (publish a
+    GundiDelivery for its action runner to transform) instead of a legacy
+    in-process Transformer.
+
+    Decided by the destination's integration *type* (e.g. ``cmore``) via
+    ``settings.GENERIC_MODEL_DESTINATION_TYPES`` so it requires no per-integration
+    config. The legacy per-integration ``additional.generic_model`` flag is still
+    honored as an override for one-off opt-in.
+    """
+    type_value = getattr(getattr(destination_integration, "type", None), "value", None)
+    if type_value and type_value in settings.GENERIC_MODEL_DESTINATION_TYPES:
+        return True
+    return bool((destination_integration.additional or {}).get("generic_model"))
 
 
 transformer_events_by_data_type = {
@@ -223,7 +239,7 @@ async def transform_and_route_observation(observation):
 
                 # Generic-model path: publish a GundiDelivery envelope and let
                 # the action runner perform destination-specific transformation.
-                if (destination_integration.additional or {}).get("generic_model"):
+                if _uses_generic_model(destination_integration):
                     await _publish_gundi_delivery(
                         observation=observation,
                         destination=destination,
