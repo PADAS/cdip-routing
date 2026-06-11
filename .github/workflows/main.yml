@@ -27,21 +27,10 @@ jobs:
           echo "tag=${tag}" >> $GITHUB_OUTPUT
           echo "repository=us-central1-docker.pkg.dev/cdip-78ca/gundi/cdip-routing" >> $GITHUB_OUTPUT
 
+  # Gates the build/deploy: `build` needs run_unit_tests, so a failing suite
+  # blocks the image. Shares its definition with the PR workflow via _tests.yml.
   run_unit_tests:
-    runs-on: ubuntu-latest
-    needs: [vars]
-    steps:
-      - name: Checkout branch
-        uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.8'
-      - name: Install pip
-        run: python -m ensurepip --upgrade
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run unit tests
-        run: pytest
+    uses: ./.github/workflows/_tests.yml
 
 
   build:
