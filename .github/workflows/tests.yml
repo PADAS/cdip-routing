@@ -1,0 +1,8 @@
+name: Tests
+
+on:
+  pull_request
+
+jobs:
+  run_unit_tests:
+    uses: ./.github/workflows/_tests.yml
