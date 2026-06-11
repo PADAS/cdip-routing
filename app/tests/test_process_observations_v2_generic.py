@@ -119,6 +119,42 @@ async def test_legacy_mode_unchanged_when_generic_model_absent(
 
 
 @pytest.mark.asyncio
+async def test_generic_mode_selected_by_destination_type_without_flag(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    destination_integration_v2,
+    raw_observation_v2,
+    raw_observation_v2_attributes,
+):
+    """A destination whose *type* is in GENERIC_MODEL_DESTINATION_TYPES uses the
+    generic-model path with no per-integration `additional.generic_model` flag.
+    (Here the ER type is temporarily added to the allow-list to drive it.)"""
+    assert "generic_model" not in (destination_integration_v2.additional or {})
+    mocker.patch(
+        "app.core.settings.GENERIC_MODEL_DESTINATION_TYPES",
+        [destination_integration_v2.type.value],
+    )
+    mock_gundi_client_v2.get_integration_details.return_value = async_return(
+        destination_integration_v2
+    )
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    send_mock = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher", send_mock
+    )
+    transform_mock = mocker.patch("app.services.event_handlers.transform_observation_v2")
+
+    await process_observation_event(raw_observation_v2, raw_observation_v2_attributes)
+
+    transform_mock.assert_not_called()
+    assert send_mock.call_count == 1
+    payload, _ = _decode_published_payload(send_mock)
+    assert payload["event_type"] == "GundiDelivery"
+
+
+@pytest.mark.asyncio
 async def test_generic_mode_when_additional_is_none(
     mocker,
     mock_cache,
