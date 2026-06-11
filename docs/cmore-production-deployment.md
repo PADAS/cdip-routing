@@ -11,13 +11,17 @@ This was built and verified on dev/stage; the same chain applies to prod. There 
 ## Parameters (set once, used throughout)
 
 ```bash
-# --- confirm these for prod before running anything ---
-export PROJECT=cdip-prod-78ca               # CONFIRM (dev=cdip-dev-78ca, stage=cdip-stage-78ca)
+# Production values (confirmed 2026-06-11). dev=cdip-dev-78ca, stage=cdip-stage-78ca.
+export PROJECT=cdip-prod1-78ca
 export REGION=us-central1
 export TYPE=cmore
-export RUNNER_URL=https://<cmore-actions-runner-prod-url>   # from `gcloud run services describe`
+# Prod cmore runner (from `gcloud run services describe cmore-actions-runner`):
+export RUNNER_URL=https://cmore-actions-runner-nhgde2snxa-uc.a.run.app
 export RUNNER_SA=gundi-integrations-v2@${PROJECT}.iam.gserviceaccount.com
 ```
+
+> If the runner URL/SA ever change, re-confirm with:
+> `gcloud run services describe cmore-actions-runner --project=${PROJECT} --region=${REGION} --format='value(status.url, spec.template.spec.serviceAccountName)'`
 
 ---
 
@@ -93,7 +97,20 @@ gcloud pubsub subscriptions create ${TYPE}-push-data-sub \
     --role=roles/iam.serviceAccountTokenCreator
   ```
 
-> The push-data topic must exist **before** the CMORE destination integration is pointed at it and before routing tries to deliver.
+- [ ] Grant the Pub/Sub service agent the rights dead-lettering needs — publish to the dead-letter topic and subscribe on the source subscription (else dead-lettering fails silently):
+  ```bash
+  gcloud pubsub topics add-iam-policy-binding ${TYPE}-push-data-dead-letter \
+    --project=${PROJECT} \
+    --member=serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com \
+    --role=roles/pubsub.publisher
+
+  gcloud pubsub subscriptions add-iam-policy-binding ${TYPE}-push-data-sub \
+    --project=${PROJECT} \
+    --member=serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com \
+    --role=roles/pubsub.subscriber
+  ```
+
+> The push-data topic must exist **before** the CMORE destination integration is pointed at it and before routing tries to deliver. As of 2026-06-11 none of the `cmore-push-data*` resources exist in `cdip-prod1-78ca` yet — this is a clean create.
 
 ## Step 3 — Deploy the runners
 
