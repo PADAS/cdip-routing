@@ -103,7 +103,7 @@ gcloud pubsub subscriptions create ${TYPE}-push-data-sub \
 
 ## Step 4 — Configure prod integrations in the Gundi portal
 
-- [ ] **CMORE destination integration**: prod base_url + token + ShareGroup. Set `additional.generic_model` so routing uses the generic-model path. Set `broker_config.topic = cmore-push-data-topic` (else cdip-routing falls back to legacy `destination-<id>-<env>` naming and messages never arrive).
+- [ ] **CMORE destination integration**: prod base_url + token + ShareGroup. Set `broker_config.topic = cmore-push-data-topic` (else cdip-routing falls back to legacy `destination-<id>-<env>` naming and messages never arrive). No `additional.generic_model` flag needed — cdip-routing routes the generic-model path by destination *type* (`cmore` is in `GENERIC_MODEL_DESTINATION_TYPES`, default; cdip-routing PR #151). The per-integration flag still works as an override if ever needed.
 - [ ] **ER provider integration**: pull filters (event types + subject groups) and `er_ui_root` (for the deep link).
 - [ ] **Connection**: provider = ER, destination = CMORE.
 - [ ] **DeliverConfig mappings** (`event_type_to_tag`): run the scaffold CLI against the prod connection once tags are visible (Step 0):
@@ -140,4 +140,4 @@ No schema/data changes, so rollback is image-level and low-risk:
 - Redeploy the prior image for any service.
 - `provider_metadata` degrades gracefully: an older cdip/cdip-routing simply drops the field (deep-link comment stops; events still post). An older CMORE runner ignores tags/updates it doesn't understand.
 - Pub/Sub resources can be left in place (idle) or deleted; they don't affect other types.
-- The portal `broker_config.topic` / `additional.generic_model` settings can be reverted per-integration to fall back to legacy routing.
+- To fall a destination back to legacy routing, remove its `broker_config.topic` (and, if cdip-routing PR #151 isn't deployed, the generic-model path is instead controlled by `GENERIC_MODEL_DESTINATION_TYPES` / the `additional.generic_model` override).
