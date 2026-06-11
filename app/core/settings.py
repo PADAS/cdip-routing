@@ -58,6 +58,16 @@ DEAD_LETTER_TOPIC = env.str("DEAD_LETTER_TOPIC", "transformer-dead-letter-dev")
 MAX_EVENT_AGE_SECONDS = env.int("MAX_EVENT_AGE_SECONDS", 86400)  # 24hrs
 EVENT_PROCESSING_STATUS_TTL = env.int("EVENT_PROCESSING_STATUS_TTL", 3600)
 
+# Destination integration *types* that use the generic-model path: cdip-routing
+# publishes a GundiDelivery envelope and the destination's action runner does
+# the transformation, instead of a legacy in-process Transformer. Keyed by
+# integration type slug so operators never have to set `additional.generic_model`
+# per integration — registering, say, a `cmore` destination is enough. Add a new
+# generic-model destination type here (env override) when it's onboarded.
+GENERIC_MODEL_DESTINATION_TYPES = env.list(
+    "GENERIC_MODEL_DESTINATION_TYPES", ["cmore"]
+)
+
 # Topic for portal-visible activity logs published as gundi_core system events.
 INTEGRATION_EVENTS_TOPIC = env.str(
     "INTEGRATION_EVENTS_TOPIC", f"integration-events-{GCP_ENVIRONMENT}"
