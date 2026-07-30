@@ -5,11 +5,14 @@ An ObservationsBatchReceived envelope is transformed per item, grouped per
 ObservationsBatchTransformedER message per group.
 """
 
+import copy
 import json
 import uuid
 
 import pytest
 
+from app.conftest import async_return
+from app.core.errors import ReferenceDataError
 from app.services.process_messages import process_observation_event
 
 
@@ -167,4 +170,45 @@ async def test_batch_with_all_items_failing_publishes_nothing(
     )
     await process_observation_event(event_dict, _batch_attributes(2))
 
+    send_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_batch_raises_on_unsupported_broker(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    destination_integration_v2,
+    connection_v2,
+    route_v2,
+):
+    # A destination configured with a legacy/unsupported broker must abort the
+    # whole batch (ReferenceDataError, so the envelope is retried) before any
+    # transform or publish work happens for that destination — same as the
+    # single-item path and the generic-model publish path already do per item.
+    unsupported_broker_integration = copy.deepcopy(destination_integration_v2)
+    unsupported_broker_integration.additional = {
+        **(unsupported_broker_integration.additional or {}),
+        "broker": "kafka",
+    }
+    mock_gundi_client_v2.get_integration_details.return_value = async_return(
+        unsupported_broker_integration
+    )
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    send_mock = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher", send_mock
+    )
+    transform_mock = mocker.patch("app.services.event_handlers.transform_observation_v2")
+
+    event_dict = _make_batch_event_dict(
+        observations_count=2,
+        data_provider_id=str(connection_v2.provider.id),
+    )
+
+    with pytest.raises(ReferenceDataError):
+        await process_observation_event(event_dict, _batch_attributes(2))
+
+    transform_mock.assert_not_called()
     send_mock.assert_not_called()

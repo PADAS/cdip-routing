@@ -459,6 +459,22 @@ async def transform_and_route_observations_batch(batch):
                     f"'{destination.owner.name} - {destination.name}'({destination.id})"
                 )
 
+                # Validate the broker once per destination, before any
+                # transform/publish work — same restriction the single-item
+                # path (transform_and_route_observation) and the generic-model
+                # publish path (_publish_gundi_delivery) already enforce per
+                # item. Hoisted here so a batch can't slip an unsupported
+                # broker past this check the way per-item publishing would
+                # have caught it.
+                broker_value = (
+                    (broker_config or {}).get("broker", Broker.GCP_PUBSUB.value).strip().lower()
+                )
+                if broker_value != Broker.GCP_PUBSUB.value:
+                    current_span.set_attribute("broker", broker_value)
+                    raise ReferenceDataError(
+                        f"Broker '{broker_value}' is no longer supported. Please use `{Broker.GCP_PUBSUB.value}` instead."
+                    )
+
                 # Generic-model destinations keep the per-item GundiDelivery
                 # path (splitting the batch is allowed; merging never is).
                 if _uses_generic_model(destination_integration):
