@@ -385,7 +385,6 @@ async def _publish_transformed_batch_group(
     effective_provider_key,
     destination,
     broker_config,
-    current_span,
 ):
     er_batch = ERObservationsBatch(
         batch_id=batch.batch_id,
@@ -400,7 +399,7 @@ async def _publish_transformed_batch_group(
         "batch": "true",
         "batch_count": str(len(items)),
         "provider_key": effective_provider_key,
-        "stream_type": StreamPrefixEnum.observation.value,
+        "stream_type": batch.observation_type,
         "destination_id": str(destination.id),
         "data_provider_id": str(batch.data_provider_id),
     }
@@ -466,8 +465,11 @@ async def transform_and_route_observations_batch(batch):
                 # item. Hoisted here so a batch can't slip an unsupported
                 # broker past this check the way per-item publishing would
                 # have caught it.
+                # str() + `or` guard: `additional.broker` can be present but
+                # null in portal data; .strip() on None would fail the whole
+                # batch before the unsupported-broker check even runs.
                 broker_value = (
-                    (broker_config or {}).get("broker", Broker.GCP_PUBSUB.value).strip().lower()
+                    str((broker_config or {}).get("broker") or Broker.GCP_PUBSUB.value).strip().lower()
                 )
                 if broker_value != Broker.GCP_PUBSUB.value:
                     current_span.set_attribute("broker", broker_value)
@@ -559,7 +561,6 @@ async def transform_and_route_observations_batch(batch):
                         effective_provider_key=effective_provider_key,
                         destination=destination,
                         broker_config=broker_config,
-                        current_span=current_span,
                     )
         except ReferenceDataError as e:
             logger.exception(
