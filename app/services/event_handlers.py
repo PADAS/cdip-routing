@@ -1,14 +1,18 @@
 import logging
 from gundi_core.events import (
     ObservationReceived,
+    ObservationsBatchReceived,
     EventReceived,
     EventUpdateReceived,
     AttachmentReceived,
     TextMessageReceived,
     GundiDelivery,
     ProviderInfo,
+    ERObservationsBatch,
+    ObservationsBatchTransformedER,
+    TransformedERObservationItem,
 )
-from gundi_core.schemas.v2 import StreamPrefixEnum
+from gundi_core.schemas.v2 import StreamPrefixEnum, ERObservation
 from gundi_core.events.transformers import (
     EventTransformedER,
     EventUpdateTransformedER,
@@ -374,6 +378,214 @@ async def transform_and_route_observation(observation):
             raise e  # Raise the exception so the message is retried later by GCP
 
 
+async def _publish_transformed_batch_group(
+    *,
+    batch,
+    items,
+    effective_provider_key,
+    destination,
+    broker_config,
+):
+    er_batch = ERObservationsBatch(
+        batch_id=batch.batch_id,
+        data_provider_id=batch.data_provider_id,
+        destination_id=str(destination.id),
+        provider_key=effective_provider_key,
+        items=items,
+    )
+    envelope = ObservationsBatchTransformedER(payload=er_batch)
+    attributes = {
+        "gundi_version": "v2",
+        "batch": "true",
+        "batch_count": str(len(items)),
+        "provider_key": effective_provider_key,
+        "stream_type": batch.observation_type,
+        "destination_id": str(destination.id),
+        "data_provider_id": str(batch.data_provider_id),
+    }
+    pubsub_message = build_gcp_pubsub_message(payload=envelope.dict(exclude_none=True))
+    await send_message_to_gcp_pubsub_dispatcher(
+        message=pubsub_message,
+        attributes=attributes,
+        destination=destination,
+        broker_config=broker_config,
+        ordering_key="",
+    )
+    logger.info(
+        f"Batch {batch.batch_id}: {len(items)} observations transformed and sent to destination {destination.id}.",
+        extra=attributes,
+    )
+
+
+async def transform_and_route_observations_batch(batch):
+    with tracing.tracer.start_as_current_span(
+        "routing_service.transform_and_route_observations_batch", kind=SpanKind.CONSUMER
+    ) as current_span:
+        current_span.set_attribute("batch_id", str(batch.batch_id))
+        current_span.set_attribute("batch_count", len(batch.observations))
+        if not batch.observations:
+            return
+        try:
+            data_provider_id = str(batch.data_provider_id)
+            # ONE connection/route lookup for the whole batch — every item
+            # shares the provider by the envelope invariant.
+            connection = await get_connection(connection_id=data_provider_id)
+            if not connection:
+                error = f"Connection '{data_provider_id}' not found."
+                current_span.set_attribute("error", error)
+                raise ReferenceDataError(error)
+            provider = connection.provider
+            default_route = await get_route(
+                route_id=connection.default_route.id,
+                data_provider_id=data_provider_id,
+            )
+            if not default_route:
+                error = f"Default route '{connection.default_route.id}', for provider '{data_provider_id}' not found."
+                current_span.set_attribute("error", error)
+                raise ReferenceDataError(error)
+            route_configuration = default_route.configuration
+            provider_key = get_provider_key(provider)
+            destinations = connection.destinations
+            current_span.set_attribute("destinations_qty", len(destinations))
+
+            provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
+            for destination in destinations:
+                destination_integration = await get_integration(
+                    integration_id=destination.id
+                )
+                broker_config = destination_integration.additional
+                destination_str = (
+                    f"'{destination.owner.name} - {destination.name}'({destination.id})"
+                )
+
+                # Validate the broker once per destination, before any
+                # transform/publish work — same restriction the single-item
+                # path (transform_and_route_observation) and the generic-model
+                # publish path (_publish_gundi_delivery) already enforce per
+                # item. Hoisted here so a batch can't slip an unsupported
+                # broker past this check the way per-item publishing would
+                # have caught it.
+                # str() + `or` guard: `additional.broker` can be present but
+                # null in portal data; .strip() on None would fail the whole
+                # batch before the unsupported-broker check even runs.
+                broker_value = (
+                    str((broker_config or {}).get("broker") or Broker.GCP_PUBSUB.value).strip().lower()
+                )
+                if broker_value != Broker.GCP_PUBSUB.value:
+                    current_span.set_attribute("broker", broker_value)
+                    raise ReferenceDataError(
+                        f"Broker '{broker_value}' is no longer supported. Please use `{Broker.GCP_PUBSUB.value}` instead."
+                    )
+
+                # Generic-model destinations keep the per-item GundiDelivery
+                # path (splitting the batch is allowed; merging never is).
+                if _uses_generic_model(destination_integration):
+                    for observation in batch.observations:
+                        await _publish_gundi_delivery(
+                            observation=observation,
+                            destination=destination,
+                            destination_integration=destination_integration,
+                            provider=provider,
+                            provider_key=provider_key,
+                            route_configuration=route_configuration,
+                            broker_config=broker_config,
+                            destination_str=destination_str,
+                            provider_str=provider_str,
+                            current_span=current_span,
+                        )
+                    continue
+
+                # Transform per item; group per effective provider_key because
+                # field mappings may override it per item and one ER bulk post
+                # allows exactly one provider_key in its URL path.
+                groups = {}
+                for observation in batch.observations:
+                    try:
+                        transformed = await transform_observation_v2(
+                            observation=observation,
+                            destination=destination_integration,
+                            provider=provider,
+                            route_configuration=route_configuration,
+                        )
+                    except Exception as e:
+                        # Shrink the batch, never abort it
+                        error_msg = (
+                            f"Error transforming observation {observation.gundi_id} in batch {batch.batch_id} "
+                            f"from {provider_str} for destination {destination_str}: {type(e).__name__}: {e}. Discarded."
+                        )
+                        logger.exception(error_msg)
+                        current_span.add_event(
+                            name="routing_service.batch_item_discarded_on_transformer_error"
+                        )
+                        continue
+                    if not transformed:
+                        current_span.add_event(
+                            name="routing_service.batch_item_discarded_by_transformer"
+                        )
+                        continue
+                    if not isinstance(transformed, ERObservation):
+                        # Non-ER destination in the same connection (e.g. a raw-dict
+                        # transformer): no batch envelope exists for it yet, so this
+                        # item publishes individually exactly as the single path does.
+                        pubsub_message_payload = (
+                            transformed
+                            if isinstance(transformed, dict)
+                            else build_transformer_event(transformed).dict(exclude_none=True)
+                        )
+                        attributes = build_transformed_message_attributes(
+                            observation=observation,
+                            destination=destination,
+                            gundi_version="v2",
+                            provider_key=getattr(transformed, "provider_key", provider_key),
+                        )
+                        await send_message_to_gcp_pubsub_dispatcher(
+                            message=build_gcp_pubsub_message(payload=pubsub_message_payload),
+                            attributes=attributes,
+                            destination=destination,
+                            broker_config=broker_config,
+                            ordering_key="",
+                        )
+                        continue
+                    effective_key = getattr(transformed, "provider_key", None) or provider_key
+                    groups.setdefault(effective_key, []).append(
+                        TransformedERObservationItem(
+                            gundi_id=observation.gundi_id,
+                            observation=transformed,
+                        )
+                    )
+
+                for effective_provider_key, items in groups.items():
+                    await _publish_transformed_batch_group(
+                        batch=batch,
+                        items=items,
+                        effective_provider_key=effective_provider_key,
+                        destination=destination,
+                        broker_config=broker_config,
+                    )
+        except ReferenceDataError as e:
+            logger.exception(
+                f"External error occurred obtaining reference data for batch {batch.batch_id}: {e}",
+                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.InboundIntId: str(batch.data_provider_id)},
+            )
+            current_span.set_attribute("error", str(e))
+            raise e  # Raise so the whole envelope is retried later by GCP
+        except Exception as e:
+            logger.exception(
+                f"Unexpected internal exception occurred processing batch {batch.batch_id}: {e}",
+                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.InboundIntId: str(batch.data_provider_id)},
+            )
+            current_span.set_attribute("error", str(e))
+            raise e
+
+
+async def handle_observations_batch_received(event: ObservationsBatchReceived):
+    with tracing.tracer.start_as_current_span(
+        "routing_service.handle_observations_batch_received", kind=SpanKind.CONSUMER
+    ) as current_span:
+        current_span.set_attribute("batch_count", len(event.payload.observations))
+        await transform_and_route_observations_batch(batch=event.payload)
+
+
 async def handle_observation_received(event: ObservationReceived):
     # Trace observations with Open Telemetry
     with tracing.tracer.start_as_current_span(
@@ -419,6 +631,7 @@ async def handle_text_message_received(event: TextMessageReceived):
 
 event_handlers = {
     "ObservationReceived": handle_observation_received,
+    "ObservationsBatchReceived": handle_observations_batch_received,
     "EventReceived": handle_event_received,
     "EventUpdateReceived": handle_event_update,
     "AttachmentReceived": handle_attachment_received,
@@ -427,6 +640,7 @@ event_handlers = {
 
 event_schemas = {
     "ObservationReceived": ObservationReceived,
+    "ObservationsBatchReceived": ObservationsBatchReceived,
     "EventReceived": EventReceived,
     "EventUpdateReceived": EventUpdateReceived,
     "AttachmentReceived": AttachmentReceived,
