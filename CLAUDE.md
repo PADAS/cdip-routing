@@ -20,6 +20,9 @@ exception out of the handler is how a message gets retried by GCP; returning nor
 ## Commands
 
 ```bash
+# One-time setup: the suite needs the pinned deps in a 3.8 venv
+python3.8 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+
 # Tests (no pytest.ini/pyproject; pytest is run bare from the repo root)
 TRACING_ENABLED=false pytest
 TRACING_ENABLED=false pytest app/tests/test_process_observations_v2.py
@@ -31,13 +34,16 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 # Send a sample Pub/Sub push envelope at a locally running service.
 # test_local.sh is a curl scratchpad: one active payload plus many commented-out
 # ones (AttachmentReceived, EventReceived, EventUpdateReceived, v1 messages...).
-# Uncomment the case you want and point the port at your uvicorn instance.
+# Uncomment the case you want; it POSTs to localhost:8282, so run uvicorn on that
+# port or edit the script.
 ./test_local.sh
 
 # Formatting/secret scanning (black, detect-secrets, ggshield)
 pre-commit run --all-files
 
-# Build + push the image manually (CI normally does this)
+# Build + push the image manually (CI normally does this).
+# The target lives in GNUmakefile and needs GNU make >= 4.1 — macOS ships 3.81,
+# so use `gmake build_and_push` (brew install make) there.
 make build_and_push
 ```
 
@@ -62,7 +68,9 @@ before any routing:
 3. **Dedup**: `message_id = payload.event_id or pubsub message_id`; if seen in Redis
    (`app/core/deduplication.py`, TTL `EVENT_PROCESSING_STATUS_TTL`) → dead-letter + discard.
 4. **Age check**: `is_too_old` against `MAX_EVENT_AGE_SECONDS` → dead-letter + discard. This is the
-   retry-limit mechanism; Pub/Sub retries the same message until it ages out.
+   retry-limit mechanism; Pub/Sub retries the same message until it ages out. **Known bug**: the
+   implementation uses `timedelta.seconds`, which drops whole days, so a 25-hour-old message reads as one
+   hour old and is never discarded under the 24h default. `total_seconds()` is the fix.
 5. Branch on `attributes["gundi_version"]`:
    - **v1** → `process_observation` (legacy; `OutboundConfiguration` per device, no system-event envelope)
    - **v2** → `process_observation_event` → `event_handlers[event_type]`
@@ -84,14 +92,18 @@ means adding to *both* dicts.
 4. Two publish paths:
    - **Generic-model** (`_uses_generic_model`): wrap the untransformed payload in a `GundiDelivery`
      envelope and publish; the destination's *action runner* does the transformation. Selected by
-     destination integration *type* via `settings.GENERIC_MODEL_DESTINATION_TYPES` (default `["cmore"]`),
-     with `additional.generic_model` as a per-integration override.
+     destination integration *type* via `settings.GENERIC_MODEL_DESTINATION_TYPES` (default `["cmore"]`).
+     `additional.generic_model` is a one-off **opt-in** for a type that isn't on the list; it cannot opt a
+     listed type *out*, since the type check runs first.
    - **Legacy in-process**: `transform_observation_v2` picks a `Transformer` class out of
      `transformers_map[stream_type][destination_type]` in `app/services/transformers.py`, applies route
-     field-mapping rules, then the result is wrapped in the matching `*Transformed*` system event via
-     `transformer_events_by_data_type` and published.
+     field-mapping rules, then wraps the result in the matching `*Transformed*` system event via
+     `transformer_events_by_data_type` and publishes it. **Exception**: a transformer that returns a plain
+     `dict` (e.g. Movebank) is published raw, unwrapped — older dispatchers depend on that shape.
 5. `build_transformed_message_attributes` builds the Pub/Sub attributes the dispatcher reads.
-   Ordering key is set **only for `event_update`** (so updates land after their create).
+   Ordering key is set to `gundi_id` **only for `event_update`**; creates publish with an empty key. Pub/Sub
+   only orders messages sharing a non-empty key, so this serializes updates against each other — it does
+   **not** guarantee an update arrives after its create.
 
 `transform_and_route_observations_batch` is the batch path for `ObservationsBatchReceived`. Its invariants,
 which are easy to break:
@@ -99,8 +111,11 @@ which are easy to break:
 - **One** connection/route lookup for the whole batch — every item shares the provider by envelope invariant.
 - Broker validation is hoisted **before** any transform/publish work per destination (single-item path
   validates per item; a batch must not slip an unsupported broker through).
-- A failing item is **dropped**, never aborts the batch ("shrink the batch, never abort it"). Only
-  reference-data/unexpected errors propagate, so the whole envelope is retried.
+- A failing item is **dropped**, never aborts the batch ("shrink the batch, never abort it"). What
+  propagates — and so retries the whole envelope — is failure *outside* the per-item try: the connection
+  and route lookups, `get_integration`, and broker validation. Anything raised **inside**
+  `transform_observation_v2` is caught by the per-item `except Exception` and drops just that item, including
+  a `ReferenceDataError` from a malformed field mapping.
 - Items are grouped per **effective `provider_key`** (field mappings can override it per item) because one
   ER bulk post carries exactly one provider_key in its URL path.
 - Generic-model destinations and non-ER transform results keep publishing **per item**: splitting a batch
@@ -117,15 +132,18 @@ which are easy to break:
 
 - `app/core/gundi.py` — all portal access, via `gundi_client.PortalApi` (`_portal`, v1) and
   `gundi_client_v2.GundiClient` (`portal_v2`). Every lookup is **Redis-cached** with
-  `PORTAL_CONFIG_OBJECT_CACHE_TTL`; empty responses are deliberately not cached. Portal failures also
-  emit a portal-visible activity log.
+  `PORTAL_CONFIG_OBJECT_CACHE_TTL`; empty responses are deliberately not cached. Only the v2 lookups
+  (`get_connection`, `get_route`, `get_integration`) emit a portal-visible activity log on failure; the v1
+  helpers just log locally, and `ensure_device_integration` silently returns a blank device.
 - `app/services/activity_logger.py` — publishes `IntegrationActionCustomLog` to
   `INTEGRATION_EVENTS_TOPIC` so operators see lookup failures in the portal. **Best-effort by contract**:
   it never raises, and is deduped in Redis for `ACTIVITY_LOG_DEDUP_TTL`.
-- `app/core/pubsub.py` — all publishing (`gcloud.aio.pubsub`), with `backoff` retries. Destination topic
-  comes from `broker_config["topic"]`, falling back to `destination-<id>-<GCP_ENVIRONMENT>`.
-- `app/core/settings.py` — every setting is an `environs` env var with a default; there is no settings
-  class. Note `app/__init__.py` re-exports it, so both `from app import settings` and
+- `app/core/pubsub.py` — all publishing (`gcloud.aio.pubsub`). Only
+  `send_message_to_gcp_pubsub_dispatcher` has `backoff` retries; dead-letter and activity-log publishing
+  get one attempt. Destination topic comes from `broker_config["topic"]`, falling back to
+  `destination-<id>-<GCP_ENVIRONMENT>`.
+- `app/core/settings.py` — settings are `environs` env vars with defaults, read at import; there is no
+  settings class. A few values are plain code constants with no env knob (e.g. `DEFAULT_REQUESTS_TIMEOUT`). Note `app/__init__.py` re-exports it, so both `from app import settings` and
   `from app.core import settings` appear in the codebase.
 - `app/services/transformers.py` — ~2000 lines of destination-specific `Transformer` subclasses (ER,
   SMART, WPS Watch, TrapTagger, Movebank, InReach). v1 uses the `if/elif` chain in `transform_observation`;
@@ -168,7 +186,8 @@ or portal/pubsub helper means writing or updating the tests that cover it in the
   `test_get_connection_details.py`), not mirrored 1:1 against `app/`. Extend the file that already covers
   the behavior before creating a new one.
 - **Test through the real entry point.** Call `process_request` / `process_observation_event` /
-  `transform_and_route_observation(s_batch)` and patch only at the boundaries listed above. Tests that
+  `transform_and_route_observation` / `transform_and_route_observations_batch`, and patch only at the
+  boundaries listed above. Tests that
   call a private helper directly tend to pass while the routing path is broken.
 - **Reuse `app/conftest.py`.** There is almost certainly already a raw payload, attributes dict, or mock
   client for your stream type; `async_return()` is the helper for stubbing coroutines. Add a new fixture
@@ -221,6 +240,6 @@ or portal/pubsub helper means writing or updating the tests that cover it in the
 
 - `.github/workflows/_tests.yml` — reusable test job, the single source of truth for how the suite runs.
 - `tests.yml` runs it on every PR; `main.yml` runs it as a **gate** before build/deploy.
-- `main.yml` builds the image and deploys via Terragrunt: pushes to `main` → **dev**, pushes to
-  `release-**` → **stage**. Infra lives in `terraform/` (Cloud Run, Pub/Sub topics/subscriptions, IAM,
+- `main.yml` builds the image and deploys via Terragrunt: pushes to `main` → **dev**; pushes to
+  `release-**` → **stage**, then **prod** once `stage-deploy` succeeds. Infra lives in `terraform/` (Cloud Run, Pub/Sub topics/subscriptions, IAM,
   Secret Manager, monitoring), per-environment under `terraform/environments/{dev,stage,prod}`.
