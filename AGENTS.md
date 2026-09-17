@@ -16,8 +16,10 @@ There is no consumer loop and no worker process — **one HTTP request = one Pub
 exception out of the handler is how a message gets retried by GCP; returning normally acks it.
 
 > `README.md` is stale: it describes Kafka subscribers, `app/subscribers/` and `app/transform_service/`,
-> none of which exist anymore. Kafka is dead — `Broker.KAFKA` exists in `app/core/utils.py` only so the
-> code can reject it. Trust the code over the README.
+> none of which exist anymore. Kafka is dead: the `Broker.KAFKA` member and the `supported_brokers` set in
+> `app/core/utils.py` are unused leftovers — nothing reads either, so don't preserve them as load-bearing.
+> Rejection compares the portal's `additional.broker` string against `Broker.GCP_PUBSUB.value`.
+> Trust the code over the README.
 
 ## Commands
 
@@ -114,11 +116,17 @@ which are easy to break:
 - **One** connection/route lookup for the whole batch — every item shares the provider by envelope invariant.
 - Broker validation is hoisted **before** any transform/publish work per destination (single-item path
   validates per item; a batch must not slip an unsupported broker through).
-- A failing item is **dropped**, never aborts the batch ("shrink the batch, never abort it"). What
-  propagates — and so retries the whole envelope — is failure *outside* the per-item try: the connection
-  and route lookups, `get_integration`, and broker validation. Anything raised **inside**
-  `transform_observation_v2` is caught by the per-item `except Exception` and drops just that item, including
-  a `ReferenceDataError` from a malformed field mapping.
+- A failing **transform** is dropped, never aborts the batch ("shrink the batch, never abort it"). The
+  per-item `try` wraps `transform_observation_v2` and nothing else, so anything it raises — including a
+  `ReferenceDataError` from a malformed field mapping — drops just that item. Everything else propagates and
+  retries the whole envelope: the connection and route lookups, broker validation, and the `AttributeError`
+  on `destination_integration.additional` when `get_integration` returns `None` (it swallows its own errors
+  and returns in a `finally`, so it never raises — don't grep it for a `raise`).
+- **The three publish sites sit outside that try**, so the invariant above does not cover them:
+  the per-item `send_message_to_gcp_pubsub_dispatcher` for non-ER results, the per-item
+  `_publish_gundi_delivery` for generic-model destinations, and `_publish_transformed_batch_group`. A
+  500-item batch whose item 300 exhausts its `backoff` retries on publish aborts the whole batch, and
+  redelivery re-publishes items 1–299.
 - Items are grouped per **effective `provider_key`** (field mappings can override it per item) because one
   ER bulk post carries exactly one provider_key in its URL path.
 - Generic-model destinations and non-ER transform results keep publishing **per item**: splitting a batch
@@ -173,7 +181,13 @@ mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)  # portal v2
 mocker.patch("app.core.gundi._portal", mock_gundi_client)   # portal v1
 mocker.patch("app.core.pubsub.pubsub", mock_pubsub)         # gcloud.aio.pubsub
 mocker.patch("app.core.deduplication._cache_db", mock_cache)
+mocker.patch("app.services.activity_logger._cache_db", mock_cache)  # portal-error log dedup
 ```
+
+That last one is easy to miss: every v2 portal-lookup failure reaches `log_portal_lookup_error`, which
+does its own `_cache_db.set(...)`. Leave it unpatched and the test opens a real connection to
+`localhost:6379`. Patching `app.core.gundi.log_portal_lookup_error` outright works too — see
+`test_get_connection_details.py`.
 
 Assertions are typically "did we publish, and with what payload/attributes" —
 `mock_pubsub.PublisherClient.return_value.publish.called` and inspecting the decoded message.
@@ -201,7 +215,10 @@ or portal/pubsub helper means writing or updating the tests that cover it in the
 - **Cover the three outcomes this service actually has**, not just a happy path:
   1. the message is transformed and published (assert the topic, attributes, and decoded payload);
   2. the message is **discarded** — duplicate, too old, unsupported version, transformer error,
-     no destinations — assert nothing was published and, where applicable, that it was dead-lettered;
+     no destinations — assert nothing reached the *destination* topic. Do **not** assert
+     `not publish.called`: duplicate, too old and unsupported version all dead-letter, and that publishes
+     through the same patched mock, so `publish.called` is `True`. Distinguish by the `topic_path` args
+     (`test_message_deduplication` is the model);
   3. the message is **retried** — `ReferenceDataError` or an unexpected error propagates out of the
      handler (`pytest.raises`), because propagating is the retry signal to GCP.
   For batch changes, also assert that one failing item shrinks the batch instead of aborting it, and that
