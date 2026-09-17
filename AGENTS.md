@@ -36,8 +36,9 @@ TRACING_ENABLED=false pytest app/tests/test_process_request.py::test_message_v2_
 uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 
 # Send a sample Pub/Sub push envelope at a locally running service.
-# test_local.sh is a curl scratchpad: one active payload plus many commented-out
-# ones (AttachmentReceived, EventReceived, EventUpdateReceived, v1 messages...).
+# test_local.sh is a curl scratchpad: one active payload — itself an
+# AttachmentReceived v2 message — plus many commented-out ones (EventReceived,
+# EventUpdateReceived per destination, v1 messages...).
 # Uncomment the case you want; it POSTs to localhost:8282, so run uvicorn on that
 # port or edit the script.
 ./test_local.sh
@@ -114,19 +115,26 @@ means adding to *both* dicts.
 which are easy to break:
 
 - **One** connection/route lookup for the whole batch — every item shares the provider by envelope invariant.
-- Broker validation is hoisted **before** any transform/publish work per destination (single-item path
-  validates per item; a batch must not slip an unsupported broker through).
+- Broker validation is hoisted **before** any transform/publish work per destination, so a batch cannot
+  slip an unsupported broker through. The single-item path is **not** equivalent: it checks *after*
+  `transform_observation_v2` and after attribute building, and its `broker_config.get("broker", …).strip()`
+  has no null guard — so `additional.broker: null` raises `AttributeError` (an unexpected-error retry)
+  rather than the documented `ReferenceDataError`. The batch path's `str(… or …)` guard exists for exactly
+  that portal record.
 - A failing **transform** is dropped, never aborts the batch ("shrink the batch, never abort it"). The
   per-item `try` wraps `transform_observation_v2` and nothing else, so anything it raises — including a
   `ReferenceDataError` from a malformed field mapping — drops just that item. Everything else propagates and
   retries the whole envelope: the connection and route lookups, broker validation, and the `AttributeError`
   on `destination_integration.additional` when `get_integration` returns `None` (it swallows its own errors
   and returns in a `finally`, so it never raises — don't grep it for a `raise`).
-- **The three publish sites sit outside that try**, so the invariant above does not cover them:
+- **Everything after the transform sits outside that try**, so the invariant above does not cover it:
   the per-item `send_message_to_gcp_pubsub_dispatcher` for non-ER results, the per-item
-  `_publish_gundi_delivery` for generic-model destinations, and `_publish_transformed_batch_group`. A
-  500-item batch whose item 300 exhausts its `backoff` retries on publish aborts the whole batch, and
-  redelivery re-publishes items 1–299.
+  `_publish_gundi_delivery` for generic-model destinations, `_publish_transformed_batch_group`, and also
+  `build_transformer_event`, `build_transformed_message_attributes` and the `TransformedERObservationItem`
+  construction. A 500-item batch whose item 300 exhausts its `backoff` retries on publish aborts the whole
+  batch, and redelivery re-publishes items 1–299. `build_transformer_event` is the sharpest edge: it does
+  `transformer_events_by_data_type[type(x).__name__]`, so a new transformer result type missing from that
+  map raises `KeyError` and retries the envelope forever — add the map entry with the transformer.
 - Items are grouped per **effective `provider_key`** (field mappings can override it per item) because one
   ER bulk post carries exactly one provider_key in its URL path.
 - Generic-model destinations and non-ER transform results keep publishing **per item**: splitting a batch
@@ -134,7 +142,12 @@ which are easy to break:
 
 ### Error handling contract
 
-- `ReferenceDataError` and unexpected exceptions are **re-raised** → GCP retries the message.
+- `ReferenceDataError` and unexpected exceptions retry the message **only when they escape the handler** —
+  raising out of it is the retry signal to GCP.
+- **Anything raised inside `transform_observation_v2` never escapes on the v2 paths.** Both call sites
+  (single-item and batch) wrap it in a bare `except Exception` and continue, so a `ReferenceDataError` from
+  a malformed route field mapping is *discarded*, not retried — bad portal config fails silently. Don't
+  build alerting or tests on the assumption that it retries.
 - Transformer errors **discard that destination's item** (v2) or dead-letter it (v1) and continue —
   a bad transform for one destination must not block the others.
 - `send_observation_to_dead_letter_topic` targets `settings.DEAD_LETTER_TOPIC`.
@@ -143,12 +156,15 @@ which are easy to break:
 
 - `app/core/gundi.py` — all portal access, via `gundi_client.PortalApi` (`_portal`, v1) and
   `gundi_client_v2.GundiClient` (`portal_v2`). Every lookup is **Redis-cached** with
-  `PORTAL_CONFIG_OBJECT_CACHE_TTL`. Empty responses end up uncached, but only `ensure_device_integration`
-  guards that on purpose (`if device:`); `write_to_cache_safe` logs "Ignoring null instance" and then falls
-  through with no `return`, so the write throws `AttributeError` and the generic `except` swallows it. Don't
-  read that as intent — it needs the missing `return`. Only the v2 lookups
+  `PORTAL_CONFIG_OBJECT_CACHE_TTL`. Not caching an empty response is **deliberate**: four lookups carry the
+  same `# don't cache empty response` guard (`get_outbound_config_detail`, `get_inbound_integration_detail`,
+  `get_all_outbound_configs_for_id`, `ensure_device_integration`) — strip them and you reintroduce negative
+  caching of empty portal responses for a full TTL. What is *not* deliberate: `write_to_cache_safe` logs
+  "Ignoring null instance" and then falls through with no `return`, so the write throws `AttributeError` and
+  the generic `except` swallows it; that one needs the missing `return`. Only the v2 lookups
   (`get_connection`, `get_route`, `get_integration`) emit a portal-visible activity log on failure; the v1
-  helpers just log locally, and `ensure_device_integration` silently returns a blank device.
+  helpers log and then `raise ReferenceDataError` — which is the retry signal, not a local-only log — and
+  `ensure_device_integration` silently returns a blank device.
 - `app/services/activity_logger.py` — publishes `IntegrationActionCustomLog` to
   `INTEGRATION_EVENTS_TOPIC` so operators see lookup failures in the portal. **Best-effort by contract**:
   it never raises, and is deduped in Redis for `ACTIVITY_LOG_DEDUP_TTL`.
