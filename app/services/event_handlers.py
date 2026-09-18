@@ -35,6 +35,7 @@ from app.core.local_logging import ExtraKeys
 from app.core.utils import Broker
 from app.core.utils import get_provider_key
 from app.core.pubsub import send_message_to_gcp_pubsub_dispatcher
+from app.services.activity_logger import log_missing_default_route
 from app.services.transformers import (
     build_transformed_message_attributes,
     build_gcp_pubsub_message,
@@ -185,6 +186,52 @@ async def _publish_gundi_delivery(
     )
 
 
+async def _discard_on_missing_default_route(
+    *, connection, observations, observation_type, current_span
+):
+    """Log, trace and emit an activity log for a connection with no default route.
+
+    This is a portal configuration error (the provider has no routing rule), so
+    the observations cannot be routed. Callers discard them instead of raising,
+    because raising makes PubSub retry a message that can never succeed.
+    """
+    provider = connection.provider
+    provider_id = str(provider.id)
+    owner_name = provider.owner.name if provider.owner else None
+    gundi_ids = [str(o.gundi_id) for o in observations]
+    destinations = [str(d.id) for d in (connection.destinations or [])]
+    routing_rules = [str(r.id) for r in (connection.routing_rules or [])]
+    error_msg = (
+        f"Connection '{owner_name} - {provider.name}'({provider_id}) has no default route. "
+        f"This is a configuration error. "
+        f"{len(gundi_ids)} {observation_type} observation(s) discarded: {gundi_ids}. "
+        f"destinations={destinations} routing_rules={routing_rules}"
+    )
+    logger.error(
+        error_msg,
+        extra={
+            ExtraKeys.AttentionNeeded: True,
+            ExtraKeys.InboundIntId: provider_id,
+            ExtraKeys.Provider: provider.name,
+            ExtraKeys.StreamType: observation_type,
+            ExtraKeys.GundiVersion: "v2",
+            ExtraKeys.GundiId: gundi_ids[0] if len(gundi_ids) == 1 else gundi_ids,
+            "destinations": destinations,
+            "routing_rules": routing_rules,
+        },
+    )
+    current_span.set_attribute("error", error_msg)
+    current_span.set_attribute("is_discarded", True)
+    current_span.add_event(
+        name="routing_service.observation_discarded_on_missing_default_route"
+    )
+    await log_missing_default_route(
+        connection=connection,
+        observation_type=observation_type,
+        gundi_ids=gundi_ids,
+    )
+
+
 async def transform_and_route_observation(observation):
     with tracing.tracer.start_as_current_span(
         "routing_service.transform_and_route_observation", kind=SpanKind.CONSUMER
@@ -198,6 +245,14 @@ async def transform_and_route_observation(observation):
                 error = f"Connection '{observation.data_provider_id}' not found."
                 current_span.set_attribute("error", error)
                 raise ReferenceDataError(error)
+            if not connection.default_route:
+                await _discard_on_missing_default_route(
+                    connection=connection,
+                    observations=[observation],
+                    observation_type=observation.observation_type,
+                    current_span=current_span,
+                )
+                return
             provider = connection.provider
             destinations = connection.destinations
             default_route = await get_route(
@@ -434,6 +489,14 @@ async def transform_and_route_observations_batch(batch):
                 error = f"Connection '{data_provider_id}' not found."
                 current_span.set_attribute("error", error)
                 raise ReferenceDataError(error)
+            if not connection.default_route:
+                await _discard_on_missing_default_route(
+                    connection=connection,
+                    observations=batch.observations,
+                    observation_type=batch.observation_type,
+                    current_span=current_span,
+                )
+                return
             provider = connection.provider
             default_route = await get_route(
                 route_id=connection.default_route.id,
