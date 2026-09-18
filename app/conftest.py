@@ -1519,6 +1519,15 @@ def connection_v2():
 
 
 @pytest.fixture
+def connection_v2_without_default_route(connection_v2):
+    """A provider integration that exists in the portal but has no routing
+    rules yet, so the portal reports no default route and no destinations."""
+    return connection_v2.copy(
+        update={"default_route": None, "routing_rules": [], "destinations": []}
+    )
+
+
+@pytest.fixture
 def connection_v2_traptagger_to_wpswatch():
     return schemas_v2.Connection.parse_obj(
         {

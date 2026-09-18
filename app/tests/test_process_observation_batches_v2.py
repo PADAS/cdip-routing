@@ -212,3 +212,46 @@ async def test_batch_raises_on_unsupported_broker(
 
     transform_mock.assert_not_called()
     send_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_batch_without_default_route_is_discarded_and_logged(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    connection_v2_without_default_route,
+):
+    """Same configuration error as the single-item path, for a whole batch:
+    drop the envelope, skip the null route lookup, emit one activity log
+    listing every discarded gundi_id."""
+    provider_id = str(connection_v2_without_default_route.provider.id)
+    mock_gundi_client_v2.get_connection_details.return_value = async_return(
+        connection_v2_without_default_route
+    )
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    send_mock = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher", send_mock
+    )
+    activity_cache = mocker.MagicMock()
+    activity_cache.set.return_value = async_return(True)
+    mocker.patch("app.services.activity_logger._cache_db", activity_cache)
+    activity_publish = mocker.patch(
+        "app.services.activity_logger.send_event_to_integration_events_topic",
+        return_value=async_return(None),
+    )
+    event_dict = _make_batch_event_dict(observations_count=3, data_provider_id=provider_id)
+    expected_gundi_ids = [o["gundi_id"] for o in event_dict["payload"]["observations"]]
+
+    # Must not raise (raising makes PubSub retry the whole envelope).
+    await process_observation_event(event_dict, _batch_attributes(3))
+
+    send_mock.assert_not_called()
+    mock_gundi_client_v2.get_route_details.assert_not_called()
+    activity_publish.assert_called_once()
+    payload = activity_publish.call_args.args[0].payload
+    assert str(payload.integration_id) == provider_id
+    assert payload.data["reason"] == "missing_default_route"
+    assert payload.data["discarded_count"] == 3
+    assert payload.data["gundi_ids"] == expected_gundi_ids

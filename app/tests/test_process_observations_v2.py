@@ -129,3 +129,50 @@ async def test_default_provider_key(
     provider = connection_v2.provider
     provider_key = get_provider_key(provider)
     assert provider_key == f"gundi_{provider.type.value}_{str(provider.id)}"
+
+
+@pytest.mark.asyncio
+async def test_observation_without_default_route_is_discarded_and_logged(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    connection_v2_without_default_route,
+    raw_observation_v2,
+    raw_observation_v2_attributes,
+):
+    """A provider with no default route is a portal configuration error.
+
+    The observation must be dropped (not retried forever by PubSub), the
+    route lookup must not be attempted with a null id, and an ERROR activity
+    log must be emitted for the provider integration.
+    """
+    provider_id = str(connection_v2_without_default_route.provider.id)
+    raw_observation_v2["payload"]["data_provider_id"] = provider_id
+    mock_gundi_client_v2.get_connection_details.return_value = async_return(
+        connection_v2_without_default_route
+    )
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    dispatcher_send = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher",
+        dispatcher_send,
+    )
+    activity_cache = mocker.MagicMock()
+    activity_cache.set.return_value = async_return(True)
+    mocker.patch("app.services.activity_logger._cache_db", activity_cache)
+    activity_publish = mocker.patch(
+        "app.services.activity_logger.send_event_to_integration_events_topic",
+        return_value=async_return(None),
+    )
+
+    # Must not raise (raising makes PubSub retry the message).
+    await process_observation_event(raw_observation_v2, raw_observation_v2_attributes)
+
+    dispatcher_send.assert_not_called()
+    mock_gundi_client_v2.get_route_details.assert_not_called()
+    activity_publish.assert_called_once()
+    payload = activity_publish.call_args.args[0].payload
+    assert str(payload.integration_id) == provider_id
+    assert payload.data["reason"] == "missing_default_route"
+    assert payload.data["gundi_ids"] == [raw_observation_v2["payload"]["gundi_id"]]
