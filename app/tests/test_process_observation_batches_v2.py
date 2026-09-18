@@ -255,3 +255,37 @@ async def test_batch_without_default_route_is_discarded_and_logged(
     assert payload.data["reason"] == "missing_default_route"
     assert payload.data["discarded_count"] == 3
     assert payload.data["gundi_ids"] == expected_gundi_ids
+
+
+@pytest.mark.asyncio
+async def test_batch_is_retried_when_destination_integration_lookup_fails(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    connection_v2,
+):
+    """Same as the single-item path: a None from get_integration (portal
+    timeout / 5xx) must raise ReferenceDataError for retry, not AttributeError."""
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_integration_details.side_effect = TimeoutError("portal read timeout")
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    send_mock = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher", send_mock
+    )
+    activity_cache = mocker.MagicMock()
+    activity_cache.set.return_value = async_return(True)
+    mocker.patch("app.services.activity_logger._cache_db", activity_cache)
+    mocker.patch(
+        "app.services.activity_logger.send_event_to_integration_events_topic",
+        return_value=async_return(None),
+    )
+    event_dict = _make_batch_event_dict(observations_count=3, data_provider_id=provider_id)
+
+    with pytest.raises(ReferenceDataError) as excinfo:
+        await process_observation_event(event_dict, _batch_attributes(3))
+
+    assert destination_id in str(excinfo.value)
+    send_mock.assert_not_called()

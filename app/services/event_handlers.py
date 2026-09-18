@@ -291,6 +291,17 @@ async def transform_and_route_observation(observation):
                 destination_integration = await get_integration(
                     integration_id=destination.id
                 )
+                if destination_integration is None:
+                    # get_integration swallows portal errors (timeouts, 5xx) and
+                    # returns None after emitting a portal-lookup activity log.
+                    # Raise a ReferenceDataError so the message is retried once
+                    # the portal recovers, instead of an AttributeError below.
+                    error = (
+                        f"Destination integration '{destination.id}' could not be "
+                        f"loaded from the portal for provider '{observation.data_provider_id}'."
+                    )
+                    current_span.set_attribute("error", error)
+                    raise ReferenceDataError(error)
                 broker_config = destination_integration.additional
                 destination_str = (
                     f"'{destination.owner.name} - {destination.name}'({destination.id})"
@@ -402,7 +413,7 @@ async def transform_and_route_observation(observation):
                 )
         except ReferenceDataError as e:
             error_msg = (
-                f"External error occurred obtaining reference data for observation: {e}",
+                f"External error occurred obtaining reference data for observation: {e}"
             )
             logger.exception(
                 error_msg,
@@ -516,6 +527,17 @@ async def transform_and_route_observations_batch(batch):
                 destination_integration = await get_integration(
                     integration_id=destination.id
                 )
+                if destination_integration is None:
+                    # get_integration swallows portal errors (timeouts, 5xx) and
+                    # returns None after emitting a portal-lookup activity log.
+                    # Raise a ReferenceDataError so the message is retried once
+                    # the portal recovers, instead of an AttributeError below.
+                    error = (
+                        f"Destination integration '{destination.id}' could not be "
+                        f"loaded from the portal for provider '{data_provider_id}'."
+                    )
+                    current_span.set_attribute("error", error)
+                    raise ReferenceDataError(error)
                 broker_config = destination_integration.additional
                 destination_str = (
                     f"'{destination.owner.name} - {destination.name}'({destination.id})"
