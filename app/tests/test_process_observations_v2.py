@@ -176,3 +176,48 @@ async def test_observation_without_default_route_is_discarded_and_logged(
     assert str(payload.integration_id) == provider_id
     assert payload.data["reason"] == "missing_default_route"
     assert payload.data["gundi_ids"] == [raw_observation_v2["payload"]["gundi_id"]]
+
+
+@pytest.mark.asyncio
+async def test_observation_is_retried_when_destination_integration_lookup_fails(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    connection_v2,
+    raw_observation_v2,
+    raw_observation_v2_attributes,
+):
+    """A transient portal failure (timeout, 5xx) makes get_integration return
+    None. That must surface as a ReferenceDataError so PubSub retries the
+    message once the portal recovers, not as an AttributeError on `.additional`.
+    """
+    from app.core.errors import ReferenceDataError
+
+    destination_id = str(connection_v2.destinations[0].id)
+    raw_observation_v2["payload"]["data_provider_id"] = str(connection_v2.provider.id)
+    mock_gundi_client_v2.get_integration_details.side_effect = TimeoutError("portal read timeout")
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    dispatcher_send = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher",
+        dispatcher_send,
+    )
+    activity_cache = mocker.MagicMock()
+    activity_cache.set.return_value = async_return(True)
+    mocker.patch("app.services.activity_logger._cache_db", activity_cache)
+    activity_publish = mocker.patch(
+        "app.services.activity_logger.send_event_to_integration_events_topic",
+        return_value=async_return(None),
+    )
+
+    with pytest.raises(ReferenceDataError) as excinfo:
+        await process_observation_event(raw_observation_v2, raw_observation_v2_attributes)
+
+    assert destination_id in str(excinfo.value)
+    dispatcher_send.assert_not_called()
+    # The portal-lookup activity log still names the destination that failed.
+    activity_publish.assert_called_once()
+    payload = activity_publish.call_args.args[0].payload
+    assert payload.action_id == "get_integration"
+    assert str(payload.integration_id) == destination_id
