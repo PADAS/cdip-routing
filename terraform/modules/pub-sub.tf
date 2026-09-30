@@ -53,3 +53,32 @@ resource "google_pubsub_subscription" "transformer-dead-letter-subscription" {
 
   message_retention_duration = "604800s" # 7 days in seconds
 }
+
+# Routing domain events (first: ObservationFiltered), consumed by the portal's
+# routing-events consumer. The consumer must be deployed before anything
+# publishes here: the pipeline is forward-only, so events acked with no
+# consumer are lost. See GUNDI-5711.
+resource "google_pubsub_topic" "routing-events" {
+  name    = "routing-events-${var.env}"
+  project = var.project_id
+}
+
+resource "google_pubsub_subscription" "routing-events-portal-subscription" {
+  name    = "cdip-routing-events-sub-${var.env}"
+  topic   = google_pubsub_topic.routing-events.id
+  project = var.project_id
+
+  ack_deadline_seconds    = 60
+  enable_message_ordering = true
+
+  expiration_policy {
+    ttl = ""
+  }
+
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  message_retention_duration = "604800s" # 7 days in seconds
+}
