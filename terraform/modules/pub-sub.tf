@@ -68,8 +68,11 @@ resource "google_pubsub_subscription" "routing-events-portal-subscription" {
   topic   = google_pubsub_topic.routing-events.id
   project = var.project_id
 
-  ack_deadline_seconds    = 60
-  enable_message_ordering = true
+  ack_deadline_seconds = 60
+  # No ordering (Mariano, review): the consumer doesn't need it, and on an
+  # ordered subscription a nacked message holds every later message on the
+  # same key until it succeeds.
+  enable_message_ordering = false
 
   expiration_policy {
     ttl = ""
