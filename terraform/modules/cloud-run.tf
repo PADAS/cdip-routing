@@ -99,6 +99,11 @@ resource "google_cloud_run_v2_service" "default" {
       }
 
       env {
+        name  = "ROUTING_EVENTS_TOPIC"
+        value = google_pubsub_topic.routing-events.name
+      }
+
+      env {
         name  = "SMART_DEFAULT_TIMEOUT"
         value = var.smart_default_timeout
       }
