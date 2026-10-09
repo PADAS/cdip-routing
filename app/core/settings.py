@@ -65,7 +65,8 @@ EVENT_PROCESSING_STATUS_TTL = env.int("EVENT_PROCESSING_STATUS_TTL", 3600)
 # per integration — registering, say, a `cmore` destination is enough. Add a new
 # generic-model destination type here (env override) when it's onboarded.
 GENERIC_MODEL_DESTINATION_TYPES = env.list(
-    "GENERIC_MODEL_DESTINATION_TYPES", ["cmore"]
+    "GENERIC_MODEL_DESTINATION_TYPES",
+    ["cmore", "generic_webhooks", "hackathon_generic_webhooks"],
 )
 
 # Topic for portal-visible activity logs published as gundi_core system events.

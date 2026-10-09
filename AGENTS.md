@@ -97,7 +97,7 @@ means adding to *both* dicts.
 4. Two publish paths:
    - **Generic-model** (`_uses_generic_model`): wrap the untransformed payload in a `GundiDelivery`
      envelope and publish; the destination's *action runner* does the transformation. Selected by
-     destination integration *type* via `settings.GENERIC_MODEL_DESTINATION_TYPES` (default `["cmore"]`).
+     destination integration *type* via `settings.GENERIC_MODEL_DESTINATION_TYPES` (default `["cmore", "generic_webhooks", "hackathon_generic_webhooks"]`).
      `additional.generic_model` is a one-off **opt-in** for a type that isn't on the list; it cannot opt a
      listed type *out*, since the type check runs first.
    - **Legacy in-process**: `transform_observation_v2` picks a `Transformer` class out of
