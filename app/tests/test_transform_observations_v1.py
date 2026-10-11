@@ -2,9 +2,14 @@ import pytest
 import pytz
 from datetime import datetime
 from gundi_core import schemas
+from smartconnect.models import ConfigurableDataModel
 from app.conftest import async_return
 from app.core.gundi import URN_GUNDI_PREFIX, URN_GUNDI_INTSRC_FORMAT
-from app.services.transformers import transform_observation
+from app.services.transformers import (
+    SmartEventTransformer,
+    map_choice_value_to_option_key,
+    transform_observation,
+)
 
 
 @pytest.mark.asyncio
@@ -145,7 +150,6 @@ async def test_smart_transformer_with_er_patrol(
     assert smart_attributes.get("patrolUuid") == str(patrol.id)
 
 
-from app.services.transformers import SmartEventTransformer, map_choice_value_to_option_key
 
 
 def test_map_choice_value_exact_key_unchanged():
@@ -208,8 +212,6 @@ async def test_smart_transformer_resolves_v2_choice_values(
 async def test_smart_transformer_resolves_across_all_attribute_configs(
     mocker, mock_smart_async_client_class, smart_outbound_configuration_gcp_pubsub
 ):
-    from smartconnect.models import ConfigurableDataModel
-
     mocker.patch(
         "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
     )

@@ -56,6 +56,10 @@ logger = logging.getLogger(__name__)
 ADMIN_PORTAL_HOST = urlparse(settings.PORTAL_API_ENDPOINT).hostname
 
 
+# The option-key rules live in smartconnect.choices. ConfigurableDataModel.
+# resolve_option_key unions across the attribute configs within one CM, but
+# routing must union several CMs and the CA data model in a single lookup,
+# which is why these helpers exist here.
 def _option_keys(*attributes: Optional[dict]) -> List[str]:
     """Option keys of the given data model attribute dicts, deduplicated in order.
 
@@ -84,6 +88,38 @@ def _attribute_entries(configurable_models, key) -> List[dict]:
         for a in (cm.export_as_dict().get("attributes") or [])
         if a.get("key") == key
     ]
+
+
+async def _resolve_known_attribute(
+    transformer, key, value
+) -> Optional[Tuple[str, Any]]:
+    """Resolve (key, value) if the attribute is in a CM or the CA data model.
+
+    Returns None when the attribute is unknown, so callers fall through to the
+    transformation rules. When a CM already knows the attribute, a CA data model
+    outage only narrows the option keys and must not fail the event.
+    """
+    configurable_models = await transformer.get_configurable_models()
+    cm_entries = _attribute_entries(configurable_models, key)
+    if cm_entries:
+        try:
+            ca_attr = (await transformer.get_ca_datamodel()).get_attribute(key=key)
+        except ReferenceDataError:
+            logger.warning(
+                "CA data model unavailable; resolving attribute %r against "
+                "configurable-model options only",
+                key,
+            )
+            ca_attr = None
+    else:
+        ca_attr = (await transformer.get_ca_datamodel()).get_attribute(key=key)
+    if not cm_entries and not ca_attr:
+        return None
+    return key, map_choice_value_to_option_key(
+        attribute_key=key,
+        value=value,
+        option_keys=_option_keys(*cm_entries, ca_attr),
+    )
 
 
 def map_choice_value_to_option_key(
@@ -407,24 +443,9 @@ class SMARTTransformer:
     async def _resolve_attribute(
         self, key, value
     ) -> Tuple[Union[str, None], Union[str, None]]:
-        # Favor a match in a configurable model, then the CA data model.
-        configurable_models = await self.get_configurable_models()
-        cm_attr = None
-        for cm in configurable_models:
-            cm_attr = cm.get_attribute(key=key)
-            if cm_attr:
-                break
-        ca_attr = (await self.get_ca_datamodel()).get_attribute(key=key)
-
-        if cm_attr or ca_attr:
-            value = map_choice_value_to_option_key(
-                attribute_key=key,
-                value=value,
-                option_keys=_option_keys(
-                    *_attribute_entries(configurable_models, key), ca_attr
-                ),
-            )
-            return key, value
+        resolved = await _resolve_known_attribute(self, key, value)
+        if resolved is not None:
+            return resolved
 
         return_key = return_value = None
         # Find in transformation rules.
@@ -1140,24 +1161,9 @@ class SMARTTransformerV2(Transformer, ABC):
     async def _resolve_attribute(
         self, key, value
     ) -> Tuple[Union[str, None], Union[str, None]]:
-        # Favor a match in a configurable model, then the CA data model.
-        configurable_models = await self.get_configurable_models()
-        cm_attr = None
-        for cm in configurable_models:
-            cm_attr = cm.get_attribute(key=key)
-            if cm_attr:
-                break
-        ca_attr = (await self.get_ca_datamodel()).get_attribute(key=key)
-
-        if cm_attr or ca_attr:
-            value = map_choice_value_to_option_key(
-                attribute_key=key,
-                value=value,
-                option_keys=_option_keys(
-                    *_attribute_entries(configurable_models, key), ca_attr
-                ),
-            )
-            return key, value
+        resolved = await _resolve_known_attribute(self, key, value)
+        if resolved is not None:
+            return resolved
 
         return_key = return_value = None
         # Find in transformation rules.
