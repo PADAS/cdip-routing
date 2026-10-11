@@ -1,7 +1,6 @@
 import logging
 from enum import Enum
 import aioredis
-import walrus
 from hashlib import md5
 from uuid import UUID
 from app import settings

@@ -24,8 +24,8 @@ exception out of the handler is how a message gets retried by GCP; returning nor
 ## Commands
 
 ```bash
-# One-time setup: the suite needs the pinned deps in a 3.8 venv
-python3.8 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+# One-time setup: the suite needs the pinned deps in a 3.10 venv
+python3.10 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 
 # Tests (no pytest.ini/pyproject; pytest is run bare from the repo root)
 TRACING_ENABLED=false pytest
@@ -56,12 +56,12 @@ make build_and_push
 exporter **at import time** (via `app/__init__.py`), so without it, tests fail with
 `DefaultCredentialsError` on a machine with no GCP auth.
 
-**Python 3.8** — matched by `docker/Dockerfile`, the compiled `requirements.txt`, and CI. See
-`docs/python-version.md`: the pin is inertia, not a requirement, and the upgrade path to 3.11 is written up
-there. Don't add 3.9+ syntax without doing that upgrade.
+**Python 3.10** — matched by `docker/Dockerfile`, the compiled `requirements.txt`, and CI. See
+`docs/python-version.md`: the pin is forced by smartconnect-client, and 3.11 is blocked by aioredis until the client moves to redis.asyncio
+there. Don't add 3.11+ syntax.
 
 Dependencies are pinned in `requirements.in` and compiled to `requirements.txt` with
-`uv pip compile --python-version 3.8`. Edit the `.in` file, never `requirements.txt` by hand.
+`uv pip compile --python-version 3.10`. Edit the `.in` file, never `requirements.txt` by hand.
 
 ## Request flow
 
