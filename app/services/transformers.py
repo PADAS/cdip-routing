@@ -1,4 +1,6 @@
+import functools
 import json
+import re
 import base64
 import logging
 import os
@@ -56,6 +58,12 @@ logger = logging.getLogger(__name__)
 ADMIN_PORTAL_HOST = urlparse(settings.PORTAL_API_ENDPOINT).hostname
 
 
+@functools.lru_cache(maxsize=1)
+def _timezone_finder() -> timezonefinder.TimezoneFinder:
+    # Construction loads the polygon index (~0.5s); share one per process.
+    return timezonefinder.TimezoneFinder()
+
+
 # The option-key rules live in smartconnect.choices. ConfigurableDataModel.
 # resolve_option_key unions across the attribute configs within one CM, but
 # routing must union several CMs and the CA data model in a single lookup,
@@ -99,18 +107,27 @@ async def _resolve_known_attribute(
     transformation rules. When a CM already knows the attribute, a CA data model
     outage only narrows the option keys and must not fail the event.
     """
+    config = getattr(transformer, "_config", None) or getattr(
+        transformer, "config", None
+    )
+    integration_id = getattr(config, "id", None)
+    integration_id = str(integration_id) if integration_id is not None else None
     configurable_models = await transformer.get_configurable_models()
     cm_entries = _attribute_entries(configurable_models, key)
     if cm_entries:
-        try:
-            ca_attr = (await transformer.get_ca_datamodel()).get_attribute(key=key)
-        except ReferenceDataError:
-            logger.warning(
-                "CA data model unavailable; resolving attribute %r against "
-                "configurable-model options only",
-                key,
-            )
-            ca_attr = None
+        ca_attr = None
+        if not getattr(transformer, "_ca_datamodel_unavailable", False):
+            try:
+                ca_attr = (await transformer.get_ca_datamodel()).get_attribute(
+                    key=key
+                )
+            except ReferenceDataError:
+                transformer._ca_datamodel_unavailable = True
+                logger.warning(
+                    "CA data model unavailable; resolving attributes against "
+                    "configurable-model options only (integration %s)",
+                    integration_id,
+                )
     else:
         ca_attr = (await transformer.get_ca_datamodel()).get_attribute(key=key)
     if not cm_entries and not ca_attr:
@@ -119,32 +136,58 @@ async def _resolve_known_attribute(
         attribute_key=key,
         value=value,
         option_keys=_option_keys(*cm_entries, ca_attr),
+        integration_id=integration_id,
     )
 
 
+_SANITIZED_CHOICE_RE = re.compile(r"[a-z0-9_]+")
+
+
 def map_choice_value_to_option_key(
-    *, attribute_key: str, value: Any, option_keys: List[str]
+    *,
+    attribute_key: str,
+    value: Any,
+    option_keys: List[str],
+    integration_id: Optional[str] = None,
 ) -> Any:
     """Translate an ER choice value back to the SMART option key it came from.
 
     ER v2 event types store LIST/MLIST/TREE selections as Choice values
     derived from the SMART key (lower-cased, non-alphanumerics collapsed to
     underscores, hash-shortened over 100 chars). SMART Connect only accepts
-    the original key. Exact matches (all v1 sites) return unchanged. On a
-    failed lookup the value is returned unchanged and an error is logged so
-    SMART's rejection stays traceable to the attribute.
+    the original key. Exact matches (all v1 sites) return unchanged, and only
+    values shaped like a sanitized key are looked up. On a failed lookup the
+    value is returned unchanged and an error is logged so SMART's rejection
+    stays traceable to the attribute and integration.
     """
     if not option_keys or not isinstance(value, str):
+        return value
+    if value in option_keys:
+        return value
+    if not _SANITIZED_CHOICE_RE.fullmatch(value):
+        logger.debug(
+            "Value %r for SMART attribute %r is not a sanitized choice value; "
+            "passing through (integration %s)",
+            value,
+            attribute_key,
+            integration_id,
+        )
         return value
     try:
         return resolve_option_key(option_keys, value)
     except OptionKeyResolutionError as e:
         logger.error(
-            "Could not map ER choice value %r for SMART attribute %r to an option key: %s",
+            "Could not map ER choice value %r for SMART attribute %r to an option "
+            "key (integration %s): %s",
             value,
             attribute_key,
+            integration_id,
             e,
-            extra={"attribute_key": attribute_key, "value": value},
+            extra={
+                "attribute_key": attribute_key,
+                "value": value,
+                "integration_id": integration_id,
+            },
         )
         return value
 
@@ -396,7 +439,7 @@ class SMARTTransformer:
         OutboundConfiguration (which will in turn fall back to Utc).
         """
         try:
-            predicted_timezone = timezonefinder.TimezoneFinder().timezone_at(
+            predicted_timezone = _timezone_finder().timezone_at(
                 lng=longitude, lat=latitude
             )
             return pytz.timezone(predicted_timezone)
@@ -1123,7 +1166,7 @@ class SMARTTransformerV2(Transformer, ABC):
         OutboundConfiguration (which will in turn fall back to Utc).
         """
         try:
-            predicted_timezone = timezonefinder.TimezoneFinder().timezone_at(
+            predicted_timezone = _timezone_finder().timezone_at(
                 lng=longitude, lat=latitude
             )
             return pytz.timezone(predicted_timezone)
@@ -1930,8 +1973,6 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
     ca_uuid = ca_uuids.pop()
     return patrol, ca_uuid
 
-
-import re
 
 
 def get_ca_uuid_for_event(

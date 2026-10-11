@@ -7,6 +7,7 @@ from app.conftest import async_return
 from app.core.gundi import URN_GUNDI_PREFIX, URN_GUNDI_INTSRC_FORMAT
 from app.services.transformers import (
     SmartEventTransformer,
+    _timezone_finder,
     map_choice_value_to_option_key,
     transform_observation,
 )
@@ -151,7 +152,6 @@ async def test_smart_transformer_with_er_patrol(
 
 
 
-
 def test_map_choice_value_exact_key_unchanged():
     assert map_choice_value_to_option_key(
         attribute_key="wildlifestate", value="healthy", option_keys=["healthy", "injured"]
@@ -238,3 +238,52 @@ async def test_smart_transformer_resolves_across_all_attribute_configs(
         "cmonlystate",
         "Injured",
     )
+
+
+@pytest.mark.parametrize("value", ["", "Some Label", "mixedCase_value"])
+def test_map_choice_value_non_sanitized_shapes_pass_through_quietly(value, caplog):
+    with caplog.at_level("DEBUG"):
+        out = map_choice_value_to_option_key(
+            attribute_key="x", value=value, option_keys=["Lion", "healthy"]
+        )
+    assert out == value
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]
+
+
+def test_map_choice_value_exact_mixed_case_key_unchanged():
+    assert (
+        map_choice_value_to_option_key(
+            attribute_key="x", value="Lion", option_keys=["Lion", "LION"]
+        )
+        == "Lion"
+    )
+
+
+def test_map_choice_value_ambiguous_logs_error_with_integration_id(caplog):
+    with caplog.at_level("ERROR"):
+        out = map_choice_value_to_option_key(
+            attribute_key="species",
+            value="lion",
+            option_keys=["Lion", "LION"],
+            integration_id="integration-123",
+        )
+    assert out == "lion"
+    errors = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert errors and "integration-123" in errors[0].getMessage()
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_reuses_timezone_finder(
+    mocker, mock_smart_async_client_class, smart_outbound_configuration_gcp_pubsub
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    transformer = SmartEventTransformer(
+        config=smart_outbound_configuration_gcp_pubsub, ca_uuid=None
+    )
+    _timezone_finder.cache_clear()
+    for _ in range(2):
+        tz = transformer.guess_location_timezone(longitude=36.82, latitude=-1.29)
+        assert tz.zone == "Africa/Nairobi"
+    assert _timezone_finder.cache_info().misses <= 1

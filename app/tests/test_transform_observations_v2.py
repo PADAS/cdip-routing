@@ -5,7 +5,11 @@ import pytz
 from smartconnect.models import SMARTCONNECT_DATFORMAT, ConfigurableDataModel
 from gundi_core import schemas
 from app.core.errors import ReferenceDataError
-from app.services.transformers import SmartEventTransformerV2, transform_observation_v2
+from app.services.transformers import (
+    SmartEventTransformerV2,
+    _timezone_finder,
+    transform_observation_v2,
+)
 
 
 @pytest.mark.asyncio
@@ -938,3 +942,57 @@ async def test_smart_transformer_v2_survives_ca_datamodel_outage_when_cm_matches
         "cmonlystate",
         "Injured",
     )
+
+
+def _two_attribute_cm():
+    xml = (
+        '<ConfigurableModel xmlns="http://www.smartconservationsoftware.org/xml/1.0/configurablemodel">'
+        '<name value="Test CM" language_code="en"/><nodes/>'
+        '<attributeConfig id="cfg-1" attributeKey="cmonlystate" isDefault="true">'
+        '<listItem keyRef="Healthy" isActive="true"/></attributeConfig>'
+        '<attributeConfig id="cfg-2" attributeKey="cmonlyother" isDefault="true">'
+        '<listItem keyRef="Injured" isActive="true"/></attributeConfig>'
+        "</ConfigurableModel>"
+    )
+    cm = ConfigurableDataModel()
+    cm.load(xml)
+    return cm
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_v2_fetches_ca_datamodel_once_after_outage(
+    mocker, mock_smart_async_client_class, destination_integration_v2_smart
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    transformer = SmartEventTransformerV2(config=destination_integration_v2_smart)
+    mocker.patch.object(
+        transformer, "get_configurable_models", return_value=[_two_attribute_cm()]
+    )
+    get_ca = mocker.patch.object(
+        transformer, "get_ca_datamodel", side_effect=ReferenceDataError("down")
+    )
+    assert await transformer._resolve_attribute("cmonlystate", "healthy") == (
+        "cmonlystate",
+        "Healthy",
+    )
+    assert await transformer._resolve_attribute("cmonlyother", "injured") == (
+        "cmonlyother",
+        "Injured",
+    )
+    assert get_ca.call_count == 1
+
+
+def test_smart_transformer_v2_reuses_timezone_finder(
+    mocker, mock_smart_async_client_class, destination_integration_v2_smart
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    transformer = SmartEventTransformerV2(config=destination_integration_v2_smart)
+    _timezone_finder.cache_clear()
+    for _ in range(2):
+        tz = transformer.guess_location_timezone(longitude=36.82, latitude=-1.29)
+        assert tz.zone == "Africa/Nairobi"
+    assert _timezone_finder.cache_info().misses <= 1
