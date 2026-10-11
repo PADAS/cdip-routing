@@ -866,3 +866,24 @@ async def test_transform_text_message_for_inreach(
         transformed_observation.Recipients == text_message_from_earthranger.recipients
     )
     assert transformed_observation.Timestamp == text_message_from_earthranger.created_at
+
+
+from app.services.transformers import SmartEventTransformerV2
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_v2_resolves_v2_choice_values(
+    mocker, mock_smart_async_client_class, destination_integration_v2_smart
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    transformer = SmartEventTransformerV2(config=destination_integration_v2_smart)
+    assert await transformer._resolve_attribute("causeofdeath", "natural_disease") == (
+        "causeofdeath",
+        "natural.disease",
+    )
+    assert await transformer._resolve_attribute("wildlifestate", "healthy") == (
+        "wildlifestate",
+        "healthy",
+    )

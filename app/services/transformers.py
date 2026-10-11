@@ -26,6 +26,7 @@ from gundi_core.schemas.v2 import (
 )
 from pydantic import BaseModel
 from smartconnect import AsyncSmartClient
+from smartconnect.choices import OptionKeyResolutionError, resolve_option_key
 from gundi_core.schemas.v2.smart import (
     SMARTCONNECT_DATFORMAT,
     SMARTRequest,
@@ -53,6 +54,63 @@ from app.core.errors import (
 logger = logging.getLogger(__name__)
 
 ADMIN_PORTAL_HOST = urlparse(settings.PORTAL_API_ENDPOINT).hostname
+
+
+def _option_keys(*attributes: Optional[dict]) -> List[str]:
+    """Option keys of the given data model attribute dicts, deduplicated in order.
+
+    Base-model attributes carry {key, type, options}; configurable-model
+    attributes carry {key, options, ...} with a curated subset. The union is
+    used so a value recorded before a CM dropped an option still resolves.
+    """
+    keys: List[str] = []
+    for attribute in attributes:
+        for option in (attribute or {}).get("options") or []:
+            key = option.get("key")
+            if key and key not in keys:
+                keys.append(key)
+    return keys
+
+
+def _attribute_entries(configurable_models, key) -> List[dict]:
+    """Every attribute entry with this key across the configurable models.
+
+    A configurable model may carry several attributeConfig entries per key
+    (per-node curations); get_attribute only returns the first.
+    """
+    return [
+        a
+        for cm in configurable_models
+        for a in (cm.export_as_dict().get("attributes") or [])
+        if a.get("key") == key
+    ]
+
+
+def map_choice_value_to_option_key(
+    *, attribute_key: str, value: Any, option_keys: List[str]
+) -> Any:
+    """Translate an ER choice value back to the SMART option key it came from.
+
+    ER v2 event types store LIST/MLIST/TREE selections as Choice values
+    derived from the SMART key (lower-cased, non-alphanumerics collapsed to
+    underscores, hash-shortened over 100 chars). SMART Connect only accepts
+    the original key. Exact matches (all v1 sites) return unchanged. On a
+    failed lookup the value is returned unchanged and an error is logged so
+    SMART's rejection stays traceable to the attribute.
+    """
+    if not option_keys or not isinstance(value, str):
+        return value
+    try:
+        return resolve_option_key(option_keys, value)
+    except OptionKeyResolutionError as e:
+        logger.error(
+            "Could not map ER choice value %r for SMART attribute %r to an option key: %s",
+            value,
+            attribute_key,
+            e,
+            extra={"attribute_key": attribute_key, "value": value},
+        )
+        return value
 
 
 class Transformer(ABC):
@@ -349,20 +407,23 @@ class SMARTTransformer:
     async def _resolve_attribute(
         self, key, value
     ) -> Tuple[Union[str, None], Union[str, None]]:
-        attr = None
-
-        # Favor a match in configurable model.
+        # Favor a match in a configurable model, then the CA data model.
         configurable_models = await self.get_configurable_models()
+        cm_attr = None
         for cm in configurable_models:
-            attr = cm.get_attribute(key=key)
-            if attr:
+            cm_attr = cm.get_attribute(key=key)
+            if cm_attr:
                 break
-        else:
-            ca_datamodel = await self.get_ca_datamodel()
-            attr = ca_datamodel.get_attribute(key=key)
+        ca_attr = (await self.get_ca_datamodel()).get_attribute(key=key)
 
-        # Favor a match in the CA DataModel attributes dictionary.
-        if attr:
+        if cm_attr or ca_attr:
+            value = map_choice_value_to_option_key(
+                attribute_key=key,
+                value=value,
+                option_keys=_option_keys(
+                    *_attribute_entries(configurable_models, key), ca_attr
+                ),
+            )
             return key, value
 
         return_key = return_value = None
@@ -1079,20 +1140,23 @@ class SMARTTransformerV2(Transformer, ABC):
     async def _resolve_attribute(
         self, key, value
     ) -> Tuple[Union[str, None], Union[str, None]]:
-        attr = None
-
-        # Favor a match in configurable model.
+        # Favor a match in a configurable model, then the CA data model.
         configurable_models = await self.get_configurable_models()
+        cm_attr = None
         for cm in configurable_models:
-            attr = cm.get_attribute(key=key)
-            if attr:
+            cm_attr = cm.get_attribute(key=key)
+            if cm_attr:
                 break
-        else:
-            ca_datamodel = await self.get_ca_datamodel()
-            attr = ca_datamodel.get_attribute(key=key)
+        ca_attr = (await self.get_ca_datamodel()).get_attribute(key=key)
 
-        # Favor a match in the CA DataModel attributes dictionary.
-        if attr:
+        if cm_attr or ca_attr:
+            value = map_choice_value_to_option_key(
+                attribute_key=key,
+                value=value,
+                option_keys=_option_keys(
+                    *_attribute_entries(configurable_models, key), ca_attr
+                ),
+            )
             return key, value
 
         return_key = return_value = None
