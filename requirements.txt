@@ -113,15 +113,16 @@ gundi-core==1.13.0
     #   -r requirements.in
     #   gundi-client
     #   gundi-client-v2
-h11==0.14.0
+h11==0.16.0
     # via
+    #   -r requirements.in
     #   httpcore
     #   uvicorn
 h3==4.5.0
     # via timezonefinder
 hiredis==2.3.2
     # via -r requirements.in
-httpcore==1.0.8
+httpcore==1.0.9
     # via httpx
 httpx==0.28.1
     # via
@@ -311,13 +312,15 @@ smartconnect-client==1.15.0
     # via -r requirements.in
 sniffio==1.3.0
     # via anyio
-starlette==0.47.0
-    # via fastapi
+starlette==0.50.0
+    # via
+    #   -r requirements.in
+    #   fastapi
 timezonefinder==8.2.0
     # via smartconnect-client
 tomli==2.0.1
     # via pytest
-typing-extensions==4.9.0
+typing-extensions==4.16.0
     # via
     #   aiohttp
     #   aioredis
@@ -329,6 +332,7 @@ typing-extensions==4.9.0
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
     #   pydantic
+    #   starlette
     #   uvicorn
 tzlocal==5.0.1
     # via dateparser
