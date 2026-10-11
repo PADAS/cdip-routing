@@ -57,8 +57,8 @@ exporter **at import time** (via `app/__init__.py`), so without it, tests fail w
 `DefaultCredentialsError` on a machine with no GCP auth.
 
 **Python 3.10** — matched by `docker/Dockerfile`, the compiled `requirements.txt`, and CI. See
-`docs/python-version.md`: the pin is forced by smartconnect-client, and 3.11 is blocked by aioredis until the client moves to redis.asyncio
-there. Don't add 3.11+ syntax.
+`docs/python-version.md`: the pin is forced by smartconnect-client, and 3.11 is blocked by aioredis until the client moves to redis.asyncio.
+Don't add 3.11+ syntax.
 
 Dependencies are pinned in `requirements.in` and compiled to `requirements.txt` with
 `uv pip compile --python-version 3.10`. Edit the `.in` file, never `requirements.txt` by hand.

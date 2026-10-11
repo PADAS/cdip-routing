@@ -19,7 +19,8 @@ gundi-client-v2, redis-py 6).
 exception with both `asyncio.TimeoutError` and the builtin `TimeoutError` as
 bases. Python 3.11 made those the same class, so the package fails at import
 with `TypeError: duplicate base class TimeoutError`. Nothing in routing's code
-triggers it; importing the package is enough.
+triggers it; importing the package is enough. Python 3.10 reaches end of life in
+October 2026, so the redis.asyncio move and the 3.11 bump should follow promptly.
 
 ## Path to 3.11
 
