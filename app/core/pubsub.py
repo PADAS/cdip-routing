@@ -44,7 +44,11 @@ async def send_message_to_gcp_pubsub_dispatcher(
             # Serialize UUIDs or other complex types to string
             attributes_clean = json.loads(json.dumps(attributes, default=str))
             ordering_key_clean = str(ordering_key)
-            messages = [pubsub.PubsubMessage(message, ordering_key=ordering_key_clean, **attributes_clean)]
+            messages = [
+                pubsub.PubsubMessage(
+                    message, ordering_key=ordering_key_clean, **attributes_clean
+                )
+            ]
             logger.info(f"Sending observation to PubSub topic {topic_name}..")
             try:
                 response = await client.publish(
@@ -93,6 +97,40 @@ async def send_event_to_integration_events_topic(event):
         except Exception as e:
             logger.warning(
                 f"Failed to publish activity log to {topic_name}: {type(e).__name__}: {e}"
+            )
+            current_span.set_attribute("error", str(e))
+
+
+async def send_event_to_routing_events_topic(event):
+    """Publish a gundi_core system event to the routing events topic.
+
+    Best-effort by contract, like the activity-log publisher: when this runs the
+    observation is already dropped by policy, so a failed publish only costs the
+    trace marking in the portal - raising here would retry the whole envelope and
+    re-deliver the observation to every destination that already received it.
+    """
+    with tracing.tracer.start_as_current_span(
+        "routing_service.send_event_to_routing_events_topic", kind=SpanKind.PRODUCER
+    ) as current_span:
+        topic_name = settings.ROUTING_EVENTS_TOPIC
+        current_span.set_attribute("topic", topic_name)
+        try:
+            timeout_settings = aiohttp.ClientTimeout(
+                total=settings.ROUTING_EVENTS_PUBLISH_TIMEOUT_SECONDS
+            )
+            async with aiohttp.ClientSession(
+                raise_for_status=True, timeout=timeout_settings
+            ) as session:
+                client = pubsub.PublisherClient(session=session)
+                topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
+                payload = json.dumps(event.dict(), default=str).encode("utf-8")
+                messages = [pubsub.PubsubMessage(payload)]
+                await client.publish(
+                    topic, messages, timeout=int(timeout_settings.total)
+                )
+        except Exception as e:
+            logger.warning(
+                f"Failed to publish routing event to {topic_name}: {type(e).__name__}: {e}"
             )
             current_span.set_attribute("error", str(e))
 

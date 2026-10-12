@@ -113,3 +113,8 @@ variable "subnet" {
   default     = "cloud-run"
   description = "The subnet cloud run will use"
 }
+variable "routing_filters_enabled" {
+  description = "Enable device routing filters enforcement (GUNDI-5712). Off by default so deploying the code changes nothing until each environment opts in."
+  type        = bool
+  default     = false
+}
