@@ -73,6 +73,10 @@ INTEGRATION_EVENTS_TOPIC = env.str(
 # Suppress repeat activity logs for the same (action, resource, error) within this window.
 ACTIVITY_LOG_DEDUP_TTL = env.int("ACTIVITY_LOG_DEDUP_TTL", 3600)
 # PubSub publish timeout for activity log events. Sized for occasional high-concurrency latency.
+INTEGRATION_EVENTS_PUBLISH_TIMEOUT_SECONDS = env.int(
+    "INTEGRATION_EVENTS_PUBLISH_TIMEOUT_SECONDS", 60
+)
+
 # The on-switch for device routing filters (GUNDI-5712). Off by default so the
 # deploy that carries the code changes nothing; flipping it is a config change
 # that reverts without a rollback.
@@ -82,7 +86,4 @@ ROUTING_EVENTS_TOPIC = env.str(
 )
 ROUTING_EVENTS_PUBLISH_TIMEOUT_SECONDS = env.int(
     "ROUTING_EVENTS_PUBLISH_TIMEOUT_SECONDS", 60
-)
-INTEGRATION_EVENTS_PUBLISH_TIMEOUT_SECONDS = env.int(
-    "INTEGRATION_EVENTS_PUBLISH_TIMEOUT_SECONDS", 60
 )
