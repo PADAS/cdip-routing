@@ -240,6 +240,14 @@ async def _discard_on_missing_default_route(
     )
 
 
+def _external_source_id(observation):
+    # The v2 schemas default external_source_id to the string "None" (Observation)
+    # or "none" (Event, Attachment, ...), not null. Sourceless data must read as
+    # "no device" to the rule and in the drop record, not as a device named "none".
+    value = getattr(observation, "external_source_id", None)
+    return None if value is None or str(value).lower() == "none" else value
+
+
 def _dropping_source_filter(route, destination_id, observation):
     """The device rule that drops this observation for this destination, or None
     to deliver. Fail-open throughout (GUNDI-5712): flag off, no filters block, no
@@ -253,8 +261,7 @@ def _dropping_source_filter(route, destination_id, observation):
     if rule is None:
         return None
     verdict = rule.allows(
-        str(observation.data_provider_id),
-        getattr(observation, "external_source_id", None),
+        str(observation.data_provider_id), _external_source_id(observation)
     )
     return rule if verdict is False else None
 
@@ -262,18 +269,22 @@ def _dropping_source_filter(route, destination_id, observation):
 async def _discard_filtered_observation(
     *, observation, destination, rule, current_span, span_event, set_discarded=False
 ):
-    # The ObservationFiltered event is what marks the GundiTrace in the portal
-    # (GUNDI-5711's consumer); the trace row is the primary record of the drop,
-    # so the local log stays at DEBUG like per-delivery entries.
     if set_discarded:
         current_span.set_attribute("is_discarded", True)
     current_span.add_event(name=span_event)
-    logger.debug(
-        f"Observation {observation.gundi_id} dropped by the {rule.mode} rule "
-        f"for destination {destination.id}.",
+    external_source_id = _external_source_id(observation)
+    # INFO, like a delivery: until the ObservationFiltered consumer marks the
+    # GundiTrace this line is the only visible record of the drop. Not
+    # attention_needed - a working rule is not an operator problem.
+    logger.info(
+        f"Observation {observation.gundi_id} from device {external_source_id} dropped "
+        f"by the {rule.mode} rule for destination {destination.id}.",
         extra={
             ExtraKeys.GundiId: str(observation.gundi_id),
+            ExtraKeys.DeviceId: external_source_id,
             ExtraKeys.InboundIntId: str(observation.data_provider_id),
+            ExtraKeys.OutboundIntId: str(destination.id),
+            ExtraKeys.StreamType: observation.observation_type,
         },
     )
     await send_event_to_routing_events_topic(
@@ -283,7 +294,7 @@ async def _discard_filtered_observation(
                 related_to=getattr(observation, "related_to", None),
                 data_provider_id=str(observation.data_provider_id),
                 destination_id=str(destination.id),
-                external_source_id=getattr(observation, "external_source_id", None),
+                external_source_id=external_source_id,
                 observation_type=observation.observation_type,
                 filtered_by=ObservationFilterReason.for_mode(rule.mode).value,
             )

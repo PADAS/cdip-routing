@@ -6,11 +6,13 @@ what marks the GundiTrace in the portal (GUNDI-5711's consumer).
 """
 
 import json
+import logging
 import uuid
 
 import pytest
 
 from app.conftest import async_return
+from app.core import settings
 from app.services.process_messages import process_observation_event
 from gundi_core.schemas import v2 as schemas_v2
 
@@ -340,3 +342,189 @@ async def test_batch_shrinks_to_the_allowed_items(
     assert len(payload["payload"]["items"]) == 2
     assert routing_events.call_count == 1
     assert routing_events.call_args[0][0].payload.external_source_id == "device-1"
+
+
+@pytest.mark.asyncio
+async def test_a_drop_is_logged_at_info_without_attention_needed(
+    caplog, mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
+):
+    # Until the trace consumer is deployed the log line is the only place an
+    # operator can see a drop, so it must be visible at the default level; a
+    # working rule is not an operator problem, so it must not page anyone.
+    _enable(mocker)
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, destination_id, provider_id, mode="blacklist", ids=["collar-001"]
+        )
+    )
+    event = _observation_event_dict(provider_id, "collar-001")
+
+    with caplog.at_level(logging.INFO, logger="app.services.event_handlers"):
+        await process_observation_event(event, _ATTRIBUTES)
+
+    drops = [r for r in caplog.records if "dropped" in r.getMessage()]
+    assert len(drops) == 1
+    record = drops[0]
+    assert record.levelno == logging.INFO
+    assert event["payload"]["gundi_id"] in record.getMessage()
+    assert destination_id in record.getMessage()
+    assert "collar-001" in record.getMessage()
+    assert not getattr(record, "attention_needed", False)
+
+
+@pytest.mark.asyncio
+async def test_sourceless_observation_is_reported_without_a_device_id(
+    mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
+):
+    # The v2 schemas default external_source_id to the string "None"/"none",
+    # not null. The drop record must not name a device called "None".
+    dispatcher, routing_events = enforcement_mocks
+    _enable(mocker)
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, destination_id, provider_id, mode="whitelist", ids=["collar-001"]
+        )
+    )
+    event = _observation_event_dict(provider_id, "unused")
+    del event["payload"]["external_source_id"]
+
+    await process_observation_event(event, _ATTRIBUTES)
+
+    assert dispatcher.call_count == 0
+    assert routing_events.call_count == 1
+    assert routing_events.call_args[0][0].payload.external_source_id is None
+
+
+@pytest.mark.asyncio
+async def test_a_blacklist_naming_none_does_not_match_sourceless_data(
+    mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
+):
+    dispatcher, routing_events = enforcement_mocks
+    _enable(mocker)
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2,
+            destination_id,
+            provider_id,
+            mode="blacklist",
+            ids=["None", "none"],
+        )
+    )
+    event = _observation_event_dict(provider_id, "unused")
+    del event["payload"]["external_source_id"]
+
+    await process_observation_event(event, _ATTRIBUTES)
+
+    assert dispatcher.call_count == 1
+    assert routing_events.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_a_rule_drops_only_its_own_destination(
+    mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
+):
+    dispatcher, routing_events = enforcement_mocks
+    _enable(mocker)
+    connection = connection_v2.copy(deep=True)
+    connection.destinations.append(
+        connection.destinations[0].copy(
+            update={"id": uuid.uuid4(), "name": "Second ER"}
+        )
+    )
+    filtered_id, open_id = connection.destinations[0].id, connection.destinations[1].id
+    provider_id = str(connection.provider.id)
+    mock_gundi_client_v2.get_connection_details.return_value = async_return(connection)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, filtered_id, provider_id, mode="blacklist", ids=["collar-001"]
+        )
+    )
+
+    await process_observation_event(
+        _observation_event_dict(provider_id, "collar-001"), _ATTRIBUTES
+    )
+
+    assert dispatcher.call_count == 1
+    assert dispatcher.call_args[1]["destination"].id == open_id
+    assert routing_events.call_count == 1
+    assert str(routing_events.call_args[0][0].payload.destination_id) == str(
+        filtered_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_generic_model_destination_is_filtered_too(
+    mocker,
+    enforcement_mocks,
+    mock_gundi_client_v2,
+    connection_v2,
+    route_v2,
+    destination_integration_v2,
+):
+    dispatcher, routing_events = enforcement_mocks
+    _enable(mocker)
+    generic = destination_integration_v2.copy(deep=True)
+    generic.additional = {**(generic.additional or {}), "generic_model": True}
+    mock_gundi_client_v2.get_integration_details.return_value = async_return(generic)
+    publish_delivery = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers._publish_gundi_delivery", publish_delivery
+    )
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, destination_id, provider_id, mode="blacklist", ids=["collar-001"]
+        )
+    )
+
+    await process_observation_event(
+        _observation_event_dict(provider_id, "collar-001"), _ATTRIBUTES
+    )
+
+    assert publish_delivery.call_count == 0
+    assert dispatcher.call_count == 0
+    assert routing_events.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_the_event_is_published_to_the_routing_events_topic(
+    mocker,
+    enforcement_mocks,
+    mock_gundi_client_v2,
+    connection_v2,
+    route_v2,
+    mock_pubsub,
+):
+    _enable(mocker)
+    from app.core.pubsub import send_event_to_routing_events_topic
+
+    mocker.patch(
+        "app.services.event_handlers.send_event_to_routing_events_topic",
+        send_event_to_routing_events_topic,
+    )
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, destination_id, provider_id, mode="blacklist", ids=["collar-001"]
+        )
+    )
+    event = _observation_event_dict(provider_id, "collar-001")
+
+    await process_observation_event(event, _ATTRIBUTES)
+
+    publisher = mock_pubsub.PublisherClient.return_value
+    assert [c[0][1] for c in publisher.topic_path.call_args_list] == [
+        settings.ROUTING_EVENTS_TOPIC
+    ]
+    published = json.loads(mock_pubsub.PubsubMessage.call_args[0][0].decode("utf-8"))
+    assert published["event_type"] == "ObservationFiltered"
+    assert published["payload"]["gundi_id"] == event["payload"]["gundi_id"]
