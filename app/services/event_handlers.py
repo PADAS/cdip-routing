@@ -334,7 +334,7 @@ def _dropping_source_filter(route, destination_id, observation):
     # dispatcher the same way today's orphaned attachments do.
     if observation.observation_type == StreamPrefixEnum.attachment.value:
         return None
-    rule = (getattr(route, "filters", None) or {}).get(str(destination_id))
+    rule = route.filter_for(destination_id) if route is not None else None
     if rule is None:
         return None
     verdict = rule.allows(

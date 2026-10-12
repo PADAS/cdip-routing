@@ -843,3 +843,37 @@ async def test_an_explicit_sentinel_looking_device_id_is_kept_in_the_record(
     assert dispatcher.call_count == 0
     assert routing_events.call_count == 1
     assert routing_events.call_args[0][0].payload.external_source_id == "none"
+
+
+@pytest.mark.asyncio
+async def test_a_rule_matches_a_non_canonical_destination_id_spelling(
+    mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
+):
+    # Route.filters keys are canonicalized by gundi-core; the lookup must
+    # canonicalize the destination id the same way instead of str()-ing it.
+    dispatcher, routing_events = enforcement_mocks
+    _enable(mocker)
+    provider_id = str(connection_v2.provider.id)
+    canonical = str(connection_v2.destinations[0].id)
+    connection = connection_v2.copy(deep=True)
+    # .construct() skips validation, so the id stays a plain str in this
+    # spelling instead of being parsed back into a canonical UUID.
+    connection.destinations[0] = type(connection.destinations[0]).construct(
+        **{
+            **connection.destinations[0].__dict__,
+            "id": canonical.upper().replace("-", ""),
+        }
+    )
+    mock_gundi_client_v2.get_connection_details.return_value = async_return(connection)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, canonical, provider_id, mode="blacklist", ids=["collar-001"]
+        )
+    )
+
+    await process_observation_event(
+        _observation_event_dict(provider_id, "collar-001"), _ATTRIBUTES
+    )
+
+    assert dispatcher.call_count == 0
+    assert routing_events.call_count == 1
