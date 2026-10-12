@@ -927,3 +927,33 @@ async def test_single_item_drop_marks_the_span_discarded_and_batch_drop_does_not
     ]
     assert routing_events.call_count == 2
     assert isinstance(routing_events.call_args_list[1][0][0], list)
+
+
+@pytest.mark.asyncio
+async def test_the_shared_publisher_swallows_a_publish_failure_itself(
+    mocker, mock_pubsub
+):
+    # The batch path publishes a destination's drops outside any try; if this
+    # ever raised, a routing-events outage would abort the batch and retry the
+    # envelope with duplicate deliveries. Callers' own guards must not be what
+    # makes this safe.
+    from app.core.pubsub import (
+        send_event_to_integration_events_topic,
+        send_events_to_routing_events_topic,
+    )
+    from gundi_core.events import ObservationFiltered, FilteredObservation
+
+    mock_pubsub.PublisherClient.return_value.publish.side_effect = Exception("boom")
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
+    event = ObservationFiltered(
+        payload=FilteredObservation(
+            gundi_id=str(uuid.uuid4()),
+            data_provider_id=str(uuid.uuid4()),
+            destination_id=str(uuid.uuid4()),
+        )
+    )
+
+    await send_events_to_routing_events_topic([event])
+    await send_event_to_integration_events_topic(event)
+
+    assert mock_pubsub.PublisherClient.return_value.publish.call_count == 2
