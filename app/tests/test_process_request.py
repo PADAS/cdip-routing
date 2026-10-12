@@ -12,10 +12,19 @@ from app.services.transformers import extract_fields_from_message
 api_client = TestClient(app)
 
 
-@pytest.mark.parametrize("request_headers, request_payload", [
-    ("pubsub_request_headers", "geoevent_v1_request_payload",),
-    ("eventarc_request_headers", "geoevent_v1_eventarc_request_payload",),
-])
+@pytest.mark.parametrize(
+    "request_headers, request_payload",
+    [
+        (
+            "pubsub_request_headers",
+            "geoevent_v1_request_payload",
+        ),
+        (
+            "eventarc_request_headers",
+            "geoevent_v1_eventarc_request_payload",
+        ),
+    ],
+)
 @pytest.mark.asyncio
 async def test_process_geoevent_v1_successfully(
     mocker,
@@ -25,7 +34,7 @@ async def test_process_geoevent_v1_successfully(
     mock_gundi_client,
     mock_pubsub,
     request_headers,
-    request_payload
+    request_payload,
 ):
     request_headers = request.getfixturevalue(request_headers)
     request_payload = request.getfixturevalue(request_payload)
@@ -45,10 +54,19 @@ async def test_process_geoevent_v1_successfully(
     assert mock_pubsub.PublisherClient.return_value.publish.called
 
 
-@pytest.mark.parametrize("request_headers, request_payload", [
-    ("pubsub_request_headers", "event_v2_request_payload",),
-    ("eventarc_request_headers", "event_v2_eventarc_request_payload",),
-])
+@pytest.mark.parametrize(
+    "request_headers, request_payload",
+    [
+        (
+            "pubsub_request_headers",
+            "event_v2_request_payload",
+        ),
+        (
+            "eventarc_request_headers",
+            "event_v2_eventarc_request_payload",
+        ),
+    ],
+)
 @pytest.mark.asyncio
 async def test_process_event_v2_successfully(
     mocker,
@@ -59,7 +77,7 @@ async def test_process_event_v2_successfully(
     mock_pubsub,
     request_headers,
     request_payload,
-    destination_integration_v2
+    destination_integration_v2,
 ):
     request_headers = request.getfixturevalue(request_headers)
     request_payload = request.getfixturevalue(request_payload)
@@ -123,7 +141,7 @@ async def test_message_deduplication(
     mock_pubsub,
     pubsub_request_headers,
     event_update_v2_request_payload,
-    destination_integration_v2
+    destination_integration_v2,
 ):
     # Mock external dependencies
     mocker.patch("app.core.gundi._cache_db", mock_cache)
@@ -143,7 +161,9 @@ async def test_message_deduplication(
     mocked_publish = mock_pubsub.PublisherClient.return_value.publish
     assert mocked_publish.call_count == 1
     # Check that the status was set to processed
-    data, attributes = extract_fields_from_message(event_update_v2_request_payload["message"])
+    data, attributes = extract_fields_from_message(
+        event_update_v2_request_payload["message"]
+    )
     event_id = data["event_id"]
     key = get_event_status_key(event_id=event_id)
     ttl = settings.EVENT_PROCESSING_STATUS_TTL
@@ -170,7 +190,7 @@ async def test_message_v2_deduplication(
     mock_pubsub,
     pubsub_request_headers,
     event_update_v2_request_payload,
-    destination_integration_v2
+    destination_integration_v2,
 ):
     # Mock external dependencies
     mocker.patch("app.core.gundi._cache_db", mock_cache)
@@ -190,7 +210,9 @@ async def test_message_v2_deduplication(
     mocked_topic.assert_called_once_with(settings.GCP_PROJECT_ID, topic)
     assert mocked_publish.call_count == 1
     # Check that the status was set to processed
-    data, attributes = extract_fields_from_message(event_update_v2_request_payload["message"])
+    data, attributes = extract_fields_from_message(
+        event_update_v2_request_payload["message"]
+    )
     event_id = data["event_id"]
     key = get_event_status_key(event_id=event_id)
     ttl = settings.EVENT_PROCESSING_STATUS_TTL
@@ -219,7 +241,7 @@ async def test_message_v1_deduplication(
     mock_pubsub,
     pubsub_request_headers,
     geoevent_v1_request_payload,
-    outbound_integration_config
+    outbound_integration_config,
 ):
     # Mock external dependencies
     mocker.patch("app.core.gundi._cache_db", mock_cache)

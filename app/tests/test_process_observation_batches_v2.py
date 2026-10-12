@@ -113,7 +113,9 @@ async def test_batch_shrinks_on_transform_failure(
     mocker.patch(
         "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher", send_mock
     )
-    real_transform = mocker.patch("app.services.event_handlers.transform_observation_v2")
+    real_transform = mocker.patch(
+        "app.services.event_handlers.transform_observation_v2"
+    )
     # Middle item fails to transform; batch must shrink, not abort
     # NOTE: `transform_observation_v2` is an `async def`, so `mocker.patch`
     # auto-creates an AsyncMock (Python 3.8+ unittest.mock behavior). An
@@ -122,6 +124,7 @@ async def test_batch_shrinks_on_transform_failure(
     # Future) would make the *Future itself* the "transformed" value instead
     # of unwrapping it, which breaks the ERObservation isinstance check below.
     from gundi_core.schemas.v2 import ERObservation
+
     ok_obs = ERObservation(
         manufacturer_id="device-ok",
         recorded_at="2026-07-22 11:51:05+00:00",
@@ -200,7 +203,9 @@ async def test_batch_raises_on_unsupported_broker(
     mocker.patch(
         "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher", send_mock
     )
-    transform_mock = mocker.patch("app.services.event_handlers.transform_observation_v2")
+    transform_mock = mocker.patch(
+        "app.services.event_handlers.transform_observation_v2"
+    )
 
     event_dict = _make_batch_event_dict(
         observations_count=2,
@@ -241,7 +246,9 @@ async def test_batch_without_default_route_is_discarded_and_logged(
         "app.services.activity_logger.send_event_to_integration_events_topic",
         return_value=async_return(None),
     )
-    event_dict = _make_batch_event_dict(observations_count=3, data_provider_id=provider_id)
+    event_dict = _make_batch_event_dict(
+        observations_count=3, data_provider_id=provider_id
+    )
     expected_gundi_ids = [o["gundi_id"] for o in event_dict["payload"]["observations"]]
 
     # Must not raise (raising makes PubSub retry the whole envelope).
@@ -268,7 +275,9 @@ async def test_batch_is_retried_when_destination_integration_lookup_fails(
     timeout / 5xx) must raise ReferenceDataError for retry, not AttributeError."""
     provider_id = str(connection_v2.provider.id)
     destination_id = str(connection_v2.destinations[0].id)
-    mock_gundi_client_v2.get_integration_details.side_effect = TimeoutError("portal read timeout")
+    mock_gundi_client_v2.get_integration_details.side_effect = TimeoutError(
+        "portal read timeout"
+    )
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
     send_mock = mocker.AsyncMock()
@@ -282,7 +291,9 @@ async def test_batch_is_retried_when_destination_integration_lookup_fails(
         "app.services.activity_logger.send_event_to_integration_events_topic",
         return_value=async_return(None),
     )
-    event_dict = _make_batch_event_dict(observations_count=3, data_provider_id=provider_id)
+    event_dict = _make_batch_event_dict(
+        observations_count=3, data_provider_id=provider_id
+    )
 
     with pytest.raises(ReferenceDataError) as excinfo:
         await process_observation_event(event_dict, _batch_attributes(3))

@@ -1,5 +1,7 @@
 import logging
 from gundi_core.events import (
+    FilteredObservation,
+    ObservationFiltered,
     ObservationReceived,
     ObservationsBatchReceived,
     EventReceived,
@@ -34,7 +36,12 @@ from app.core.gundi import get_connection, get_route, get_integration
 from app.core.local_logging import ExtraKeys
 from app.core.utils import Broker
 from app.core.utils import get_provider_key
-from app.core.pubsub import send_message_to_gcp_pubsub_dispatcher
+from gundi_core.events.integrations import ObservationFilterReason
+from app.core.pubsub import (
+    send_event_to_routing_events_topic,
+    send_events_to_routing_events_topic,
+    send_message_to_gcp_pubsub_dispatcher,
+)
 from app.services.activity_logger import log_missing_default_route
 from app.services.transformers import (
     build_transformed_message_attributes,
@@ -105,7 +112,9 @@ def _build_provider_info(provider) -> ProviderInfo:
     )
 
 
-def _build_gundi_delivery(*, observation, provider, route_configuration) -> GundiDelivery:
+def _build_gundi_delivery(
+    *, observation, provider, route_configuration
+) -> GundiDelivery:
     return GundiDelivery(
         payload=observation,
         route_configuration=route_configuration,
@@ -131,7 +140,9 @@ async def _publish_gundi_delivery(
     is responsible for transformation."""
 
     # Validate broker — same restriction as the legacy path.
-    broker_value = (broker_config or {}).get("broker", Broker.GCP_PUBSUB.value).strip().lower()
+    broker_value = (
+        (broker_config or {}).get("broker", Broker.GCP_PUBSUB.value).strip().lower()
+    )
     if broker_value != Broker.GCP_PUBSUB.value:
         current_span.set_attribute("broker", broker_value)
         raise ReferenceDataError(
@@ -165,9 +176,7 @@ async def _publish_gundi_delivery(
         provider_key=provider_key,
     )
 
-    pubsub_message = build_gcp_pubsub_message(
-        payload=delivery.dict(exclude_none=True)
-    )
+    pubsub_message = build_gcp_pubsub_message(payload=delivery.dict(exclude_none=True))
     ordering_key = (
         str(observation.gundi_id)
         if observation.observation_type == StreamPrefixEnum.event_update.value
@@ -232,6 +241,100 @@ async def _discard_on_missing_default_route(
     )
 
 
+def _external_source_id_for_record(observation):
+    # Only for the log line and the drop record. The v2 schemas default an
+    # omitted external_source_id to the string "None"/"none", not null; an
+    # omitted id must read as "no device" there, while a value the provider
+    # actually sent - even one spelled "none" - is kept as sent. The rule
+    # itself always gets the verbatim value: ids compare verbatim against
+    # Source.external_id by gundi-core's contract.
+    if "external_source_id" not in getattr(observation, "__fields_set__", ()):
+        return None
+    return getattr(observation, "external_source_id", None)
+
+
+def _dropping_source_filter(route, destination_id, observation):
+    """The device rule that drops this observation for this destination, or None
+    to deliver. Fail-open throughout (GUNDI-5712): flag off, no filters block, no
+    rule for the arrow, a rule that does not name this provider, a disabled rule
+    or an unknown mode all answer None - a malformed configuration must never
+    cause a silent drop. Only an explicit allows() == False drops.
+    """
+    if not settings.ROUTING_FILTERS_ENABLED:
+        return None
+    # An attachment has no device identity of its own; it follows its parent
+    # event, which was already gated. One whose parent was dropped fails at the
+    # dispatcher the same way today's orphaned attachments do.
+    if observation.observation_type == StreamPrefixEnum.attachment.value:
+        return None
+    rule = (getattr(route, "filters", None) or {}).get(str(destination_id))
+    if rule is None:
+        return None
+    verdict = rule.allows(
+        str(observation.data_provider_id),
+        getattr(observation, "external_source_id", None),
+    )
+    return rule if verdict is False else None
+
+
+async def _discard_filtered_observation(
+    *,
+    observation,
+    destination,
+    rule,
+    current_span,
+    span_event,
+    set_discarded=False,
+    sink=None,
+):
+    """Record a policy drop. With a `sink` list the ObservationFiltered event is
+    collected there for the caller to publish in one request; without one it is
+    published right away."""
+    if set_discarded:
+        current_span.set_attribute("is_discarded", True)
+    current_span.add_event(name=span_event)
+    # Never raises, structurally: in the batch path this runs outside the
+    # per-item try, so an exception here would abort the batch and redelivery
+    # would re-publish items already sent. The drop itself already happened
+    # (the caller continues); this only records it.
+    try:
+        external_source_id = _external_source_id_for_record(observation)
+        # INFO, like a delivery: until the ObservationFiltered consumer marks the
+        # GundiTrace this line is the only visible record of the drop. Not
+        # attention_needed - a working rule is not an operator problem.
+        logger.info(
+            f"Observation {observation.gundi_id} from device {external_source_id} dropped "
+            f"by the {rule.mode} rule for destination {destination.id}.",
+            extra={
+                ExtraKeys.GundiId: str(observation.gundi_id),
+                ExtraKeys.DeviceId: external_source_id,
+                ExtraKeys.InboundIntId: str(observation.data_provider_id),
+                ExtraKeys.OutboundIntId: str(destination.id),
+                ExtraKeys.StreamType: observation.observation_type,
+            },
+        )
+        event = ObservationFiltered(
+            payload=FilteredObservation(
+                gundi_id=str(observation.gundi_id),
+                related_to=getattr(observation, "related_to", None),
+                data_provider_id=str(observation.data_provider_id),
+                destination_id=str(destination.id),
+                external_source_id=external_source_id,
+                observation_type=observation.observation_type,
+                filtered_by=ObservationFilterReason.for_mode(rule.mode).value,
+            )
+        )
+        if sink is not None:
+            sink.append(event)
+        else:
+            await send_event_to_routing_events_topic(event)
+    except Exception as e:
+        logger.warning(
+            f"Failed to record the filtered drop of {observation.gundi_id}: "
+            f"{type(e).__name__}: {e}"
+        )
+
+
 async def transform_and_route_observation(observation):
     with tracing.tracer.start_as_current_span(
         "routing_service.transform_and_route_observation", kind=SpanKind.CONSUMER
@@ -287,6 +390,20 @@ async def transform_and_route_observation(observation):
 
             provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
             for destination in destinations:
+                # Policy gate first: a dropped destination needs neither the
+                # portal lookup below nor a transform.
+                if rule := _dropping_source_filter(
+                    default_route, destination.id, observation
+                ):
+                    await _discard_filtered_observation(
+                        observation=observation,
+                        destination=destination,
+                        rule=rule,
+                        current_span=current_span,
+                        span_event="routing_service.observation_discarded_by_source_filter",
+                        set_discarded=True,
+                    )
+                    continue
                 # Get additional configuration for the destination
                 destination_integration = await get_integration(
                     integration_id=destination.id
@@ -368,12 +485,10 @@ async def transform_and_route_observation(observation):
                     f"Transformed observation: {repr(transformed_observation)}, attributes: {attributes}"
                 )
 
-                if (
-                    broker_type := broker_config.get("broker", Broker.GCP_PUBSUB.value)
-                    .strip()
-                    .lower()
-                    != Broker.GCP_PUBSUB.value
-                ):
+                broker_type = (
+                    broker_config.get("broker", Broker.GCP_PUBSUB.value).strip().lower()
+                )
+                if broker_type != Broker.GCP_PUBSUB.value:
                     current_span.set_attribute("broker", broker_type)
                     raise ReferenceDataError(
                         f"Broker '{broker_type}' is no longer supported. Please use `{Broker.GCP_PUBSUB.value}` instead."
@@ -524,6 +639,30 @@ async def transform_and_route_observations_batch(batch):
 
             provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
             for destination in destinations:
+                # Policy first, before this destination's portal lookup and
+                # broker check: a destination that drops every item must not
+                # be able to retry the envelope - and redeliver the others -
+                # by failing its setup. Partial drops are published after the
+                # deliveries so a setup failure does not record them twice.
+                allowed, filtered_events = [], []
+                for observation in batch.observations:
+                    if rule := _dropping_source_filter(
+                        default_route, destination.id, observation
+                    ):
+                        await _discard_filtered_observation(
+                            observation=observation,
+                            destination=destination,
+                            rule=rule,
+                            current_span=current_span,
+                            span_event="routing_service.batch_item_discarded_by_source_filter",
+                            sink=filtered_events,
+                        )
+                    else:
+                        allowed.append(observation)
+                if not allowed:
+                    await send_events_to_routing_events_topic(filtered_events)
+                    continue
+
                 destination_integration = await get_integration(
                     integration_id=destination.id
                 )
@@ -554,7 +693,9 @@ async def transform_and_route_observations_batch(batch):
                 # null in portal data; .strip() on None would fail the whole
                 # batch before the unsupported-broker check even runs.
                 broker_value = (
-                    str((broker_config or {}).get("broker") or Broker.GCP_PUBSUB.value).strip().lower()
+                    str((broker_config or {}).get("broker") or Broker.GCP_PUBSUB.value)
+                    .strip()
+                    .lower()
                 )
                 if broker_value != Broker.GCP_PUBSUB.value:
                     current_span.set_attribute("broker", broker_value)
@@ -564,8 +705,12 @@ async def transform_and_route_observations_batch(batch):
 
                 # Generic-model destinations keep the per-item GundiDelivery
                 # path (splitting the batch is allowed; merging never is).
+                # A destination's drops go out in one publish after its
+                # deliveries: one publish per dropped item, each with its own
+                # session and timeout, can outlast the push ack deadline on a
+                # large batch and get the allowed items redelivered.
                 if _uses_generic_model(destination_integration):
-                    for observation in batch.observations:
+                    for observation in allowed:
                         await _publish_gundi_delivery(
                             observation=observation,
                             destination=destination,
@@ -578,13 +723,14 @@ async def transform_and_route_observations_batch(batch):
                             provider_str=provider_str,
                             current_span=current_span,
                         )
+                    await send_events_to_routing_events_topic(filtered_events)
                     continue
 
                 # Transform per item; group per effective provider_key because
                 # field mappings may override it per item and one ER bulk post
                 # allows exactly one provider_key in its URL path.
                 groups = {}
-                for observation in batch.observations:
+                for observation in allowed:
                     try:
                         transformed = await transform_observation_v2(
                             observation=observation,
@@ -615,23 +761,31 @@ async def transform_and_route_observations_batch(batch):
                         pubsub_message_payload = (
                             transformed
                             if isinstance(transformed, dict)
-                            else build_transformer_event(transformed).dict(exclude_none=True)
+                            else build_transformer_event(transformed).dict(
+                                exclude_none=True
+                            )
                         )
                         attributes = build_transformed_message_attributes(
                             observation=observation,
                             destination=destination,
                             gundi_version="v2",
-                            provider_key=getattr(transformed, "provider_key", provider_key),
+                            provider_key=getattr(
+                                transformed, "provider_key", provider_key
+                            ),
                         )
                         await send_message_to_gcp_pubsub_dispatcher(
-                            message=build_gcp_pubsub_message(payload=pubsub_message_payload),
+                            message=build_gcp_pubsub_message(
+                                payload=pubsub_message_payload
+                            ),
                             attributes=attributes,
                             destination=destination,
                             broker_config=broker_config,
                             ordering_key="",
                         )
                         continue
-                    effective_key = getattr(transformed, "provider_key", None) or provider_key
+                    effective_key = (
+                        getattr(transformed, "provider_key", None) or provider_key
+                    )
                     groups.setdefault(effective_key, []).append(
                         TransformedERObservationItem(
                             gundi_id=observation.gundi_id,
@@ -647,17 +801,24 @@ async def transform_and_route_observations_batch(batch):
                         destination=destination,
                         broker_config=broker_config,
                     )
+                await send_events_to_routing_events_topic(filtered_events)
         except ReferenceDataError as e:
             logger.exception(
                 f"External error occurred obtaining reference data for batch {batch.batch_id}: {e}",
-                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.InboundIntId: str(batch.data_provider_id)},
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.InboundIntId: str(batch.data_provider_id),
+                },
             )
             current_span.set_attribute("error", str(e))
             raise e  # Raise so the whole envelope is retried later by GCP
         except Exception as e:
             logger.exception(
                 f"Unexpected internal exception occurred processing batch {batch.batch_id}: {e}",
-                extra={ExtraKeys.AttentionNeeded: True, ExtraKeys.InboundIntId: str(batch.data_provider_id)},
+                extra={
+                    ExtraKeys.AttentionNeeded: True,
+                    ExtraKeys.InboundIntId: str(batch.data_provider_id),
+                },
             )
             current_span.set_attribute("error", str(e))
             raise e

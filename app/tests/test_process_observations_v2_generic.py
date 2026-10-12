@@ -144,7 +144,9 @@ async def test_generic_mode_selected_by_destination_type_without_flag(
     mocker.patch(
         "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher", send_mock
     )
-    transform_mock = mocker.patch("app.services.event_handlers.transform_observation_v2")
+    transform_mock = mocker.patch(
+        "app.services.event_handlers.transform_observation_v2"
+    )
 
     await process_observation_event(raw_observation_v2, raw_observation_v2_attributes)
 
@@ -167,7 +169,9 @@ async def test_generic_mode_when_additional_is_none(
     # not crash on .get().
     integration = copy.deepcopy(destination_integration_v2)
     integration.additional = None
-    mock_gundi_client_v2.get_integration_details.return_value = async_return(integration)
+    mock_gundi_client_v2.get_integration_details.return_value = async_return(
+        integration
+    )
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
     send_mock = mocker.AsyncMock()
@@ -178,7 +182,9 @@ async def test_generic_mode_when_additional_is_none(
     # We expect a failure downstream (broker_config check requires .get on None),
     # but the generic-model check itself must not raise AttributeError.
     try:
-        await process_observation_event(raw_observation_v2, raw_observation_v2_attributes)
+        await process_observation_event(
+            raw_observation_v2, raw_observation_v2_attributes
+        )
     except Exception:
         pass
 

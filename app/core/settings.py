@@ -64,9 +64,7 @@ EVENT_PROCESSING_STATUS_TTL = env.int("EVENT_PROCESSING_STATUS_TTL", 3600)
 # integration type slug so operators never have to set `additional.generic_model`
 # per integration — registering, say, a `cmore` destination is enough. Add a new
 # generic-model destination type here (env override) when it's onboarded.
-GENERIC_MODEL_DESTINATION_TYPES = env.list(
-    "GENERIC_MODEL_DESTINATION_TYPES", ["cmore"]
-)
+GENERIC_MODEL_DESTINATION_TYPES = env.list("GENERIC_MODEL_DESTINATION_TYPES", ["cmore"])
 
 # Topic for portal-visible activity logs published as gundi_core system events.
 INTEGRATION_EVENTS_TOPIC = env.str(
@@ -77,4 +75,15 @@ ACTIVITY_LOG_DEDUP_TTL = env.int("ACTIVITY_LOG_DEDUP_TTL", 3600)
 # PubSub publish timeout for activity log events. Sized for occasional high-concurrency latency.
 INTEGRATION_EVENTS_PUBLISH_TIMEOUT_SECONDS = env.int(
     "INTEGRATION_EVENTS_PUBLISH_TIMEOUT_SECONDS", 60
+)
+
+# The on-switch for device routing filters (GUNDI-5712). Off by default so the
+# deploy that carries the code changes nothing; flipping it is a config change
+# that reverts without a rollback.
+ROUTING_FILTERS_ENABLED = env.bool("ROUTING_FILTERS_ENABLED", False)
+ROUTING_EVENTS_TOPIC = env.str(
+    "ROUTING_EVENTS_TOPIC", f"routing-events-{GCP_ENVIRONMENT}"
+)
+ROUTING_EVENTS_PUBLISH_TIMEOUT_SECONDS = env.int(
+    "ROUTING_EVENTS_PUBLISH_TIMEOUT_SECONDS", 60
 )

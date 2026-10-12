@@ -57,9 +57,7 @@ async def test_logs_first_time_failure(mocker, mock_dedup_cache):
 
 
 @pytest.mark.asyncio
-async def test_dedup_within_ttl_does_not_publish(
-    mocker, mock_dedup_cache_already_seen
-):
+async def test_dedup_within_ttl_does_not_publish(mocker, mock_dedup_cache_already_seen):
     mocker.patch.object(activity_logger, "_cache_db", mock_dedup_cache_already_seen)
     mock_publish = mocker.patch.object(
         activity_logger,
@@ -77,9 +75,7 @@ async def test_dedup_within_ttl_does_not_publish(
 
 
 @pytest.mark.asyncio
-async def test_different_error_signature_logs_independently(
-    mocker, mock_dedup_cache
-):
+async def test_different_error_signature_logs_independently(mocker, mock_dedup_cache):
     mocker.patch.object(activity_logger, "_cache_db", mock_dedup_cache)
     mocker.patch.object(
         activity_logger,

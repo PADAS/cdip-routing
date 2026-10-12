@@ -196,7 +196,9 @@ async def test_observation_is_retried_when_destination_integration_lookup_fails(
 
     destination_id = str(connection_v2.destinations[0].id)
     raw_observation_v2["payload"]["data_provider_id"] = str(connection_v2.provider.id)
-    mock_gundi_client_v2.get_integration_details.side_effect = TimeoutError("portal read timeout")
+    mock_gundi_client_v2.get_integration_details.side_effect = TimeoutError(
+        "portal read timeout"
+    )
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
     dispatcher_send = mocker.AsyncMock()
@@ -213,7 +215,9 @@ async def test_observation_is_retried_when_destination_integration_lookup_fails(
     )
 
     with pytest.raises(ReferenceDataError) as excinfo:
-        await process_observation_event(raw_observation_v2, raw_observation_v2_attributes)
+        await process_observation_event(
+            raw_observation_v2, raw_observation_v2_attributes
+        )
 
     assert destination_id in str(excinfo.value)
     dispatcher_send.assert_not_called()
