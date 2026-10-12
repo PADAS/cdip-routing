@@ -890,3 +890,40 @@ async def test_publishing_no_routing_events_opens_no_session(mocker, mock_pubsub
 
     assert not session.called
     assert not mock_pubsub.PublisherClient.called
+
+
+@pytest.mark.asyncio
+async def test_single_item_drop_marks_the_span_discarded_and_batch_drop_does_not(
+    mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
+):
+    # The single-item span represents one observation, so a drop discards it;
+    # a batch span represents the envelope, which still delivers the rest.
+    _, routing_events = enforcement_mocks
+    _enable(mocker)
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, destination_id, provider_id, mode="whitelist", ids=["device-0"]
+        )
+    )
+    # Every `with tracing.tracer.start_as_current_span(...) as span` in the
+    # service now yields this one MagicMock span.
+    tracer = mocker.patch("app.services.event_handlers.tracing.tracer")
+    span = tracer.start_as_current_span.return_value.__enter__.return_value
+
+    await process_observation_event(
+        _observation_event_dict(provider_id, "collar-001"), _ATTRIBUTES
+    )
+    span.set_attribute.assert_any_call("is_discarded", True)
+
+    span.reset_mock()
+    await process_observation_event(
+        _batch_event_dict(provider_id, ["device-0", "device-1"]),
+        {**_ATTRIBUTES, "batch": "true", "batch_count": "2"},
+    )
+    assert ("is_discarded", True) not in [
+        c.args for c in span.set_attribute.call_args_list
+    ]
+    assert routing_events.call_count == 2
+    assert isinstance(routing_events.call_args_list[1][0][0], list)

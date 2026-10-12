@@ -247,7 +247,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `_dropping_source_filter(route, destination_id, observation)` from Task 1; `_discard_filtered_observation(..., sink=...)` as in PR #162.
-- Produces: `async def _partition_by_source_filter(*, route, destination, observations, current_span, span_event, set_discarded=False) -> Tuple[list, list]` returning `(allowed, filtered_events)`. `allowed` preserves input order; `filtered_events` holds one `ObservationFiltered` per drop, in input order.
+- Produces: `async def _partition_by_source_filter(*, route, destination, observations, current_span, span_event, set_discarded=False, sink=None) -> list` returning `allowed` in input order. With `sink` (a list the caller owns) each drop's `ObservationFiltered` is appended there for the caller to publish later; without it each drop is published immediately through `send_event_to_routing_events_topic`, exactly as the single-item path did before. (Ruled during execution: an earlier `(allowed, filtered_events)` shape routed the single path through the list publisher and broke the eight tests that assert on the single-event call.)
 
 - [ ] **Step 1: Write the failing test**
 
