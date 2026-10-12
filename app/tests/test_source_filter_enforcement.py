@@ -94,9 +94,15 @@ def enforcement_mocks(mocker, mock_cache, mock_gundi_client_v2):
     mocker.patch(
         "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher", dispatcher
     )
+    # One mock for both publishers: the single-item path sends one event, the
+    # batch path sends a destination's drops as one list.
     routing_events = mocker.AsyncMock()
     mocker.patch(
         "app.services.event_handlers.send_event_to_routing_events_topic",
+        routing_events,
+    )
+    mocker.patch(
+        "app.services.event_handlers.send_events_to_routing_events_topic",
         routing_events,
     )
     return dispatcher, routing_events
@@ -341,7 +347,87 @@ async def test_batch_shrinks_to_the_allowed_items(
     payload = json.loads(dispatcher.call_args[1]["message"].decode("utf-8"))
     assert len(payload["payload"]["items"]) == 2
     assert routing_events.call_count == 1
-    assert routing_events.call_args[0][0].payload.external_source_id == "device-1"
+    events = routing_events.call_args[0][0]
+    assert [e.payload.external_source_id for e in events] == ["device-1"]
+
+
+@pytest.mark.asyncio
+async def test_batch_drops_publish_their_events_in_one_call(
+    mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
+):
+    # One publish per dropped item, each with its own session and a 60s
+    # timeout, can outlast the push ack deadline on a large batch and get the
+    # allowed items redelivered; a destination's drops go out together.
+    dispatcher, routing_events = enforcement_mocks
+    _enable(mocker)
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, destination_id, provider_id, mode="whitelist", ids=[]
+        )
+    )
+    attributes = {**_ATTRIBUTES, "batch": "true", "batch_count": "3"}
+
+    await process_observation_event(
+        _batch_event_dict(provider_id, ["device-0", "device-1", "device-2"]),
+        attributes,
+    )
+
+    assert dispatcher.call_count == 0
+    assert routing_events.call_count == 1
+    events = routing_events.call_args[0][0]
+    assert [e.payload.external_source_id for e in events] == [
+        "device-0",
+        "device-1",
+        "device-2",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_batch_generic_model_destination_delivers_only_allowed_items(
+    mocker,
+    enforcement_mocks,
+    mock_gundi_client_v2,
+    connection_v2,
+    route_v2,
+    destination_integration_v2,
+):
+    dispatcher, routing_events = enforcement_mocks
+    _enable(mocker)
+    generic = destination_integration_v2.copy(deep=True)
+    generic.additional = {**(generic.additional or {}), "generic_model": True}
+    mock_gundi_client_v2.get_integration_details.return_value = async_return(generic)
+    publish_delivery = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers._publish_gundi_delivery", publish_delivery
+    )
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2,
+            destination_id,
+            provider_id,
+            mode="whitelist",
+            ids=["device-0", "device-2"],
+        )
+    )
+    attributes = {**_ATTRIBUTES, "batch": "true", "batch_count": "3"}
+
+    await process_observation_event(
+        _batch_event_dict(provider_id, ["device-0", "device-1", "device-2"]),
+        attributes,
+    )
+
+    delivered = [
+        c[1]["observation"].external_source_id for c in publish_delivery.call_args_list
+    ]
+    assert delivered == ["device-0", "device-2"]
+    assert dispatcher.call_count == 0
+    assert routing_events.call_count == 1
+    events = routing_events.call_args[0][0]
+    assert [e.payload.external_source_id for e in events] == ["device-1"]
 
 
 @pytest.mark.asyncio
@@ -400,26 +486,25 @@ async def test_sourceless_observation_is_reported_without_a_device_id(
 
 
 @pytest.mark.asyncio
-async def test_a_blacklist_naming_none_does_not_match_sourceless_data(
+async def test_device_ids_compare_verbatim_with_the_rule(
     mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
 ):
+    # gundi-core's contract: ids compare verbatim against Source.external_id.
+    # Only the exact schema defaults read as "no device"; a device really named
+    # "NONE" must still be whitelistable.
     dispatcher, routing_events = enforcement_mocks
     _enable(mocker)
     provider_id = str(connection_v2.provider.id)
     destination_id = str(connection_v2.destinations[0].id)
     mock_gundi_client_v2.get_route_details.return_value = async_return(
         _route_with_filter(
-            route_v2,
-            destination_id,
-            provider_id,
-            mode="blacklist",
-            ids=["None", "none"],
+            route_v2, destination_id, provider_id, mode="whitelist", ids=["NONE"]
         )
     )
-    event = _observation_event_dict(provider_id, "unused")
-    del event["payload"]["external_source_id"]
 
-    await process_observation_event(event, _ATTRIBUTES)
+    await process_observation_event(
+        _observation_event_dict(provider_id, "NONE"), _ATTRIBUTES
+    )
 
     assert dispatcher.call_count == 1
     assert routing_events.call_count == 0

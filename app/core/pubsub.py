@@ -101,19 +101,27 @@ async def send_event_to_integration_events_topic(event):
             current_span.set_attribute("error", str(e))
 
 
-async def send_event_to_routing_events_topic(event):
-    """Publish a gundi_core system event to the routing events topic.
+# Pub/Sub caps a publish request at 1000 messages / 10 MB; stay well under both.
+ROUTING_EVENTS_PUBLISH_CHUNK = 500
+
+
+async def send_events_to_routing_events_topic(events):
+    """Publish gundi_core system events to the routing events topic in as few
+    publish requests as possible.
 
     Best-effort by contract, like the activity-log publisher: when this runs the
-    observation is already dropped by policy, so a failed publish only costs the
-    trace marking in the portal - raising here would retry the whole envelope and
-    re-deliver the observation to every destination that already received it.
+    observations are already dropped by policy, so a failed publish only costs
+    the trace marking in the portal - raising here would retry the whole envelope
+    and re-deliver them to every destination that already received them.
     """
+    if not events:
+        return
     with tracing.tracer.start_as_current_span(
-        "routing_service.send_event_to_routing_events_topic", kind=SpanKind.PRODUCER
+        "routing_service.send_events_to_routing_events_topic", kind=SpanKind.PRODUCER
     ) as current_span:
         topic_name = settings.ROUTING_EVENTS_TOPIC
         current_span.set_attribute("topic", topic_name)
+        current_span.set_attribute("events_qty", len(events))
         try:
             timeout_settings = aiohttp.ClientTimeout(
                 total=settings.ROUTING_EVENTS_PUBLISH_TIMEOUT_SECONDS
@@ -123,16 +131,28 @@ async def send_event_to_routing_events_topic(event):
             ) as session:
                 client = pubsub.PublisherClient(session=session)
                 topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
-                payload = json.dumps(event.dict(), default=str).encode("utf-8")
-                messages = [pubsub.PubsubMessage(payload)]
-                await client.publish(
-                    topic, messages, timeout=int(timeout_settings.total)
-                )
+                messages = [
+                    pubsub.PubsubMessage(
+                        json.dumps(event.dict(), default=str).encode("utf-8")
+                    )
+                    for event in events
+                ]
+                for start in range(0, len(messages), ROUTING_EVENTS_PUBLISH_CHUNK):
+                    await client.publish(
+                        topic,
+                        messages[start : start + ROUTING_EVENTS_PUBLISH_CHUNK],
+                        timeout=int(timeout_settings.total),
+                    )
         except Exception as e:
             logger.warning(
-                f"Failed to publish routing event to {topic_name}: {type(e).__name__}: {e}"
+                f"Failed to publish {len(events)} routing event(s) to {topic_name}: "
+                f"{type(e).__name__}: {e}"
             )
             current_span.set_attribute("error", str(e))
+
+
+async def send_event_to_routing_events_topic(event):
+    await send_events_to_routing_events_topic([event])
 
 
 async def send_observation_to_dead_letter_topic(transformed_observation, attributes):

@@ -39,6 +39,7 @@ from app.core.utils import get_provider_key
 from gundi_core.events.integrations import ObservationFilterReason
 from app.core.pubsub import (
     send_event_to_routing_events_topic,
+    send_events_to_routing_events_topic,
     send_message_to_gcp_pubsub_dispatcher,
 )
 from app.services.activity_logger import log_missing_default_route
@@ -240,12 +241,17 @@ async def _discard_on_missing_default_route(
     )
 
 
-def _external_source_id(observation):
-    # The v2 schemas default external_source_id to the string "None" (Observation)
-    # or "none" (Event, Attachment, ...), not null. Sourceless data must read as
-    # "no device" to the rule and in the drop record, not as a device named "none".
+# The v2 schemas default external_source_id to these strings, not null: "None"
+# on Observation, "none" on Event, EventUpdate, Attachment and TextMessage.
+_SOURCELESS_EXTERNAL_IDS = ("None", "none")
+
+
+def _external_source_id_for_record(observation):
+    # Only for the log line and the drop record: sourceless data must not read as
+    # a device named "none" there. The rule itself gets the verbatim value - ids
+    # compare verbatim against Source.external_id by gundi-core's contract.
     value = getattr(observation, "external_source_id", None)
-    return None if value is None or str(value).lower() == "none" else value
+    return None if value in _SOURCELESS_EXTERNAL_IDS else value
 
 
 def _dropping_source_filter(route, destination_id, observation):
@@ -261,18 +267,29 @@ def _dropping_source_filter(route, destination_id, observation):
     if rule is None:
         return None
     verdict = rule.allows(
-        str(observation.data_provider_id), _external_source_id(observation)
+        str(observation.data_provider_id),
+        getattr(observation, "external_source_id", None),
     )
     return rule if verdict is False else None
 
 
 async def _discard_filtered_observation(
-    *, observation, destination, rule, current_span, span_event, set_discarded=False
+    *,
+    observation,
+    destination,
+    rule,
+    current_span,
+    span_event,
+    set_discarded=False,
+    sink=None,
 ):
+    """Record a policy drop. With a `sink` list the ObservationFiltered event is
+    collected there for the caller to publish in one request; without one it is
+    published right away."""
     if set_discarded:
         current_span.set_attribute("is_discarded", True)
     current_span.add_event(name=span_event)
-    external_source_id = _external_source_id(observation)
+    external_source_id = _external_source_id_for_record(observation)
     # INFO, like a delivery: until the ObservationFiltered consumer marks the
     # GundiTrace this line is the only visible record of the drop. Not
     # attention_needed - a working rule is not an operator problem.
@@ -287,19 +304,21 @@ async def _discard_filtered_observation(
             ExtraKeys.StreamType: observation.observation_type,
         },
     )
-    await send_event_to_routing_events_topic(
-        ObservationFiltered(
-            payload=FilteredObservation(
-                gundi_id=str(observation.gundi_id),
-                related_to=getattr(observation, "related_to", None),
-                data_provider_id=str(observation.data_provider_id),
-                destination_id=str(destination.id),
-                external_source_id=external_source_id,
-                observation_type=observation.observation_type,
-                filtered_by=ObservationFilterReason.for_mode(rule.mode).value,
-            )
+    event = ObservationFiltered(
+        payload=FilteredObservation(
+            gundi_id=str(observation.gundi_id),
+            related_to=getattr(observation, "related_to", None),
+            data_provider_id=str(observation.data_provider_id),
+            destination_id=str(destination.id),
+            external_source_id=external_source_id,
+            observation_type=observation.observation_type,
+            filtered_by=ObservationFilterReason.for_mode(rule.mode).value,
         )
     )
+    if sink is not None:
+        sink.append(event)
+    else:
+        await send_event_to_routing_events_topic(event)
 
 
 async def transform_and_route_observation(observation):
@@ -650,6 +669,11 @@ async def transform_and_route_observations_batch(batch):
 
                 # Generic-model destinations keep the per-item GundiDelivery
                 # path (splitting the batch is allowed; merging never is).
+                # A destination's drops are published together after its
+                # deliveries: one publish per dropped item, each with its own
+                # session and timeout, can outlast the push ack deadline on a
+                # large batch and get the allowed items redelivered.
+                filtered_events = []
                 if _uses_generic_model(destination_integration):
                     for observation in batch.observations:
                         if rule := _dropping_source_filter(
@@ -661,6 +685,7 @@ async def transform_and_route_observations_batch(batch):
                                 rule=rule,
                                 current_span=current_span,
                                 span_event="routing_service.batch_item_discarded_by_source_filter",
+                                sink=filtered_events,
                             )
                             continue
                         await _publish_gundi_delivery(
@@ -675,6 +700,7 @@ async def transform_and_route_observations_batch(batch):
                             provider_str=provider_str,
                             current_span=current_span,
                         )
+                    await send_events_to_routing_events_topic(filtered_events)
                     continue
 
                 # Transform per item; group per effective provider_key because
@@ -691,6 +717,7 @@ async def transform_and_route_observations_batch(batch):
                             rule=rule,
                             current_span=current_span,
                             span_event="routing_service.batch_item_discarded_by_source_filter",
+                            sink=filtered_events,
                         )
                         continue
                     try:
@@ -763,6 +790,7 @@ async def transform_and_route_observations_batch(batch):
                         destination=destination,
                         broker_config=broker_config,
                     )
+                await send_events_to_routing_events_topic(filtered_events)
         except ReferenceDataError as e:
             logger.exception(
                 f"External error occurred obtaining reference data for batch {batch.batch_id}: {e}",
