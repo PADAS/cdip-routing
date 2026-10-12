@@ -241,17 +241,16 @@ async def _discard_on_missing_default_route(
     )
 
 
-# The v2 schemas default external_source_id to these strings, not null: "None"
-# on Observation, "none" on Event, EventUpdate, Attachment and TextMessage.
-_SOURCELESS_EXTERNAL_IDS = ("None", "none")
-
-
 def _external_source_id_for_record(observation):
-    # Only for the log line and the drop record: sourceless data must not read as
-    # a device named "none" there. The rule itself gets the verbatim value - ids
-    # compare verbatim against Source.external_id by gundi-core's contract.
-    value = getattr(observation, "external_source_id", None)
-    return None if value in _SOURCELESS_EXTERNAL_IDS else value
+    # Only for the log line and the drop record. The v2 schemas default an
+    # omitted external_source_id to the string "None"/"none", not null; an
+    # omitted id must read as "no device" there, while a value the provider
+    # actually sent - even one spelled "none" - is kept as sent. The rule
+    # itself always gets the verbatim value: ids compare verbatim against
+    # Source.external_id by gundi-core's contract.
+    if "external_source_id" not in getattr(observation, "__fields_set__", ()):
+        return None
+    return getattr(observation, "external_source_id", None)
 
 
 def _dropping_source_filter(route, destination_id, observation):
@@ -640,6 +639,30 @@ async def transform_and_route_observations_batch(batch):
 
             provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
             for destination in destinations:
+                # Policy first, before this destination's portal lookup and
+                # broker check: a destination that drops every item must not
+                # be able to retry the envelope - and redeliver the others -
+                # by failing its setup. Partial drops are published after the
+                # deliveries so a setup failure does not record them twice.
+                allowed, filtered_events = [], []
+                for observation in batch.observations:
+                    if rule := _dropping_source_filter(
+                        default_route, destination.id, observation
+                    ):
+                        await _discard_filtered_observation(
+                            observation=observation,
+                            destination=destination,
+                            rule=rule,
+                            current_span=current_span,
+                            span_event="routing_service.batch_item_discarded_by_source_filter",
+                            sink=filtered_events,
+                        )
+                    else:
+                        allowed.append(observation)
+                if not allowed:
+                    await send_events_to_routing_events_topic(filtered_events)
+                    continue
+
                 destination_integration = await get_integration(
                     integration_id=destination.id
                 )
@@ -682,25 +705,12 @@ async def transform_and_route_observations_batch(batch):
 
                 # Generic-model destinations keep the per-item GundiDelivery
                 # path (splitting the batch is allowed; merging never is).
-                # A destination's drops are published together after its
+                # A destination's drops go out in one publish after its
                 # deliveries: one publish per dropped item, each with its own
                 # session and timeout, can outlast the push ack deadline on a
                 # large batch and get the allowed items redelivered.
-                filtered_events = []
                 if _uses_generic_model(destination_integration):
-                    for observation in batch.observations:
-                        if rule := _dropping_source_filter(
-                            default_route, destination.id, observation
-                        ):
-                            await _discard_filtered_observation(
-                                observation=observation,
-                                destination=destination,
-                                rule=rule,
-                                current_span=current_span,
-                                span_event="routing_service.batch_item_discarded_by_source_filter",
-                                sink=filtered_events,
-                            )
-                            continue
+                    for observation in allowed:
                         await _publish_gundi_delivery(
                             observation=observation,
                             destination=destination,
@@ -720,19 +730,7 @@ async def transform_and_route_observations_batch(batch):
                 # field mappings may override it per item and one ER bulk post
                 # allows exactly one provider_key in its URL path.
                 groups = {}
-                for observation in batch.observations:
-                    if rule := _dropping_source_filter(
-                        default_route, destination.id, observation
-                    ):
-                        await _discard_filtered_observation(
-                            observation=observation,
-                            destination=destination,
-                            rule=rule,
-                            current_span=current_span,
-                            span_event="routing_service.batch_item_discarded_by_source_filter",
-                            sink=filtered_events,
-                        )
-                        continue
+                for observation in allowed:
                     try:
                         transformed = await transform_observation_v2(
                             observation=observation,

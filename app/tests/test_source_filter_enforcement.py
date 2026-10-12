@@ -788,3 +788,58 @@ async def test_a_route_cached_before_filters_existed_fails_open(
 
     assert dispatcher.call_count == 1
     assert routing_events.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_an_all_dropped_batch_skips_destination_setup(
+    mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
+):
+    # Policy comes before the destination's portal lookup and broker check:
+    # a destination that drops every item must not be able to retry the
+    # envelope (and redeliver the other destinations) by failing its setup.
+    dispatcher, routing_events = enforcement_mocks
+    _enable(mocker)
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, destination_id, provider_id, mode="whitelist", ids=[]
+        )
+    )
+    mock_gundi_client_v2.get_integration_details.return_value = async_return(None)
+    attributes = {**_ATTRIBUTES, "batch": "true", "batch_count": "3"}
+
+    await process_observation_event(
+        _batch_event_dict(provider_id, ["device-0", "device-1", "device-2"]),
+        attributes,
+    )
+
+    assert not mock_gundi_client_v2.get_integration_details.called
+    assert dispatcher.call_count == 0
+    assert routing_events.call_count == 1
+    assert len(routing_events.call_args[0][0]) == 3
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_sentinel_looking_device_id_is_kept_in_the_record(
+    mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
+):
+    # Only an omitted id reads as "no device"; a device whose id really is
+    # "none" is matched verbatim and recorded as sent.
+    dispatcher, routing_events = enforcement_mocks
+    _enable(mocker)
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, destination_id, provider_id, mode="blacklist", ids=["none"]
+        )
+    )
+
+    await process_observation_event(
+        _observation_event_dict(provider_id, "none"), _ATTRIBUTES
+    )
+
+    assert dispatcher.call_count == 0
+    assert routing_events.call_count == 1
+    assert routing_events.call_args[0][0].payload.external_source_id == "none"
