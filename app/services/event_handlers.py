@@ -263,6 +263,11 @@ def _dropping_source_filter(route, destination_id, observation):
     """
     if not settings.ROUTING_FILTERS_ENABLED:
         return None
+    # An attachment has no device identity of its own; it follows its parent
+    # event, which was already gated. One whose parent was dropped fails at the
+    # dispatcher the same way today's orphaned attachments do.
+    if observation.observation_type == StreamPrefixEnum.attachment.value:
+        return None
     rule = (getattr(route, "filters", None) or {}).get(str(destination_id))
     if rule is None:
         return None
@@ -289,36 +294,46 @@ async def _discard_filtered_observation(
     if set_discarded:
         current_span.set_attribute("is_discarded", True)
     current_span.add_event(name=span_event)
-    external_source_id = _external_source_id_for_record(observation)
-    # INFO, like a delivery: until the ObservationFiltered consumer marks the
-    # GundiTrace this line is the only visible record of the drop. Not
-    # attention_needed - a working rule is not an operator problem.
-    logger.info(
-        f"Observation {observation.gundi_id} from device {external_source_id} dropped "
-        f"by the {rule.mode} rule for destination {destination.id}.",
-        extra={
-            ExtraKeys.GundiId: str(observation.gundi_id),
-            ExtraKeys.DeviceId: external_source_id,
-            ExtraKeys.InboundIntId: str(observation.data_provider_id),
-            ExtraKeys.OutboundIntId: str(destination.id),
-            ExtraKeys.StreamType: observation.observation_type,
-        },
-    )
-    event = ObservationFiltered(
-        payload=FilteredObservation(
-            gundi_id=str(observation.gundi_id),
-            related_to=getattr(observation, "related_to", None),
-            data_provider_id=str(observation.data_provider_id),
-            destination_id=str(destination.id),
-            external_source_id=external_source_id,
-            observation_type=observation.observation_type,
-            filtered_by=ObservationFilterReason.for_mode(rule.mode).value,
+    # Never raises, structurally: in the batch path this runs outside the
+    # per-item try, so an exception here would abort the batch and redelivery
+    # would re-publish items already sent. The drop itself already happened
+    # (the caller continues); this only records it.
+    try:
+        external_source_id = _external_source_id_for_record(observation)
+        # INFO, like a delivery: until the ObservationFiltered consumer marks the
+        # GundiTrace this line is the only visible record of the drop. Not
+        # attention_needed - a working rule is not an operator problem.
+        logger.info(
+            f"Observation {observation.gundi_id} from device {external_source_id} dropped "
+            f"by the {rule.mode} rule for destination {destination.id}.",
+            extra={
+                ExtraKeys.GundiId: str(observation.gundi_id),
+                ExtraKeys.DeviceId: external_source_id,
+                ExtraKeys.InboundIntId: str(observation.data_provider_id),
+                ExtraKeys.OutboundIntId: str(destination.id),
+                ExtraKeys.StreamType: observation.observation_type,
+            },
         )
-    )
-    if sink is not None:
-        sink.append(event)
-    else:
-        await send_event_to_routing_events_topic(event)
+        event = ObservationFiltered(
+            payload=FilteredObservation(
+                gundi_id=str(observation.gundi_id),
+                related_to=getattr(observation, "related_to", None),
+                data_provider_id=str(observation.data_provider_id),
+                destination_id=str(destination.id),
+                external_source_id=external_source_id,
+                observation_type=observation.observation_type,
+                filtered_by=ObservationFilterReason.for_mode(rule.mode).value,
+            )
+        )
+        if sink is not None:
+            sink.append(event)
+        else:
+            await send_event_to_routing_events_topic(event)
+    except Exception as e:
+        logger.warning(
+            f"Failed to record the filtered drop of {observation.gundi_id}: "
+            f"{type(e).__name__}: {e}"
+        )
 
 
 async def transform_and_route_observation(observation):
@@ -471,12 +486,10 @@ async def transform_and_route_observation(observation):
                     f"Transformed observation: {repr(transformed_observation)}, attributes: {attributes}"
                 )
 
-                if (
-                    broker_type := broker_config.get("broker", Broker.GCP_PUBSUB.value)
-                    .strip()
-                    .lower()
-                    != Broker.GCP_PUBSUB.value
-                ):
+                broker_type = (
+                    broker_config.get("broker", Broker.GCP_PUBSUB.value).strip().lower()
+                )
+                if broker_type != Broker.GCP_PUBSUB.value:
                     current_span.set_attribute("broker", broker_type)
                     raise ReferenceDataError(
                         f"Broker '{broker_type}' is no longer supported. Please use `{Broker.GCP_PUBSUB.value}` instead."
