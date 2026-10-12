@@ -69,63 +69,27 @@ async def send_message_to_gcp_pubsub_dispatcher(
         )
 
 
-async def send_event_to_integration_events_topic(event):
-    """Publish a gundi_core system event to the integration events topic.
-
-    Best-effort: any failure is logged and swallowed. The caller's path must
-    not be affected by activity-log delivery problems.
-    """
-    with tracing.tracer.start_as_current_span(
-        "routing_service.send_event_to_integration_events_topic", kind=SpanKind.PRODUCER
-    ) as current_span:
-        topic_name = settings.INTEGRATION_EVENTS_TOPIC
-        current_span.set_attribute("topic", topic_name)
-        try:
-            timeout_settings = aiohttp.ClientTimeout(
-                total=settings.INTEGRATION_EVENTS_PUBLISH_TIMEOUT_SECONDS
-            )
-            async with aiohttp.ClientSession(
-                raise_for_status=True, timeout=timeout_settings
-            ) as session:
-                client = pubsub.PublisherClient(session=session)
-                topic = client.topic_path(settings.GCP_PROJECT_ID, topic_name)
-                payload = json.dumps(event.dict(), default=str).encode("utf-8")
-                messages = [pubsub.PubsubMessage(payload)]
-                await client.publish(
-                    topic, messages, timeout=int(timeout_settings.total)
-                )
-        except Exception as e:
-            logger.warning(
-                f"Failed to publish activity log to {topic_name}: {type(e).__name__}: {e}"
-            )
-            current_span.set_attribute("error", str(e))
-
-
 # Pub/Sub caps a publish request at 1000 messages / 10 MB; stay well under both.
-ROUTING_EVENTS_PUBLISH_CHUNK = 500
+SYSTEM_EVENTS_PUBLISH_CHUNK = 500
 
 
-async def send_events_to_routing_events_topic(events):
-    """Publish gundi_core system events to the routing events topic in as few
-    publish requests as possible.
+async def _publish_system_events(events, *, topic_name, timeout_seconds, span_name):
+    """Publish gundi_core system events to a topic in as few requests as possible.
 
-    Best-effort by contract, like the activity-log publisher: when this runs the
-    observations are already dropped by policy, so a failed publish only costs
-    the trace marking in the portal - raising here would retry the whole envelope
-    and re-deliver them to every destination that already received them.
+    Best-effort by contract: callers use this for records the portal reads
+    (activity logs, drop records), never for the observation itself, so a
+    failed publish is logged and swallowed - raising would retry the whole
+    envelope and re-deliver observations that already reached a destination.
     """
     if not events:
         return
     with tracing.tracer.start_as_current_span(
-        "routing_service.send_events_to_routing_events_topic", kind=SpanKind.PRODUCER
+        span_name, kind=SpanKind.PRODUCER
     ) as current_span:
-        topic_name = settings.ROUTING_EVENTS_TOPIC
         current_span.set_attribute("topic", topic_name)
         current_span.set_attribute("events_qty", len(events))
         try:
-            timeout_settings = aiohttp.ClientTimeout(
-                total=settings.ROUTING_EVENTS_PUBLISH_TIMEOUT_SECONDS
-            )
+            timeout_settings = aiohttp.ClientTimeout(total=timeout_seconds)
             async with aiohttp.ClientSession(
                 raise_for_status=True, timeout=timeout_settings
             ) as session:
@@ -137,18 +101,38 @@ async def send_events_to_routing_events_topic(events):
                     )
                     for event in events
                 ]
-                for start in range(0, len(messages), ROUTING_EVENTS_PUBLISH_CHUNK):
+                for start in range(0, len(messages), SYSTEM_EVENTS_PUBLISH_CHUNK):
                     await client.publish(
                         topic,
-                        messages[start : start + ROUTING_EVENTS_PUBLISH_CHUNK],
+                        messages[start : start + SYSTEM_EVENTS_PUBLISH_CHUNK],
                         timeout=int(timeout_settings.total),
                     )
         except Exception as e:
             logger.warning(
-                f"Failed to publish {len(events)} routing event(s) to {topic_name}: "
+                f"Failed to publish {len(events)} system event(s) to {topic_name}: "
                 f"{type(e).__name__}: {e}"
             )
             current_span.set_attribute("error", str(e))
+
+
+async def send_event_to_integration_events_topic(event):
+    """Activity logs the portal shows per integration."""
+    await _publish_system_events(
+        [event],
+        topic_name=settings.INTEGRATION_EVENTS_TOPIC,
+        timeout_seconds=settings.INTEGRATION_EVENTS_PUBLISH_TIMEOUT_SECONDS,
+        span_name="routing_service.send_event_to_integration_events_topic",
+    )
+
+
+async def send_events_to_routing_events_topic(events):
+    """Drop records (ObservationFiltered) the portal's trace consumer reads."""
+    await _publish_system_events(
+        events,
+        topic_name=settings.ROUTING_EVENTS_TOPIC,
+        timeout_seconds=settings.ROUTING_EVENTS_PUBLISH_TIMEOUT_SECONDS,
+        span_name="routing_service.send_events_to_routing_events_topic",
+    )
 
 
 async def send_event_to_routing_events_topic(event):

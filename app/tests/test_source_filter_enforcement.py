@@ -877,3 +877,16 @@ async def test_a_rule_matches_a_non_canonical_destination_id_spelling(
 
     assert dispatcher.call_count == 0
     assert routing_events.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_publishing_no_routing_events_opens_no_session(mocker, mock_pubsub):
+    from app.core.pubsub import send_events_to_routing_events_topic
+
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
+    session = mocker.patch("app.core.pubsub.aiohttp.ClientSession")
+
+    await send_events_to_routing_events_topic([])
+
+    assert not session.called
+    assert not mock_pubsub.PublisherClient.called
