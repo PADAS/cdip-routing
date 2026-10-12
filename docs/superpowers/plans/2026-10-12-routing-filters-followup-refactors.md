@@ -59,7 +59,7 @@ async def test_a_rule_matches_a_non_canonical_destination_id_spelling(
     # .construct() skips validation, so the id stays a plain str in this
     # spelling instead of being parsed back into a canonical UUID.
     connection.destinations[0] = type(connection.destinations[0]).construct(
-        **{**connection.destinations[0].dict(), "id": canonical.upper().replace("-", "")}
+        **{**connection.destinations[0].__dict__, "id": canonical.upper().replace("-", "")}
     )
     mock_gundi_client_v2.get_connection_details.return_value = async_return(connection)
     mock_gundi_client_v2.get_route_details.return_value = async_return(
