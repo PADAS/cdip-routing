@@ -19,4 +19,5 @@ inputs = {
   max_event_age_seconds             = "600"
   network_name                      = "sintegrate-vpc-4bb07e9c"
   max_instance_count                = 20
+  routing_filters_enabled           = true
 }
