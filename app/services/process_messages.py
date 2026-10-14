@@ -18,10 +18,14 @@ from app.services.transformers import (
     build_transformed_message_attributes,
 )
 from app.core.gundi import (
-    get_all_outbound_configs_for_id, update_observation_with_device_configuration,
+    get_all_outbound_configs_for_id,
+    update_observation_with_device_configuration,
 )
 from app.core import settings
-from app.core.pubsub import send_message_to_gcp_pubsub_dispatcher, send_observation_to_dead_letter_topic
+from app.core.pubsub import (
+    send_message_to_gcp_pubsub_dispatcher,
+    send_observation_to_dead_letter_topic,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -29,17 +33,23 @@ logger = logging.getLogger(__name__)
 
 async def process_observation_event(raw_message, attributes):
     with tracing.tracer.start_as_current_span(
-            "routing_service.process_observations_event", kind=SpanKind.CONSUMER
+        "routing_service.process_observations_event", kind=SpanKind.CONSUMER
     ) as current_span:
-        logger.debug(f"Message received: \npayload: {raw_message} \nattributes: {attributes}")
+        logger.debug(
+            f"Message received: \npayload: {raw_message} \nattributes: {attributes}"
+        )
         current_span.add_event(name="routing_service.observations_received_at_consumer")
         event_type = raw_message.get("event_type")
         if schema_version := raw_message.get("schema_version") != "v1":
-            logger.warning(f"Schema version '{schema_version}' not supported. Message discarded.")
+            logger.warning(
+                f"Schema version '{schema_version}' not supported. Message discarded."
+            )
             return
         # ToDo: Discard duplicate events
         current_span.set_attribute("system_event_type", event_type)
-        current_span.set_attribute("observation_type", str(raw_message.get("observation_type")))
+        current_span.set_attribute(
+            "observation_type", str(raw_message.get("observation_type"))
+        )
         current_span.set_attribute("message", str(raw_message))
         current_span.set_attribute("environment", settings.TRACE_ENVIRONMENT)
         current_span.set_attribute("service", "cdip-routing")
@@ -51,11 +61,15 @@ async def process_observation_event(raw_message, attributes):
         try:
             schema = event_schemas[event_type]
         except KeyError:
-            logger.warning(f"Event Schema for '{event_type}' not found. Message discarded.")
+            logger.warning(
+                f"Event Schema for '{event_type}' not found. Message discarded."
+            )
         parsed_event = schema.parse_obj(raw_message)
         result = await handler(event=parsed_event)
         # Keep track of processed events for deduplication
-        await set_event_processing_status(event_id=str(parsed_event.event_id), status=EventProcessingStatus.PROCESSED)
+        await set_event_processing_status(
+            event_id=str(parsed_event.event_id), status=EventProcessingStatus.PROCESSED
+        )
         return result
 
 
@@ -80,7 +94,9 @@ async def process_observation(raw_observation, attributes, message_id=None):
             logger.debug(f"attributes: {attributes}")
             # Get the schema version to process it accordingly
             gundi_version = attributes.get("gundi_version", "v1")
-            schema = schemas.models_by_stream_type[raw_observation.get("observation_type")]
+            schema = schemas.models_by_stream_type[
+                raw_observation.get("observation_type")
+            ]
             observation = schema.parse_obj(raw_observation)
             observation_logging_extra = {
                 ExtraKeys.DeviceId: observation.device_id,
@@ -97,7 +113,7 @@ async def process_observation(raw_observation, attributes, message_id=None):
         except Exception as e:
             logger.exception(
                 f"Exception occurred prior to processing observation: \n{observation_logging_extra} \n error: {e}",
-                extra={   # FixMe: Extra is ignored by GCP
+                extra={  # FixMe: Extra is ignored by GCP
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.Observation: raw_observation,
                 },
@@ -138,19 +154,21 @@ async def process_observation(raw_observation, attributes, message_id=None):
                     broker_config = destination.additional
 
                     try:  # Transform the observation for the destination
-                        transformed_observation = await transform_observation_to_destination_schema(
+                        transformed_observation = (
+                            await transform_observation_to_destination_schema(
                                 observation=observation,
                                 destination=destination,
                                 provider=provider,
                                 route_configuration=route_configuration,
                                 gundi_version=gundi_version,
+                            )
                         )
                     except Exception as e:
-                        error_msg = (
-                            f"Error transforming observation. Sending to dead-letter. {type(e)}: {e}"
-                        )
+                        error_msg = f"Error transforming observation. Sending to dead-letter. {type(e)}: {e}"
                         logger.exception(error_msg)
-                        await send_observation_to_dead_letter_topic(raw_observation, attributes)
+                        await send_observation_to_dead_letter_topic(
+                            raw_observation, attributes
+                        )
                         current_span.set_attribute("error", error_msg)
                         continue  # Skip to the next destination
 
@@ -168,7 +186,9 @@ async def process_observation(raw_observation, attributes, message_id=None):
                     )
 
                     broker_type = (
-                        broker_config.get("broker", Broker.GCP_PUBSUB.value).strip().lower()
+                        broker_config.get("broker", Broker.GCP_PUBSUB.value)
+                        .strip()
+                        .lower()
                     )
                     current_span.set_attribute("broker", broker_type)
                     if broker_type != Broker.GCP_PUBSUB.value:
@@ -195,8 +215,7 @@ async def process_observation(raw_observation, attributes, message_id=None):
                     )
                     # Keep track of processed events for deduplication
                     await set_event_processing_status(
-                        event_id=message_id,
-                        status=EventProcessingStatus.PROCESSED
+                        event_id=message_id, status=EventProcessingStatus.PROCESSED
                     )
             else:
                 logger.error(
@@ -276,9 +295,13 @@ async def process_request(request):
         system_event_id = payload.get("event_id")
         current_span.set_attribute("pubsub_message_id", str(pubsub_message_id))
         current_span.set_attribute("system_event_id", str(system_event_id))
-        logger.debug(f"Received PubsubMessage(PubSub ID:{pubsub_message_id}, System Event ID: {system_event_id}): {pubsub_message}")
+        logger.debug(
+            f"Received PubsubMessage(PubSub ID:{pubsub_message_id}, System Event ID: {system_event_id}): {pubsub_message}"
+        )
         # Discard duplicate events by checking if the event_id has been processed before
-        message_id = system_event_id or pubsub_message_id  # system_event_id is not available in v1 messages
+        message_id = (
+            system_event_id or pubsub_message_id
+        )  # system_event_id is not available in v1 messages
         if message_id and await is_event_processed(event_id=message_id):
             logger.warning(
                 f"Message discarded. Event with ID '{message_id}' has already been processed (possible duplicate)."
@@ -287,10 +310,14 @@ async def process_request(request):
             await send_observation_to_dead_letter_topic(payload, attributes)
             return {
                 "status": "discarded",
-                "reason": "Event has already been processed (possible duplicate)."
+                "reason": "Event has already been processed (possible duplicate).",
             }
         # Handle maximum retries and age of the event
-        timestamp = pubsub_message.get("publish_time") or pubsub_message.get("time") or headers.get("ce-time")
+        timestamp = (
+            pubsub_message.get("publish_time")
+            or pubsub_message.get("time")
+            or headers.get("ce-time")
+        )
         if is_too_old(timestamp=timestamp):
             logger.warning(
                 f"Message discarded. The message is too old or the retry time limit has been reached."

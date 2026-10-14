@@ -104,6 +104,14 @@ resource "google_cloud_run_v2_service" "default" {
       }
 
       env {
+        # The on-switch for device routing filters (GUNDI-5712): data starts
+        # being dropped where this is true. Flipped per environment via
+        # terragrunt inputs; the default keeps a code deploy behavior-neutral.
+        name  = "ROUTING_FILTERS_ENABLED"
+        value = tostring(var.routing_filters_enabled)
+      }
+
+      env {
         name  = "SMART_DEFAULT_TIMEOUT"
         value = var.smart_default_timeout
       }

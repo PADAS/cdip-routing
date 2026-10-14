@@ -445,7 +445,10 @@ async def get_connection(*, connection_id):
                 )
             else:
                 await write_to_cache_safe(
-                    key=cache_key, ttl=_cache_ttl, instance=connection, extra_dict=extra_dict
+                    key=cache_key,
+                    ttl=_cache_ttl,
+                    instance=connection,
+                    extra_dict=extra_dict,
                 )
     except Exception as e:
         logger.exception(
@@ -536,7 +539,10 @@ async def get_integration(*, integration_id):
                 )
             else:
                 await write_to_cache_safe(
-                    key=cache_key, ttl=_cache_ttl, instance=integration, extra_dict=extra_dict
+                    key=cache_key,
+                    ttl=_cache_ttl,
+                    instance=integration,
+                    extra_dict=extra_dict,
                 )
     except redis_exceptions.ConnectionError as e:
         logger.exception(

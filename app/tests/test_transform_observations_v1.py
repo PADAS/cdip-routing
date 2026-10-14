@@ -20,7 +20,9 @@ async def test_movebank_transformer(
     raw_observation_position_attributes,
 ):
 
-    schema = schemas.models_by_stream_type[raw_observation_position.get("observation_type")]
+    schema = schemas.models_by_stream_type[
+        raw_observation_position.get("observation_type")
+    ]
     observation = schema.parse_obj(raw_observation_position)
     # Set Movebank values
     outbound_configuration_default.type_slug = "movebank"
@@ -77,7 +79,9 @@ async def test_smart_transformer_with_er_event(
     mock_gundi_client.get_outbound_integration_list.return_value = async_return(
         [smart_outbound_configuration_gcp_pubsub]
     )
-    schema = schemas.models_by_stream_type[raw_observation_er_event.get("observation_type")]
+    schema = schemas.models_by_stream_type[
+        raw_observation_er_event.get("observation_type")
+    ]
     event = schema.parse_obj(raw_observation_er_event)
     assert event
 
@@ -128,7 +132,9 @@ async def test_smart_transformer_with_er_patrol(
         [smart_outbound_configuration_gcp_pubsub]
     )
 
-    schema = schemas.models_by_stream_type[raw_observation_er_patrol.get("observation_type")]
+    schema = schemas.models_by_stream_type[
+        raw_observation_er_patrol.get("observation_type")
+    ]
     patrol = schema.parse_obj(raw_observation_er_patrol)
     assert patrol
 

@@ -15,7 +15,7 @@ https://github.com/PADAS/er-client/releases/download/v1.3.0/earthranger_client-1
 smartconnect-client==1.15.0
 gundi-client==1.1.0
 gundi-client-v2==3.7.1
-gundi-core==1.13.0
+gundi-core==1.14.0
 opentelemetry-api==1.45.1
 opentelemetry-sdk==1.45.1
 opentelemetry-exporter-gcp-trace==1.15.0

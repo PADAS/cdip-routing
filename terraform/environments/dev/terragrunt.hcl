@@ -18,4 +18,5 @@ inputs = {
   network_name                      = "sintegrate-vpc-b2b9960e"
   movebank_dispatcher_default_topic = "destination-movebank-dev"
   log_level                         = "DEBUG"
+  routing_filters_enabled           = true
 }

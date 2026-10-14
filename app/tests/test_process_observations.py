@@ -45,10 +45,7 @@ async def test_retry_observations_sent_to_gcp_pubsub_on_timeout(
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
     # The mocked PubSub client raises an asyncio.TimeoutError in the first call, and returns success in a second call
-    mocker.patch(
-        "app.core.pubsub.pubsub"
-, mock_pubsub_client_with_timeout_once
-    )
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub_client_with_timeout_once)
     await process_observation(
         raw_observation_position, raw_observation_position_attributes
     )
@@ -82,8 +79,7 @@ async def test_retry_observations_sent_to_gcp_pubsub_on_client_error(
     mocker.patch("app.core.gundi._portal", mock_gundi_client)
     # The mocked PubSub client raises an asyncio.TimeoutError in the first call, and returns success in a second call
     mocker.patch(
-        "app.core.pubsub.pubsub"
-,
+        "app.core.pubsub.pubsub",
         mock_pubsub_client_with_client_error_once,
     )
     await process_observation(
@@ -260,14 +256,17 @@ async def test_retry_process_event_on_smart_error_and_send_to_dlq(
     )
     mocker.patch(
         "app.services.process_messages.send_observation_to_dead_letter_topic",
-        mock_send_observation_to_dead_letter_topic
+        mock_send_observation_to_dead_letter_topic,
     )
     await process_observation(
         raw_observation_geoevent_with_valid_uuid, raw_observation_geoevent_attributes
     )
 
     # Check that is retried and then sent to the dead letter topic
-    assert mock_smart_async_client_class_with_server_error.return_value.get_incident.call_count == 3
+    assert (
+        mock_smart_async_client_class_with_server_error.return_value.get_incident.call_count
+        == 3
+    )
     assert mock_send_observation_to_dead_letter_topic.called
 
 
@@ -299,7 +298,7 @@ async def test_process_event_doesnt_call_smart_with_invalid_uuid(
     )
     mocker.patch(
         "app.services.process_messages.send_observation_to_dead_letter_topic",
-        mock_send_observation_to_dead_letter_topic
+        mock_send_observation_to_dead_letter_topic,
     )
     mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
     await process_observation(
@@ -340,7 +339,7 @@ async def test_process_event_publishes_smart_event(
     )
     mocker.patch(
         "app.services.process_messages.send_observation_to_dead_letter_topic",
-        mock_send_observation_to_dead_letter_topic
+        mock_send_observation_to_dead_letter_topic,
     )
     mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
     await process_observation(

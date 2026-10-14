@@ -31,9 +31,14 @@ def _dedup_key(action_id: str, resource_id: str, exception: Exception) -> str:
 
 async def _publish_once(*, dedup_key: str, payload: CustomActivityLog) -> None:
     """Publish an activity log unless the same one was emitted within the dedup window."""
-    if await _cache_db.set(dedup_key, 1, ex=settings.ACTIVITY_LOG_DEDUP_TTL, nx=True) is None:
+    if (
+        await _cache_db.set(dedup_key, 1, ex=settings.ACTIVITY_LOG_DEDUP_TTL, nx=True)
+        is None
+    ):
         return  # Already logged within the dedup window.
-    await send_event_to_integration_events_topic(IntegrationActionCustomLog(payload=payload))
+    await send_event_to_integration_events_topic(
+        IntegrationActionCustomLog(payload=payload)
+    )
 
 
 async def log_portal_lookup_error(
@@ -87,7 +92,9 @@ async def log_missing_default_route(
         routing_rules = [str(r.id) for r in (connection.routing_rules or [])]
         await _publish_once(
             dedup_key=_dedup_key_for_signature(
-                MISSING_DEFAULT_ROUTE_ACTION_ID, provider_id, MISSING_DEFAULT_ROUTE_TITLE
+                MISSING_DEFAULT_ROUTE_ACTION_ID,
+                provider_id,
+                MISSING_DEFAULT_ROUTE_TITLE,
             ),
             payload=CustomActivityLog(
                 integration_id=provider_id,
