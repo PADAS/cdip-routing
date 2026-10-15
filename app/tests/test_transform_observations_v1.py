@@ -293,3 +293,30 @@ async def test_smart_transformer_reuses_timezone_finder(
         tz = transformer.guess_location_timezone(longitude=36.82, latitude=-1.29)
         assert tz.zone == "Africa/Nairobi"
     assert _timezone_finder.cache_info().misses <= 1
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_with_er_event_publishes_smart_option_key(
+    mocker,
+    mock_smart_async_client_class,
+    smart_outbound_configuration_gcp_pubsub,
+    raw_observation_er_event,
+):
+    # ER v2 stores causeofdeath "natural.disease" as the Choice value
+    # "natural_disease"; SMART must receive the original option key.
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    raw = dict(raw_observation_er_event)
+    raw["event_details"] = {**raw["event_details"], "causeofdeath": "natural_disease"}
+    event = schemas.models_by_stream_type[raw["observation_type"]].parse_obj(raw)
+
+    transformed = await transform_observation(
+        stream_type=event.observation_type,
+        config=smart_outbound_configuration_gcp_pubsub,
+        observation=event,
+    )
+
+    waypoint = transformed["waypoint_requests"][0]
+    observation = waypoint["properties"]["smartAttributes"]["observationGroups"][0]["observations"][0]
+    assert observation["attributes"]["causeofdeath"] == "natural.disease"

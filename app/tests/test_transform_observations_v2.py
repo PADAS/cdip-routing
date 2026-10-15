@@ -4,6 +4,7 @@ import pytest
 import pytz
 from smartconnect.models import SMARTCONNECT_DATFORMAT, ConfigurableDataModel
 from gundi_core import schemas
+from app.conftest import async_return
 from app.core.errors import ReferenceDataError
 from app.services.transformers import (
     SmartEventTransformerV2,
@@ -996,3 +997,102 @@ def test_smart_transformer_v2_reuses_timezone_finder(
         tz = transformer.guess_location_timezone(longitude=36.82, latitude=-1.29)
         assert tz.zone == "Africa/Nairobi"
     assert _timezone_finder.cache_info().misses <= 1
+
+
+# Routing-level regressions: ER v2 stores choice selections as sanitized values
+# (causeofdeath "natural.disease" -> "natural_disease"); SMART must receive the
+# original option key in the published request.
+@pytest.mark.asyncio
+async def test_transform_event_v2_publishes_smart_option_key(
+    mocker,
+    mock_smart_async_client_class,
+    animals_sign_event_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    event = animals_sign_event_v2.copy(
+        update={"event_details": {"species": "lion", "causeofdeath": "natural_disease"}}
+    )
+
+    transformed = await transform_observation_v2(
+        observation=event,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+
+    observation = transformed.waypoint_requests[0].properties.smartAttributes.observationGroups[0].observations[0]
+    assert observation.attributes == {"species": "lion", "causeofdeath": "natural.disease"}
+
+
+@pytest.mark.asyncio
+async def test_transform_event_update_v2_publishes_smart_option_key(
+    mocker,
+    mock_smart_async_client_class,
+    animals_sign_event_update_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    changes = dict(animals_sign_event_update_v2.changes)
+    changes["event_details"] = {"species": "puma", "causeofdeath": "natural_disease"}
+    update = animals_sign_event_update_v2.copy(update={"changes": changes})
+
+    transformed = await transform_observation_v2(
+        observation=update,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+
+    observation_update = transformed.waypoint_requests[1].properties.smartAttributes
+    assert observation_update.attributes == {"species": "puma", "causeofdeath": "natural.disease"}
+
+
+@pytest.mark.asyncio
+async def test_transform_event_v2_resolves_from_configurable_model_during_ca_outage(
+    mocker,
+    mock_smart_async_client,
+    mock_smart_async_client_class,
+    animals_sign_event_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    destination = destination_integration_v2_smart.copy(deep=True)
+    for configuration in destination.configurations:
+        if configuration.action.value == "push_events":
+            configuration.data["configurable_models_enabled"] = ["7c9f0a3e-1b2d-4e5f-8a6b-9c0d1e2f3a4b"]
+    # A CM that carries the event's category and the attribute, so neither
+    # needs the CA data model.
+    xml = (
+        '<ConfigurableModel xmlns="http://www.smartconservationsoftware.org/xml/1.0/configurablemodel">'
+        '<name value="Test CM" language_code="en"/><nodes>'
+        '<node id="n-1" key="sign" categoryKey="sign" categoryHkey="animals.sign.">'
+        '<name value="Sign" language_code="en"/></node></nodes>'
+        '<attributeConfig id="cfg-1" attributeKey="cmonlystate" isDefault="true">'
+        '<listItem keyRef="Injured" isActive="true"/></attributeConfig>'
+        "</ConfigurableModel>"
+    )
+    cm = ConfigurableDataModel()
+    cm.load(xml)
+    mock_smart_async_client.get_configurable_data_model.return_value = async_return(cm)
+    mock_smart_async_client.get_data_model.side_effect = Exception("CA data model down")
+    event = animals_sign_event_v2.copy(update={"event_details": {"cmonlystate": "injured"}})
+
+    transformed = await transform_observation_v2(
+        observation=event,
+        destination=destination,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+
+    observation = transformed.waypoint_requests[0].properties.smartAttributes.observationGroups[0].observations[0]
+    assert observation.attributes == {"cmonlystate": "Injured"}
