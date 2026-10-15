@@ -267,7 +267,7 @@ def _dropping_source_filter(route, destination_id, observation):
     # dispatcher the same way today's orphaned attachments do.
     if observation.observation_type == StreamPrefixEnum.attachment.value:
         return None
-    rule = (getattr(route, "filters", None) or {}).get(str(destination_id))
+    rule = route.filter_for(destination_id) if route is not None else None
     if rule is None:
         return None
     verdict = rule.allows(
@@ -335,6 +335,44 @@ async def _discard_filtered_observation(
         )
 
 
+async def _partition_by_source_filter(
+    *,
+    route,
+    destination,
+    observations,
+    current_span,
+    span_event,
+    set_discarded=False,
+    sink=None,
+):
+    """Apply the destination's device rule; return the observations it allows.
+
+    Policy runs before the destination's portal lookup and broker check on
+    both v2 paths: a destination that drops everything must not be able to
+    retry the envelope - and redeliver the others - by failing its setup.
+    With a `sink` list (the batch path) drop records are collected there for
+    the caller to publish after its deliveries, so a setup failure does not
+    record them twice; without one (the single-item path) each is published
+    as it happens.
+    """
+    allowed = []
+    for observation in observations:
+        rule = _dropping_source_filter(route, destination.id, observation)
+        if rule is None:
+            allowed.append(observation)
+            continue
+        await _discard_filtered_observation(
+            observation=observation,
+            destination=destination,
+            rule=rule,
+            current_span=current_span,
+            span_event=span_event,
+            set_discarded=set_discarded,
+            sink=sink,
+        )
+    return allowed
+
+
 async def transform_and_route_observation(observation):
     with tracing.tracer.start_as_current_span(
         "routing_service.transform_and_route_observation", kind=SpanKind.CONSUMER
@@ -390,19 +428,15 @@ async def transform_and_route_observation(observation):
 
             provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
             for destination in destinations:
-                # Policy gate first: a dropped destination needs neither the
-                # portal lookup below nor a transform.
-                if rule := _dropping_source_filter(
-                    default_route, destination.id, observation
-                ):
-                    await _discard_filtered_observation(
-                        observation=observation,
-                        destination=destination,
-                        rule=rule,
-                        current_span=current_span,
-                        span_event="routing_service.observation_discarded_by_source_filter",
-                        set_discarded=True,
-                    )
+                allowed = await _partition_by_source_filter(
+                    route=default_route,
+                    destination=destination,
+                    observations=[observation],
+                    current_span=current_span,
+                    span_event="routing_service.observation_discarded_by_source_filter",
+                    set_discarded=True,
+                )
+                if not allowed:
                     continue
                 # Get additional configuration for the destination
                 destination_integration = await get_integration(
@@ -639,26 +673,15 @@ async def transform_and_route_observations_batch(batch):
 
             provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
             for destination in destinations:
-                # Policy first, before this destination's portal lookup and
-                # broker check: a destination that drops every item must not
-                # be able to retry the envelope - and redeliver the others -
-                # by failing its setup. Partial drops are published after the
-                # deliveries so a setup failure does not record them twice.
-                allowed, filtered_events = [], []
-                for observation in batch.observations:
-                    if rule := _dropping_source_filter(
-                        default_route, destination.id, observation
-                    ):
-                        await _discard_filtered_observation(
-                            observation=observation,
-                            destination=destination,
-                            rule=rule,
-                            current_span=current_span,
-                            span_event="routing_service.batch_item_discarded_by_source_filter",
-                            sink=filtered_events,
-                        )
-                    else:
-                        allowed.append(observation)
+                filtered_events = []
+                allowed = await _partition_by_source_filter(
+                    route=default_route,
+                    destination=destination,
+                    observations=batch.observations,
+                    current_span=current_span,
+                    span_event="routing_service.batch_item_discarded_by_source_filter",
+                    sink=filtered_events,
+                )
                 if not allowed:
                     await send_events_to_routing_events_topic(filtered_events)
                     continue
