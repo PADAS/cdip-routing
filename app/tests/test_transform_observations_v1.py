@@ -2,9 +2,15 @@ import pytest
 import pytz
 from datetime import datetime
 from gundi_core import schemas
+from smartconnect.models import ConfigurableDataModel
 from app.conftest import async_return
 from app.core.gundi import URN_GUNDI_PREFIX, URN_GUNDI_INTSRC_FORMAT
-from app.services.transformers import transform_observation
+from app.services.transformers import (
+    SmartEventTransformer,
+    _timezone_finder,
+    map_choice_value_to_option_key,
+    transform_observation,
+)
 
 
 @pytest.mark.asyncio
@@ -149,3 +155,168 @@ async def test_smart_transformer_with_er_patrol(
     smart_attributes = patrol_properties.get("smartAttributes")
     assert smart_attributes.get("patrolId") == f"ER-{patrol.serial_number}"
     assert smart_attributes.get("patrolUuid") == str(patrol.id)
+
+
+
+def test_map_choice_value_exact_key_unchanged():
+    assert map_choice_value_to_option_key(
+        attribute_key="wildlifestate", value="healthy", option_keys=["healthy", "injured"]
+    ) == "healthy"
+
+
+def test_map_choice_value_resolves_sanitized_tree_path():
+    assert map_choice_value_to_option_key(
+        attribute_key="causeofdeath",
+        value="natural_disease",
+        option_keys=["natural", "natural.disease"],
+    ) == "natural.disease"
+
+
+def test_map_choice_value_passes_non_strings_through():
+    assert map_choice_value_to_option_key(
+        attribute_key="x", value=None, option_keys=["a"]
+    ) is None
+    assert map_choice_value_to_option_key(
+        attribute_key="x", value=3, option_keys=["a"]
+    ) == 3
+
+
+def test_map_choice_value_logs_and_passes_through_when_unresolvable(caplog):
+    with caplog.at_level("ERROR"):
+        out = map_choice_value_to_option_key(
+            attribute_key="wildlifestate", value="nope", option_keys=["healthy"]
+        )
+    assert out == "nope"
+    assert "wildlifestate" in caplog.text and "nope" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_resolves_v2_choice_values(
+    mocker, mock_smart_async_client_class, smart_outbound_configuration_gcp_pubsub
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    transformer = SmartEventTransformer(
+        config=smart_outbound_configuration_gcp_pubsub, ca_uuid=None
+    )
+    # TREE leaf stored by ER as its sanitized Choice value.
+    assert await transformer._resolve_attribute("causeofdeath", "natural_disease") == (
+        "causeofdeath",
+        "natural.disease",
+    )
+    # v1 sites: exact key stays untouched.
+    assert await transformer._resolve_attribute("wildlifestate", "healthy") == (
+        "wildlifestate",
+        "healthy",
+    )
+    # Unknown attribute still falls through to the transformation rules path.
+    assert await transformer._resolve_attribute("not_an_attribute", "x") == (None, None)
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_resolves_across_all_attribute_configs(
+    mocker, mock_smart_async_client_class, smart_outbound_configuration_gcp_pubsub
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    # Attribute key absent from the CA data model (whose lower-case wildlifestate
+    # keys would otherwise match exactly), so only the CM's configs can resolve it.
+    xml = (
+        '<ConfigurableModel xmlns="http://www.smartconservationsoftware.org/xml/1.0/configurablemodel">'
+        '<name value="Test CM" language_code="en"/><nodes/>'
+        '<attributeConfig id="cfg-1" attributeKey="cmonlystate" isDefault="true">'
+        '<listItem keyRef="Healthy" isActive="true"/></attributeConfig>'
+        '<attributeConfig id="cfg-2" attributeKey="cmonlystate" isDefault="false">'
+        '<listItem keyRef="Injured" isActive="true"/></attributeConfig>'
+        "</ConfigurableModel>"
+    )
+    cm = ConfigurableDataModel()
+    cm.load(xml)
+    transformer = SmartEventTransformer(
+        config=smart_outbound_configuration_gcp_pubsub, ca_uuid=None
+    )
+    mocker.patch.object(
+        transformer, "get_configurable_models", return_value=[cm]
+    )
+    assert await transformer._resolve_attribute("cmonlystate", "injured") == (
+        "cmonlystate",
+        "Injured",
+    )
+
+
+@pytest.mark.parametrize("value", ["", "Some Label", "mixedCase_value"])
+def test_map_choice_value_non_sanitized_shapes_pass_through_quietly(value, caplog):
+    with caplog.at_level("DEBUG"):
+        out = map_choice_value_to_option_key(
+            attribute_key="x", value=value, option_keys=["Lion", "healthy"]
+        )
+    assert out == value
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]
+
+
+def test_map_choice_value_exact_mixed_case_key_unchanged():
+    assert (
+        map_choice_value_to_option_key(
+            attribute_key="x", value="Lion", option_keys=["Lion", "LION"]
+        )
+        == "Lion"
+    )
+
+
+def test_map_choice_value_ambiguous_logs_error_with_integration_id(caplog):
+    with caplog.at_level("ERROR"):
+        out = map_choice_value_to_option_key(
+            attribute_key="species",
+            value="lion",
+            option_keys=["Lion", "LION"],
+            integration_id="integration-123",
+        )
+    assert out == "lion"
+    errors = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert errors and "integration-123" in errors[0].getMessage()
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_reuses_timezone_finder(
+    mocker, mock_smart_async_client_class, smart_outbound_configuration_gcp_pubsub
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    transformer = SmartEventTransformer(
+        config=smart_outbound_configuration_gcp_pubsub, ca_uuid=None
+    )
+    _timezone_finder.cache_clear()
+    for _ in range(2):
+        tz = transformer.guess_location_timezone(longitude=36.82, latitude=-1.29)
+        assert tz.zone == "Africa/Nairobi"
+    assert _timezone_finder.cache_info().misses <= 1
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_with_er_event_publishes_smart_option_key(
+    mocker,
+    mock_smart_async_client_class,
+    smart_outbound_configuration_gcp_pubsub,
+    raw_observation_er_event,
+):
+    # ER v2 stores causeofdeath "natural.disease" as the Choice value
+    # "natural_disease"; SMART must receive the original option key.
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    raw = dict(raw_observation_er_event)
+    raw["event_details"] = {**raw["event_details"], "causeofdeath": "natural_disease"}
+    event = schemas.models_by_stream_type[raw["observation_type"]].parse_obj(raw)
+
+    transformed = await transform_observation(
+        stream_type=event.observation_type,
+        config=smart_outbound_configuration_gcp_pubsub,
+        observation=event,
+    )
+
+    waypoint = transformed["waypoint_requests"][0]
+    observation = waypoint["properties"]["smartAttributes"]["observationGroups"][0]["observations"][0]
+    assert observation["attributes"]["causeofdeath"] == "natural.disease"

@@ -1,4 +1,6 @@
+import functools
 import json
+import re
 import base64
 import logging
 import os
@@ -26,6 +28,7 @@ from gundi_core.schemas.v2 import (
 )
 from pydantic import BaseModel
 from smartconnect import AsyncSmartClient
+from smartconnect.choices import OptionKeyResolutionError, resolve_option_key
 from gundi_core.schemas.v2.smart import (
     SMARTCONNECT_DATFORMAT,
     SMARTRequest,
@@ -53,6 +56,140 @@ from app.core.errors import (
 logger = logging.getLogger(__name__)
 
 ADMIN_PORTAL_HOST = urlparse(settings.PORTAL_API_ENDPOINT).hostname
+
+
+@functools.lru_cache(maxsize=1)
+def _timezone_finder() -> timezonefinder.TimezoneFinder:
+    # Construction loads the polygon index (~0.5s); share one per process.
+    return timezonefinder.TimezoneFinder()
+
+
+# The option-key rules live in smartconnect.choices. ConfigurableDataModel.
+# resolve_option_key unions across the attribute configs within one CM, but
+# routing must union several CMs and the CA data model in a single lookup,
+# which is why these helpers exist here.
+def _option_keys(*attributes: Optional[dict]) -> List[str]:
+    """Option keys of the given data model attribute dicts, deduplicated in order.
+
+    Base-model attributes carry {key, type, options}; configurable-model
+    attributes carry {key, options, ...} with a curated subset. The union is
+    used so a value recorded before a CM dropped an option still resolves.
+    """
+    keys = dict.fromkeys(
+        option.get("key")
+        for attribute in attributes
+        for option in (attribute or {}).get("options") or []
+        if option.get("key")
+    )
+    return list(keys)
+
+
+def _attribute_entries(configurable_models, key) -> List[dict]:
+    """Every attribute entry with this key across the configurable models.
+
+    A configurable model may carry several attributeConfig entries per key
+    (per-node curations); get_attribute only returns the first.
+    """
+    return [
+        a
+        for cm in configurable_models
+        for a in (cm.export_as_dict().get("attributes") or [])
+        if a.get("key") == key
+    ]
+
+
+async def _resolve_known_attribute(
+    transformer, key, value
+) -> Optional[Tuple[str, Any]]:
+    """Resolve (key, value) if the attribute is in a CM or the CA data model.
+
+    Returns None when the attribute is unknown, so callers fall through to the
+    transformation rules. When a CM already knows the attribute, a CA data model
+    outage only narrows the option keys and must not fail the event.
+    """
+    config = getattr(transformer, "_config", None) or getattr(
+        transformer, "config", None
+    )
+    integration_id = getattr(config, "id", None)
+    integration_id = str(integration_id) if integration_id is not None else None
+    configurable_models = await transformer.get_configurable_models()
+    cm_entries = _attribute_entries(configurable_models, key)
+    if cm_entries:
+        ca_attr = None
+        if not getattr(transformer, "_ca_datamodel_unavailable", False):
+            try:
+                ca_attr = (await transformer.get_ca_datamodel()).get_attribute(
+                    key=key
+                )
+            except ReferenceDataError:
+                transformer._ca_datamodel_unavailable = True
+                logger.warning(
+                    "CA data model unavailable; resolving attributes against "
+                    "configurable-model options only (integration %s)",
+                    integration_id,
+                )
+    else:
+        ca_attr = (await transformer.get_ca_datamodel()).get_attribute(key=key)
+    if not cm_entries and not ca_attr:
+        return None
+    return key, map_choice_value_to_option_key(
+        attribute_key=key,
+        value=value,
+        option_keys=_option_keys(*cm_entries, ca_attr),
+        integration_id=integration_id,
+    )
+
+
+_SANITIZED_CHOICE_RE = re.compile(r"[a-z0-9_]+")
+
+
+def map_choice_value_to_option_key(
+    *,
+    attribute_key: str,
+    value: Any,
+    option_keys: List[str],
+    integration_id: Optional[str] = None,
+) -> Any:
+    """Translate an ER choice value back to the SMART option key it came from.
+
+    ER v2 event types store LIST/MLIST/TREE selections as Choice values
+    derived from the SMART key (lower-cased, non-alphanumerics collapsed to
+    underscores, hash-shortened over 100 chars). SMART Connect only accepts
+    the original key. Exact matches (all v1 sites) return unchanged, and only
+    values shaped like a sanitized key are looked up. On a failed lookup the
+    value is returned unchanged and an error is logged so SMART's rejection
+    stays traceable to the attribute and integration.
+    """
+    if not option_keys or not isinstance(value, str):
+        return value
+    if value in option_keys:
+        return value
+    if not _SANITIZED_CHOICE_RE.fullmatch(value):
+        logger.debug(
+            "Value %r for SMART attribute %r is not a sanitized choice value; "
+            "passing through (integration %s)",
+            value,
+            attribute_key,
+            integration_id,
+        )
+        return value
+    try:
+        return resolve_option_key(option_keys, value)
+    except OptionKeyResolutionError as e:
+        logger.error(
+            "Could not map ER choice value %r for SMART attribute %r to an option "
+            "key (integration %s): %s",
+            value,
+            attribute_key,
+            integration_id,
+            e,
+            extra={
+                "attribute_key": attribute_key,
+                "value": value,
+                "integration_id": integration_id,
+            },
+        )
+        return value
 
 
 class Transformer(ABC):
@@ -302,7 +439,7 @@ class SMARTTransformer:
         OutboundConfiguration (which will in turn fall back to Utc).
         """
         try:
-            predicted_timezone = timezonefinder.TimezoneFinder().timezone_at(
+            predicted_timezone = _timezone_finder().timezone_at(
                 lng=longitude, lat=latitude
             )
             return pytz.timezone(predicted_timezone)
@@ -349,21 +486,9 @@ class SMARTTransformer:
     async def _resolve_attribute(
         self, key, value
     ) -> Tuple[Union[str, None], Union[str, None]]:
-        attr = None
-
-        # Favor a match in configurable model.
-        configurable_models = await self.get_configurable_models()
-        for cm in configurable_models:
-            attr = cm.get_attribute(key=key)
-            if attr:
-                break
-        else:
-            ca_datamodel = await self.get_ca_datamodel()
-            attr = ca_datamodel.get_attribute(key=key)
-
-        # Favor a match in the CA DataModel attributes dictionary.
-        if attr:
-            return key, value
+        resolved = await _resolve_known_attribute(self, key, value)
+        if resolved is not None:
+            return resolved
 
         return_key = return_value = None
         # Find in transformation rules.
@@ -1041,7 +1166,7 @@ class SMARTTransformerV2(Transformer, ABC):
         OutboundConfiguration (which will in turn fall back to Utc).
         """
         try:
-            predicted_timezone = timezonefinder.TimezoneFinder().timezone_at(
+            predicted_timezone = _timezone_finder().timezone_at(
                 lng=longitude, lat=latitude
             )
             return pytz.timezone(predicted_timezone)
@@ -1079,21 +1204,9 @@ class SMARTTransformerV2(Transformer, ABC):
     async def _resolve_attribute(
         self, key, value
     ) -> Tuple[Union[str, None], Union[str, None]]:
-        attr = None
-
-        # Favor a match in configurable model.
-        configurable_models = await self.get_configurable_models()
-        for cm in configurable_models:
-            attr = cm.get_attribute(key=key)
-            if attr:
-                break
-        else:
-            ca_datamodel = await self.get_ca_datamodel()
-            attr = ca_datamodel.get_attribute(key=key)
-
-        # Favor a match in the CA DataModel attributes dictionary.
-        if attr:
-            return key, value
+        resolved = await _resolve_known_attribute(self, key, value)
+        if resolved is not None:
+            return resolved
 
         return_key = return_value = None
         # Find in transformation rules.
@@ -1860,8 +1973,6 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
     ca_uuid = ca_uuids.pop()
     return patrol, ca_uuid
 
-
-import re
 
 
 def get_ca_uuid_for_event(
