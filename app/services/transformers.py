@@ -75,13 +75,13 @@ def _option_keys(*attributes: Optional[dict]) -> List[str]:
     attributes carry {key, options, ...} with a curated subset. The union is
     used so a value recorded before a CM dropped an option still resolves.
     """
-    keys: List[str] = []
-    for attribute in attributes:
-        for option in (attribute or {}).get("options") or []:
-            key = option.get("key")
-            if key and key not in keys:
-                keys.append(key)
-    return keys
+    keys = dict.fromkeys(
+        option.get("key")
+        for attribute in attributes
+        for option in (attribute or {}).get("options") or []
+        if option.get("key")
+    )
+    return list(keys)
 
 
 def _attribute_entries(configurable_models, key) -> List[dict]:
