@@ -437,6 +437,39 @@ async def test_transform_event_update_full_for_smart(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "recorded_at", ["2024-08-05T13:27:10.463000Z", "2024-08-05T13:27:10Z"]
+)
+async def test_transform_event_update_utc_recorded_at_for_smart(
+    mocker,
+    mock_smart_async_client_class,
+    animals_sign_event_update_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+    recorded_at,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    animals_sign_event_update_v2.changes["recorded_at"] = recorded_at
+
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_update_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+
+    expected = datetime(2024, 8, 5, 13, 27, 10, tzinfo=pytz.utc).astimezone(
+        pytz.timezone("Africa/Lagos")
+    )
+    properties = transformed_observation.waypoint_requests[0].properties
+    assert properties.dateTime.strftime(SMARTCONNECT_DATFORMAT) == expected.strftime(
+        SMARTCONNECT_DATFORMAT
+    )
+
+
+@pytest.mark.asyncio
 async def test_transform_event_update_title_for_smart(
     mocker,
     smart_ca_uuid,

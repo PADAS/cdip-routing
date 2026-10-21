@@ -27,6 +27,7 @@ from gundi_core.schemas.v2 import (
     EREventUpdate,
 )
 from pydantic import BaseModel
+from pydantic.datetime_parse import parse_datetime
 from smartconnect import AsyncSmartClient
 from smartconnect.choices import OptionKeyResolutionError, resolve_option_key
 from gundi_core.schemas.v2.smart import (
@@ -868,6 +869,11 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             logger.warning("patrol leg contains no start location or no leader")
             return None
 
+        start_time = (patrol_leg.time_range or {}).get("start_time")
+        if not start_time:
+            logger.warning("patrol leg contains no start time")
+            return None
+
         coordinates = [
             patrol_leg.start_location.longitude,
             patrol_leg.start_location.latitude,
@@ -877,10 +883,9 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             latitude=patrol_leg.start_location.latitude,
         )
         present_localtime = datetime.now(tz=pytz.utc).astimezone(location_timezone)
-        # datetime.strptime(patrol_leg.time_range.get('start_time'), "%Y-%m-%dT%H:%M:%S.%f%z")
-        patrol_leg_start_localtime = datetime.fromisoformat(
-            patrol_leg.time_range.get("start_time")
-        ).astimezone(location_timezone)
+        patrol_leg_start_localtime = parse_datetime(start_time).astimezone(
+            location_timezone
+        )
 
         comment = f"\nImported: {present_localtime.isoformat()}"
         for note in patrol.notes:
@@ -931,6 +936,8 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             patrol_request = self.er_patrol_to_smart_patrol_request(
                 patrol=patrol, patrol_leg=patrol_leg, smart_feature_type="patrol"
             )
+            if not patrol_request:
+                return None
             patrol_requests.append(patrol_request)
 
             # Get waypoints for patrol
@@ -1000,6 +1007,8 @@ class SmartERPatrolTransformer(SMARTTransformer, Transformer):
             patrol_request = self.er_patrol_to_smart_patrol_request(
                 patrol=patrol, patrol_leg=patrol_leg, smart_feature_type="patrol/new"
             )
+            if not patrol_request:
+                return None
 
             incident_requests = await self.get_incident_requests_from_er_patrol_leg(
                 patrol_id=patrol.id, patrol_leg=patrol_leg
@@ -1398,7 +1407,7 @@ class SMARTTransformerV2(Transformer, ABC):
             request_kwargs["geometry"] = Geometry(coordinates=coordinates, type="Point")
 
         if recorded_at := changes.get("recorded_at"):
-            recorded_at_datetime = datetime.fromisoformat(recorded_at)
+            recorded_at_datetime = parse_datetime(recorded_at)
             # Localize and remove tz. SMART doesn't accept the timezone (e.g +01:00) in the datetime string
             waypoint_local_datetime = recorded_at_datetime.astimezone(location_timezone)
             smart_properties["dateTime"] = waypoint_local_datetime.strftime(
