@@ -147,9 +147,18 @@ which are easy to break:
 - `ReferenceDataError` and unexpected exceptions retry the message **only when they escape the handler** —
   raising out of it is the retry signal to GCP.
 - **A `ReferenceDataError` from `transform_observation_v2` retries, but only after every other destination
-  has been attempted** (GUNDI-5844), on both v2 paths. A broken destination never blocks the healthy ones;
-  the cost is that the retry redelivers to the healthy ones too, because nothing records per-destination
-  success. Both outcomes emit a `transform_observation` activity log for the provider (`will_retry` in its data).
+  has been attempted** (GUNDI-5844), on both v2 paths. A broken destination never blocks the healthy ones,
+  and the retry does not redeliver to them: each destination whose work for the event is finished
+  (published, permanently discarded, or dropped by a source filter) gets a Redis marker
+  `processed_events.<event_id>.destinations.<destination_id>` (`app/core/deduplication.py`, TTL
+  `EVENT_PROCESSING_STATUS_TTL`), and a redelivered envelope skips marked destinations before the filter
+  gate and the portal lookup. Keyed on the system `event_id`, never `gundi_id` (an event and its updates
+  share one). Only the v2 handlers pass it; a direct call with `event_id=None` neither reads nor writes
+  markers. A Redis failure reads as "not complete" (worst case a duplicate) and a failed write is logged and
+  ignored. **Batch caveat**: the marker is per destination, not per provider-key group or per item, so a
+  destination that crashes or retries after publishing some of its groups (or per-item non-ER or
+  generic-model messages) re-publishes those on retry. Both outcomes emit a `transform_observation` activity
+  log for the provider (`will_retry` in its data).
 - Any other transformer error **discards that destination's item** (v2) or dead-letters it (v1) and
   continues — a bad transform for one destination must not block the others.
 - `send_observation_to_dead_letter_topic` targets `settings.DEAD_LETTER_TOPIC`.

@@ -136,7 +136,7 @@ async def test_process_event_update_v2_successfully(
 async def test_message_deduplication(
     mocker,
     mock_cache,
-    mock_deduplication_cache_one_miss,
+    mock_deduplication_cache_stateful,
     mock_gundi_client_v2,
     mock_pubsub,
     pubsub_request_headers,
@@ -145,7 +145,7 @@ async def test_message_deduplication(
 ):
     # Mock external dependencies
     mocker.patch("app.core.gundi._cache_db", mock_cache)
-    mocker.patch("app.core.deduplication._cache_db", mock_deduplication_cache_one_miss)
+    mocker.patch("app.core.deduplication._cache_db", mock_deduplication_cache_stateful)
     mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
     mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
     response = api_client.post(
@@ -168,7 +168,7 @@ async def test_message_deduplication(
     key = get_event_status_key(event_id=event_id)
     ttl = settings.EVENT_PROCESSING_STATUS_TTL
     value = EventProcessingStatus.PROCESSED.value
-    mock_deduplication_cache_one_miss.setex.assert_called_once_with(key, ttl, value)
+    mock_deduplication_cache_stateful.setex.assert_any_call(key, ttl, value)
     # Send the same request a second time
     response = api_client.post(
         "/",
@@ -185,7 +185,7 @@ async def test_message_deduplication(
 async def test_message_v2_deduplication(
     mocker,
     mock_cache,
-    mock_deduplication_cache_one_miss,
+    mock_deduplication_cache_stateful,
     mock_gundi_client_v2,
     mock_pubsub,
     pubsub_request_headers,
@@ -194,7 +194,7 @@ async def test_message_v2_deduplication(
 ):
     # Mock external dependencies
     mocker.patch("app.core.gundi._cache_db", mock_cache)
-    mocker.patch("app.core.deduplication._cache_db", mock_deduplication_cache_one_miss)
+    mocker.patch("app.core.deduplication._cache_db", mock_deduplication_cache_stateful)
     mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
     mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
     response = api_client.post(
@@ -217,7 +217,7 @@ async def test_message_v2_deduplication(
     key = get_event_status_key(event_id=event_id)
     ttl = settings.EVENT_PROCESSING_STATUS_TTL
     value = EventProcessingStatus.PROCESSED.value
-    mock_deduplication_cache_one_miss.setex.assert_called_once_with(key, ttl, value)
+    mock_deduplication_cache_stateful.setex.assert_any_call(key, ttl, value)
 
     # Send the same request a second time
     response = api_client.post(

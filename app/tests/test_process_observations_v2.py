@@ -285,12 +285,20 @@ BROKEN_DESTINATION_ID = "0eecad72-1d2e-43b1-a169-c419c81fc957"
 
 
 def _two_destination_setup(
-    mocker, mock_cache, mock_gundi_client_v2, connection_v2, destination_integration_v2
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    connection_v2,
+    destination_integration_v2,
+    broken_state=None,
 ):
     """connection_v2 with a second destination; transform_observation_v2 raises
-    a ReferenceDataError for that one and runs for real for the other."""
+    a ReferenceDataError for that one (while broken_state["fails"]) and runs for
+    real for the other."""
     from app.core.errors import ReferenceDataError
     from app.services.transformers import transform_observation_v2
+
+    broken_state = broken_state if broken_state is not None else {"fails": True}
 
     healthy = connection_v2.destinations[0]
     broken = healthy.copy(update={"id": BROKEN_DESTINATION_ID, "name": "Broken"})
@@ -307,7 +315,7 @@ def _two_destination_setup(
     )
 
     async def transform(*, observation, destination, provider, route_configuration):
-        if str(destination.id) == BROKEN_DESTINATION_ID:
+        if str(destination.id) == BROKEN_DESTINATION_ID and broken_state["fails"]:
             raise ReferenceDataError("Error getting data model for SMART CA: abc")
         return await transform_observation_v2(
             observation=observation,
@@ -318,10 +326,10 @@ def _two_destination_setup(
 
     mocker.patch("app.core.gundi._cache_db", mock_cache)
     mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
-    mocker.patch(
+    transform_mock = mocker.patch(
         "app.services.event_handlers.transform_observation_v2", side_effect=transform
     )
-    return connection, healthy
+    return connection, healthy, transform_mock
 
 
 def _patch_activity_log(mocker):
@@ -349,7 +357,7 @@ async def test_event_is_retried_when_transformer_raises_reference_data_error(
     The other destination is still delivered before the retry is signalled."""
     from app.core.errors import ReferenceDataError
 
-    connection, healthy = _two_destination_setup(
+    connection, healthy, _ = _two_destination_setup(
         mocker,
         mock_cache,
         mock_gundi_client_v2,
@@ -378,6 +386,135 @@ async def test_event_is_retried_when_transformer_raises_reference_data_error(
     assert payload.data["error_type"] == "ReferenceDataError"
     assert payload.data["will_retry"] is True
     assert payload.data["gundi_ids"] == [raw_event_v2["payload"]["gundi_id"]]
+
+
+@pytest.mark.asyncio
+async def test_event_retry_does_not_republish_to_completed_destinations(
+    mocker,
+    mock_cache,
+    mock_deduplication_cache_stateful,
+    mock_gundi_client_v2,
+    connection_v2,
+    destination_integration_v2,
+    raw_event_v2,
+    raw_event_v2_attributes,
+):
+    """Redelivering the same envelope after a ReferenceDataError skips the
+    destination that was already published and only retries the failed one."""
+    from app.core.deduplication import EventProcessingStatus, get_event_status_key
+    from app.core.errors import ReferenceDataError
+
+    broken_state = {"fails": True}
+    _, healthy, transform_mock = _two_destination_setup(
+        mocker,
+        mock_cache,
+        mock_gundi_client_v2,
+        connection_v2,
+        destination_integration_v2,
+        broken_state=broken_state,
+    )
+    mocker.patch("app.core.deduplication._cache_db", mock_deduplication_cache_stateful)
+    dispatcher_send = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher",
+        dispatcher_send,
+    )
+    _patch_activity_log(mocker)
+
+    def published_to(destination_id):
+        return [
+            c
+            for c in dispatcher_send.call_args_list
+            if str(c.kwargs["destination"].id) == destination_id
+        ]
+
+    def broken_transform_attempts():
+        return [
+            c
+            for c in transform_mock.call_args_list
+            if str(c.kwargs["destination"].id) == BROKEN_DESTINATION_ID
+        ]
+
+    status_key = get_event_status_key(raw_event_v2["event_id"])
+
+    for attempt in (1, 2):
+        with pytest.raises(ReferenceDataError):
+            await process_observation_event(raw_event_v2, raw_event_v2_attributes)
+        assert len(published_to(str(healthy.id))) == 1
+        assert published_to(BROKEN_DESTINATION_ID) == []
+        assert len(broken_transform_attempts()) == attempt
+        assert status_key not in mock_deduplication_cache_stateful.store
+
+    broken_state["fails"] = False
+    await process_observation_event(raw_event_v2, raw_event_v2_attributes)
+
+    assert len(published_to(str(healthy.id))) == 1
+    assert len(published_to(BROKEN_DESTINATION_ID)) == 1
+    assert mock_deduplication_cache_stateful.store[status_key] == str(
+        EventProcessingStatus.PROCESSED.value
+    )
+
+
+@pytest.mark.asyncio
+async def test_destination_marker_read_error_is_treated_as_not_complete(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    raw_event_v2,
+    raw_event_v2_attributes,
+):
+    """A Redis failure reading a completion marker must never drop data: the
+    destination is published (worst case a duplicate) and nothing raises."""
+    from redis.exceptions import RedisError
+
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    dedup_cache = mocker.MagicMock()
+    dedup_cache.get = mocker.AsyncMock(side_effect=RedisError("connection lost"))
+    dedup_cache.setex = mocker.AsyncMock(side_effect=RedisError("connection lost"))
+    mocker.patch("app.core.deduplication._cache_db", dedup_cache)
+    # Skips backoff's 10s retry window, which would otherwise stall the test.
+    no_retry = mocker.MagicMock()
+    no_retry.on_exception.return_value = lambda f: f
+    mocker.patch("app.core.deduplication.backoff", no_retry)
+    dispatcher_send = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher",
+        dispatcher_send,
+    )
+
+    await process_observation_event(raw_event_v2, raw_event_v2_attributes)
+
+    assert dedup_cache.get.called
+    dispatcher_send.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_direct_call_without_event_id_does_not_touch_destination_markers(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    raw_event_v2,
+):
+    from gundi_core.events import EventReceived
+
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    dedup_cache = mocker.MagicMock()
+    mocker.patch("app.core.deduplication._cache_db", dedup_cache)
+    dispatcher_send = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher",
+        dispatcher_send,
+    )
+
+    await transform_and_route_observation(
+        observation=EventReceived.parse_obj(raw_event_v2).payload, event_id=None
+    )
+
+    dispatcher_send.assert_called_once()
+    dedup_cache.get.assert_not_called()
+    dedup_cache.setex.assert_not_called()
 
 
 @pytest.mark.asyncio

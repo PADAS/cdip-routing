@@ -60,6 +60,25 @@ def mock_deduplication_cache_one_miss(mocker):
 
 
 @pytest.fixture
+def mock_deduplication_cache_stateful(mocker):
+    """Dict-backed Redis stand-in, so keys written by one call are read back by
+    the next (e.g. a retried message)."""
+    store = {}
+
+    async def get(key):
+        return store.get(key)
+
+    async def setex(key, ttl, value):
+        store[key] = str(value)  # decode_responses=True returns strings
+
+    mock_cache = mocker.MagicMock()
+    mock_cache.store = store
+    mock_cache.get = mocker.AsyncMock(side_effect=get)
+    mock_cache.setex = mocker.AsyncMock(side_effect=setex)
+    return mock_cache
+
+
+@pytest.fixture
 def mock_cache_with_cached_connection(mocker, connection_v2):
     mock_cache = mocker.MagicMock()
     cached_data = connection_v2.json()
