@@ -8,6 +8,7 @@ from app.services.activity_logger import (
     _dedup_key,
     log_missing_default_route,
     log_portal_lookup_error,
+    log_transform_error,
 )
 
 
@@ -198,4 +199,55 @@ async def test_missing_default_route_publish_failure_is_swallowed(
         connection=connection_v2_without_default_route,
         observation_type="obv",
         gundi_ids=["9573c2b0-3fd7-4502-884b-43d5628ce7a8"],
+    )
+
+
+@pytest.mark.asyncio
+async def test_transform_error_dedup_ignores_the_error_message(
+    mocker, mock_dedup_cache, connection_v2
+):
+    """Transformer messages can embed per-observation values; keying the dedup
+    on them would publish one activity log per observation."""
+    mocker.patch.object(activity_logger, "_cache_db", mock_dedup_cache)
+    mocker.patch.object(
+        activity_logger,
+        "send_event_to_integration_events_topic",
+        return_value=async_return(None),
+    )
+    destination = connection_v2.destinations[0]
+
+    for message in ("bad value 1", "bad value 2"):
+        await log_transform_error(
+            connection=connection_v2,
+            destination=destination,
+            observation_type="ev",
+            gundi_ids=["9573c2b0-3fd7-4502-884b-43d5628ce7a8"],
+            exception=ValueError(message),
+            will_retry=False,
+        )
+
+    keys = [c.args[0] for c in mock_dedup_cache.set.call_args_list]
+    assert keys[0] == keys[1]
+    assert str(connection_v2.provider.id) in keys[0]
+
+
+@pytest.mark.asyncio
+async def test_transform_error_publish_failure_is_swallowed(
+    mocker, mock_dedup_cache, connection_v2
+):
+    mocker.patch.object(activity_logger, "_cache_db", mock_dedup_cache)
+    mocker.patch.object(
+        activity_logger,
+        "send_event_to_integration_events_topic",
+        side_effect=RuntimeError("pubsub down"),
+    )
+
+    # Must not raise.
+    await log_transform_error(
+        connection=connection_v2,
+        destination=connection_v2.destinations[0],
+        observation_type="ev",
+        gundi_ids=["9573c2b0-3fd7-4502-884b-43d5628ce7a8"],
+        exception=ValueError("boom"),
+        will_retry=False,
     )

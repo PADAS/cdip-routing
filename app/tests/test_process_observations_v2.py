@@ -279,3 +279,141 @@ async def test_text_message_without_default_route_is_discarded_and_logged(
     assert payload.data["observation_type"] == "txt"
     assert payload.data["discarded_count"] == 1
     assert payload.data["gundi_ids"] == [str(text_message_from_earthranger.gundi_id)]
+
+
+BROKEN_DESTINATION_ID = "0eecad72-1d2e-43b1-a169-c419c81fc957"
+
+
+def _two_destination_setup(
+    mocker, mock_cache, mock_gundi_client_v2, connection_v2, destination_integration_v2
+):
+    """connection_v2 with a second destination; transform_observation_v2 raises
+    a ReferenceDataError for that one and runs for real for the other."""
+    from app.core.errors import ReferenceDataError
+    from app.services.transformers import transform_observation_v2
+
+    healthy = connection_v2.destinations[0]
+    broken = healthy.copy(update={"id": BROKEN_DESTINATION_ID, "name": "Broken"})
+    connection = connection_v2.copy(update={"destinations": [broken, healthy]})
+    integrations = {
+        str(healthy.id): destination_integration_v2,
+        BROKEN_DESTINATION_ID: destination_integration_v2.copy(
+            update={"id": BROKEN_DESTINATION_ID}
+        ),
+    }
+    mock_gundi_client_v2.get_connection_details.return_value = async_return(connection)
+    mock_gundi_client_v2.get_integration_details.side_effect = (
+        lambda integration_id: async_return(integrations[str(integration_id)])
+    )
+
+    async def transform(*, observation, destination, provider, route_configuration):
+        if str(destination.id) == BROKEN_DESTINATION_ID:
+            raise ReferenceDataError("Error getting data model for SMART CA: abc")
+        return await transform_observation_v2(
+            observation=observation,
+            destination=destination,
+            provider=provider,
+            route_configuration=route_configuration,
+        )
+
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    mocker.patch(
+        "app.services.event_handlers.transform_observation_v2", side_effect=transform
+    )
+    return connection, healthy
+
+
+def _patch_activity_log(mocker):
+    activity_cache = mocker.MagicMock()
+    activity_cache.set.return_value = async_return(True)
+    mocker.patch("app.services.activity_logger._cache_db", activity_cache)
+    return mocker.patch(
+        "app.services.activity_logger.send_event_to_integration_events_topic",
+        return_value=async_return(None),
+    )
+
+
+@pytest.mark.asyncio
+async def test_event_is_retried_when_transformer_raises_reference_data_error(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    connection_v2,
+    destination_integration_v2,
+    raw_event_v2,
+    raw_event_v2_attributes,
+):
+    """A ReferenceDataError from a transformer (e.g. the SMART data model can't
+    be fetched) must reach PubSub so the message is retried, not be discarded.
+    The other destination is still delivered before the retry is signalled."""
+    from app.core.errors import ReferenceDataError
+
+    connection, healthy = _two_destination_setup(
+        mocker,
+        mock_cache,
+        mock_gundi_client_v2,
+        connection_v2,
+        destination_integration_v2,
+    )
+    dispatcher_send = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher",
+        dispatcher_send,
+    )
+    activity_publish = _patch_activity_log(mocker)
+
+    with pytest.raises(ReferenceDataError):
+        await process_observation_event(raw_event_v2, raw_event_v2_attributes)
+
+    assert [
+        str(c.kwargs["destination"].id) for c in dispatcher_send.call_args_list
+    ] == [str(healthy.id)]
+    activity_publish.assert_called_once()
+    payload = activity_publish.call_args.args[0].payload
+    assert str(payload.integration_id) == str(connection.provider.id)
+    assert payload.action_id == "transform_observation"
+    assert payload.data["reason"] == "transform_error"
+    assert payload.data["destination_id"] == BROKEN_DESTINATION_ID
+    assert payload.data["error_type"] == "ReferenceDataError"
+    assert payload.data["will_retry"] is True
+    assert payload.data["gundi_ids"] == [raw_event_v2["payload"]["gundi_id"]]
+
+
+@pytest.mark.asyncio
+async def test_event_is_discarded_and_logged_on_permanent_transformer_error(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    connection_v2,
+    raw_event_v2,
+    raw_event_v2_attributes,
+):
+    """Any other transformer error can't be fixed by a retry: the destination's
+    item is discarded, but the discard is reported in the portal."""
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    mocker.patch(
+        "app.services.event_handlers.transform_observation_v2",
+        side_effect=ValueError("bad location"),
+    )
+    dispatcher_send = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher",
+        dispatcher_send,
+    )
+    activity_publish = _patch_activity_log(mocker)
+
+    # Must not raise (raising makes PubSub retry a message that can never succeed).
+    await process_observation_event(raw_event_v2, raw_event_v2_attributes)
+
+    dispatcher_send.assert_not_called()
+    activity_publish.assert_called_once()
+    payload = activity_publish.call_args.args[0].payload
+    assert str(payload.integration_id) == str(connection_v2.provider.id)
+    assert payload.action_id == "transform_observation"
+    assert payload.data["destination_id"] == str(connection_v2.destinations[0].id)
+    assert payload.data["error_type"] == "ValueError"
+    assert payload.data["error_message"] == "bad location"
+    assert payload.data["will_retry"] is False
+    assert payload.data["discarded_count"] == 1

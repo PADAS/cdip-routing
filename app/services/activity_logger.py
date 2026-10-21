@@ -118,3 +118,64 @@ async def log_missing_default_route(
             f"activity_logger: suppressed error while logging missing default route "
             f"for provider {provider_id}: {type(e).__name__}: {e}"
         )
+
+
+TRANSFORM_ERROR_ACTION_ID = "transform_observation"
+
+
+async def log_transform_error(
+    *,
+    connection,
+    destination,
+    observation_type: str,
+    gundi_ids: List[str],
+    exception: Exception,
+    will_retry: bool,
+) -> None:
+    """Publish an ERROR activity log for observations a destination's
+    transformer failed on, deduped per provider, destination and error type.
+
+    Never raises. A Redis or PubSub problem must not affect the caller's path.
+    """
+    provider_id = str(connection.provider.id)
+    try:
+        provider = connection.provider
+        owner = provider.owner.name if provider.owner else None
+        error_type = type(exception).__name__
+        outcome = "will be retried" if will_retry else "discarded"
+        await _publish_once(
+            # The message is left out: transformer errors can embed
+            # per-observation values, which would defeat the dedup.
+            dedup_key=_dedup_key_for_signature(
+                TRANSFORM_ERROR_ACTION_ID,
+                provider_id,
+                f"{destination.id}:{error_type}:{will_retry}",
+            ),
+            payload=CustomActivityLog(
+                integration_id=provider_id,
+                action_id=TRANSFORM_ERROR_ACTION_ID,
+                title=(
+                    f"Routing failed: observations for destination "
+                    f"'{destination.name}' could not be transformed and {outcome}"
+                ),
+                level=LogLevel.ERROR,
+                data={
+                    "reason": "transform_error",
+                    "provider": provider.name,
+                    "owner": owner,
+                    "destination_id": str(destination.id),
+                    "destination_name": destination.name,
+                    "observation_type": observation_type,
+                    "error_type": error_type,
+                    "error_message": str(exception),
+                    "will_retry": will_retry,
+                    "discarded_count": 0 if will_retry else len(gundi_ids),
+                    "gundi_ids": [str(g) for g in gundi_ids],
+                },
+            ),
+        )
+    except Exception as e:
+        logger.warning(
+            f"activity_logger: suppressed error while logging transform error "
+            f"for provider {provider_id}: {type(e).__name__}: {e}"
+        )

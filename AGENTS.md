@@ -121,12 +121,14 @@ which are easy to break:
   has no null guard — so `additional.broker: null` raises `AttributeError` (an unexpected-error retry)
   rather than the documented `ReferenceDataError`. The batch path's `str(… or …)` guard exists for exactly
   that portal record.
-- A failing **transform** is dropped, never aborts the batch ("shrink the batch, never abort it"). The
-  per-item `try` wraps `transform_observation_v2` and nothing else, so anything it raises — including a
-  `ReferenceDataError` from a malformed field mapping — drops just that item. Everything else propagates and
-  retries the whole envelope: the connection and route lookups, broker validation, and the `AttributeError`
-  on `destination_integration.additional` when `get_integration` returns `None` (it swallows its own errors
-  and returns in a `finally`, so it never raises — don't grep it for a `raise`).
+- A failing **transform** is dropped, never aborts the batch ("shrink the batch, never abort it"), and the
+  drops are reported once per destination with a `transform_observation` activity log. The exception is a
+  `ReferenceDataError` from the transform: it stops that destination (nothing of it is published), the other
+  destinations still publish, and then it is re-raised so the whole envelope is retried. The per-item `try`
+  wraps `transform_observation_v2` and nothing else. Everything else propagates and retries the whole
+  envelope immediately: the connection and route lookups, broker validation, and a `None` from
+  `get_integration` (it swallows its own errors and returns in a `finally`, so it never raises — don't grep it
+  for a `raise`).
 - **Everything after the transform sits outside that try**, so the invariant above does not cover it:
   the per-item `send_message_to_gcp_pubsub_dispatcher` for non-ER results, the per-item
   `_publish_gundi_delivery` for generic-model destinations, `_publish_transformed_batch_group`, and also
@@ -144,12 +146,12 @@ which are easy to break:
 
 - `ReferenceDataError` and unexpected exceptions retry the message **only when they escape the handler** —
   raising out of it is the retry signal to GCP.
-- **Anything raised inside `transform_observation_v2` never escapes on the v2 paths.** Both call sites
-  (single-item and batch) wrap it in a bare `except Exception` and continue, so a `ReferenceDataError` from
-  a malformed route field mapping is *discarded*, not retried — bad portal config fails silently. Don't
-  build alerting or tests on the assumption that it retries.
-- Transformer errors **discard that destination's item** (v2) or dead-letter it (v1) and continue —
-  a bad transform for one destination must not block the others.
+- **A `ReferenceDataError` from `transform_observation_v2` retries, but only after every other destination
+  has been attempted** (GUNDI-5844), on both v2 paths. A broken destination never blocks the healthy ones;
+  the cost is that the retry redelivers to the healthy ones too, because nothing records per-destination
+  success. Both outcomes emit a `transform_observation` activity log for the provider (`will_retry` in its data).
+- Any other transformer error **discards that destination's item** (v2) or dead-letters it (v1) and
+  continues — a bad transform for one destination must not block the others.
 - `send_observation_to_dead_letter_topic` targets `settings.DEAD_LETTER_TOPIC`.
 
 ## Modules
