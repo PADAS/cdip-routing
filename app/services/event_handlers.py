@@ -34,7 +34,7 @@ from app.core import settings, tracing
 from app.core.deduplication import is_destination_complete, set_destination_complete
 from app.core.errors import ReferenceDataError
 from app.core.gundi import get_connection, get_route, get_integration
-from app.core.local_logging import ExtraKeys
+from app.core.local_logging import ExtraKeys, mark_logged
 from app.core.utils import Broker
 from app.core.utils import get_provider_key
 from gundi_core.events.integrations import ObservationFilterReason
@@ -255,7 +255,23 @@ async def _report_transform_error(
     span_event,
 ):
     # exc_info passed explicitly: the batch path reports after leaving the except block
-    logger.error(error_msg, exc_info=exception)
+    logger.error(
+        error_msg,
+        exc_info=exception,
+        extra={
+            ExtraKeys.AttentionNeeded: True,
+            ExtraKeys.InboundIntId: str(connection.provider.id),
+            ExtraKeys.OutboundIntId: str(destination.id),
+            ExtraKeys.StreamType: observation_type,
+            ExtraKeys.GundiVersion: "v2",
+            ExtraKeys.GundiId: (
+                str(observations[0].gundi_id)
+                if len(observations) == 1
+                else [str(o.gundi_id) for o in observations]
+            ),
+        },
+    )
+    mark_logged(exception)
     current_span.set_attribute("error", error_msg)
     if not will_retry:
         current_span.set_attribute("is_discarded", True)
@@ -390,6 +406,7 @@ async def transform_and_route_observation(observation, *, event_id=None):
     with tracing.tracer.start_as_current_span(
         "routing_service.transform_and_route_observation", kind=SpanKind.CONSUMER
     ) as current_span:
+        retry_error = None
         try:
             # ToDo: Implement a destination resolution algorithm considering all the routes and filters
             connection = await get_connection(
@@ -440,7 +457,6 @@ async def transform_and_route_observation(observation, *, event_id=None):
                 )
 
             provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
-            retry_error = None
             for destination in destinations:
                 if await _is_destination_complete(
                     event_id=event_id,
@@ -607,8 +623,6 @@ async def transform_and_route_observation(observation, *, event_id=None):
                     extra=attributes,
                 )
                 await _mark_destination_complete(event_id, destination.id)
-            if retry_error is not None:
-                raise retry_error
         except ReferenceDataError as e:
             error_msg = (
                 f"External error occurred obtaining reference data for observation: {e}"
@@ -620,10 +634,12 @@ async def transform_and_route_observation(observation, *, event_id=None):
                     ExtraKeys.DeviceId: get_source_id(observation, "v2"),
                     ExtraKeys.InboundIntId: get_data_provider_id(observation, "v2"),
                     ExtraKeys.StreamType: observation.observation_type,
+                    ExtraKeys.GundiId: str(observation.gundi_id),
                 },
             )
             current_span.set_attribute("error", error_msg)
-            raise e  # Raise the exception so the message is retried later by GCP
+            # Raise the exception so the message is retried later by GCP
+            raise mark_logged(e)
         except Exception as e:
             error_msg = (
                 f"Unexpected internal exception occurred processing observation: {e}"
@@ -635,11 +651,16 @@ async def transform_and_route_observation(observation, *, event_id=None):
                     ExtraKeys.DeviceId: get_source_id(observation, "v2"),
                     ExtraKeys.InboundIntId: get_data_provider_id(observation, "v2"),
                     ExtraKeys.StreamType: observation.observation_type,
+                    ExtraKeys.GundiId: str(observation.gundi_id),
                 },
             )
             # Unexpected internal errors
             current_span.set_attribute("error", error_msg)
-            raise e  # Raise the exception so the message is retried later by GCP
+            # Raise the exception so the message is retried later by GCP
+            raise mark_logged(e)
+        # Outside the try: it was already logged per destination.
+        if retry_error is not None:
+            raise retry_error
 
 
 async def _publish_transformed_batch_group(
@@ -689,6 +710,7 @@ async def transform_and_route_observations_batch(batch, *, event_id=None):
         current_span.set_attribute("batch_count", len(batch.observations))
         if not batch.observations:
             return
+        retry_error = None
         try:
             data_provider_id = str(batch.data_provider_id)
             # ONE connection/route lookup for the whole batch — every item
@@ -721,7 +743,6 @@ async def transform_and_route_observations_batch(batch, *, event_id=None):
             current_span.set_attribute("destinations_qty", len(destinations))
 
             provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
-            retry_error = None
             for destination in destinations:
                 if await _is_destination_complete(
                     event_id=event_id,
@@ -844,7 +865,15 @@ async def transform_and_route_observations_batch(batch, *, event_id=None):
                         # Shrink the batch, never abort it
                         logger.exception(
                             f"Error transforming observation {observation.gundi_id} in batch {batch.batch_id} "
-                            f"from {provider_str} for destination {destination_str}: {type(e).__name__}: {e}. Discarded."
+                            f"from {provider_str} for destination {destination_str}: {type(e).__name__}: {e}. Discarded.",
+                            extra={
+                                ExtraKeys.AttentionNeeded: True,
+                                ExtraKeys.InboundIntId: data_provider_id,
+                                ExtraKeys.OutboundIntId: str(destination.id),
+                                ExtraKeys.StreamType: batch.observation_type,
+                                ExtraKeys.GundiVersion: "v2",
+                                ExtraKeys.GundiId: str(observation.gundi_id),
+                            },
                         )
                         current_span.add_event(
                             name="routing_service.batch_item_discarded_on_transformer_error"
@@ -939,11 +968,6 @@ async def transform_and_route_observations_batch(batch, *, event_id=None):
                 # destination's group publishes re-publishes the earlier groups
                 # on retry.
                 await _mark_destination_complete(event_id, destination.id)
-            # Raised only after the other destinations are published, so a
-            # broken destination doesn't block them; the ones completed here
-            # are marked and skipped on the retry.
-            if retry_error is not None:
-                raise retry_error
         except ReferenceDataError as e:
             logger.exception(
                 f"External error occurred obtaining reference data for batch {batch.batch_id}: {e}",
@@ -953,7 +977,7 @@ async def transform_and_route_observations_batch(batch, *, event_id=None):
                 },
             )
             current_span.set_attribute("error", str(e))
-            raise e  # Raise so the whole envelope is retried later by GCP
+            raise mark_logged(e)  # Raise so the whole envelope is retried later by GCP
         except Exception as e:
             logger.exception(
                 f"Unexpected internal exception occurred processing batch {batch.batch_id}: {e}",
@@ -963,7 +987,13 @@ async def transform_and_route_observations_batch(batch, *, event_id=None):
                 },
             )
             current_span.set_attribute("error", str(e))
-            raise e
+            raise mark_logged(e)
+        # Raised only after the other destinations are published, so a broken
+        # destination doesn't block them; the ones completed here are marked
+        # and skipped on the retry. Outside the try: it was already logged for
+        # its destination.
+        if retry_error is not None:
+            raise retry_error
 
 
 async def handle_observations_batch_received(event: ObservationsBatchReceived):

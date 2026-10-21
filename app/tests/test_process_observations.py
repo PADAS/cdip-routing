@@ -553,3 +553,27 @@ async def test_retry_smart_transform_when_data_model_download_fails(
 
     assert getattr(mock_smart_async_client, failing_method).call_count == 3
     assert mock_send_observation_to_dead_letter_topic.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_reference_data_error_is_retried_with_a_string_error_message(
+    mocker,
+    raw_observation_position,
+    raw_observation_position_attributes,
+):
+    from app.core.errors import ReferenceDataError
+
+    mocker.patch(
+        "app.services.process_messages.update_observation_with_device_configuration",
+        side_effect=ReferenceDataError("portal down"),
+    )
+    mock_logger = mocker.patch("app.services.process_messages.logger")
+
+    with pytest.raises(ReferenceDataError):
+        await process_observation(
+            raw_observation_position, raw_observation_position_attributes
+        )
+
+    error_msg = mock_logger.exception.call_args.args[0]
+    assert isinstance(error_msg, str)
+    assert "portal down" in error_msg

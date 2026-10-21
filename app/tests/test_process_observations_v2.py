@@ -2,7 +2,7 @@ import pytest
 
 from app.conftest import async_return
 from app.services.event_handlers import transform_and_route_observation
-from app.services.process_messages import process_observation_event
+from app.services.process_messages import event_schemas, process_observation_event
 from app.core.utils import get_provider_key
 
 
@@ -554,3 +554,25 @@ async def test_event_is_discarded_and_logged_on_permanent_transformer_error(
     assert payload.data["error_message"] == "bad location"
     assert payload.data["will_retry"] is False
     assert payload.data["discarded_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_event_type_without_schema_is_discarded(
+    mocker, caplog, raw_event_v2, raw_event_v2_attributes
+):
+    """Raising here would 500 and Pub/Sub would redeliver a message that can
+    never be parsed, until it's too old."""
+    handler = mocker.AsyncMock()
+    mocker.patch.dict(
+        "app.services.process_messages.event_handlers", {"EventReceived": handler}
+    )
+    mocker.patch.dict(event_schemas)
+    del event_schemas["EventReceived"]
+
+    with caplog.at_level("WARNING"):
+        result = await process_observation_event(raw_event_v2, raw_event_v2_attributes)
+
+    assert result is None
+    handler.assert_not_called()
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]
+    assert any("Message discarded" in r.getMessage() for r in caplog.records)

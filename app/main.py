@@ -5,6 +5,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.local_logging import is_logged
 from app.services.process_messages import process_request
 
 # For running behind a proxy, we'll want to configure the root path for OpenAPI browser.
@@ -48,10 +49,19 @@ def health_check(
 async def process_cloud_event(
     request: Request,
 ):
-    body = await request.body()
-    headers = request.headers
-    print(f"Message Received.\n RAW body: {body}\n headers: {headers}")
-    return await process_request(request=request)
+    try:
+        return await process_request(request=request)
+    except Exception as e:
+        if not is_logged(e):
+            logger.exception(
+                f"Unhandled error processing message: {type(e).__name__}: {e}"
+            )
+        # Any non-2xx nacks the message so Pub/Sub redelivers it. Returning
+        # instead of raising keeps uvicorn from logging the traceback again.
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"status": "error", "reason": type(e).__name__},
+        )
 
 
 @app.exception_handler(RequestValidationError)
