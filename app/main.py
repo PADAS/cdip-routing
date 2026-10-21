@@ -49,9 +49,6 @@ def health_check(
 async def process_cloud_event(
     request: Request,
 ):
-    body = await request.body()
-    headers = request.headers
-    print(f"Message Received.\n RAW body: {body}\n headers: {headers}")
     try:
         return await process_request(request=request)
     except Exception as e:

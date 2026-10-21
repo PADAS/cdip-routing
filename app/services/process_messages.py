@@ -64,6 +64,7 @@ async def process_observation_event(raw_message, attributes):
             logger.warning(
                 f"Event Schema for '{event_type}' not found. Message discarded."
             )
+            return
         parsed_event = schema.parse_obj(raw_message)
         result = await handler(event=parsed_event)
         # Keep track of processed events for deduplication

@@ -459,7 +459,7 @@ class SMARTTransformer:
             f"(provider integration: {event.integration_id}, "
             f"destination: {self._config.id}, SMART CA: {self.ca_uuid})"
         )
-        logger.error(message)
+        # Logged once at the routing boundary, with the integration ids.
         return ReferenceDataError(message)
 
     def guess_location_timezone(
@@ -2084,6 +2084,8 @@ def is_transient_error(error: BaseException) -> bool:
     Exception,
     max_tries=3,
     giveup=lambda e: not is_transient_error(e),
+    # The caller logs the failure at ERROR with the integration ids.
+    giveup_log_level=logging.INFO,
 )
 async def transform_observation_to_destination_schema(
     *,
