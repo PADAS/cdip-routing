@@ -73,9 +73,9 @@ before any routing:
 3. **Dedup**: `message_id = payload.event_id or pubsub message_id`; if seen in Redis
    (`app/core/deduplication.py`, TTL `EVENT_PROCESSING_STATUS_TTL`) → dead-letter + discard.
 4. **Age check**: `is_too_old` against `MAX_EVENT_AGE_SECONDS` → dead-letter + discard. This is the
-   retry-limit mechanism; Pub/Sub retries the same message until it ages out. **Known bug**: the
-   implementation uses `timedelta.seconds`, which drops whole days, so a 25-hour-old message reads as one
-   hour old and is never discarded under the 24h default. `total_seconds()` is the fix.
+   retry-limit mechanism; Pub/Sub retries the same message until it ages out. The age must come from
+   `timedelta.total_seconds()`: `.seconds` drops whole days, so the check could never fire under the 24h
+   default.
 5. Branch on `attributes["gundi_version"]`:
    - **v1** → `process_observation` (legacy; `OutboundConfiguration` per device, no system-event envelope)
    - **v2** → `process_observation_event` → `event_handlers[event_type]`
