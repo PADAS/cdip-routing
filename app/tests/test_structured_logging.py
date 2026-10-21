@@ -139,3 +139,74 @@ def test_error_nobody_logged_is_logged_once_at_the_endpoint(mocker, caplog):
     errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert len(errors) == 1
     assert "RuntimeError: bad envelope" in errors[0].getMessage()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload_fixture",
+    ["event_v2_request_payload", "event_update_v2_request_payload"],
+    ids=["event", "event_update"],
+)
+async def test_missing_category_logs_one_error_entry(
+    request,
+    mocker,
+    caplog,
+    mock_cache,
+    mock_deduplication_cache_empty,
+    mock_gundi_client_v2,
+    mock_smart_async_client,
+    connection_v2_traptagger_to_smart,
+    destination_integration_v2_smart,
+    pubsub_request_headers,
+    payload_fixture,
+):
+    """A SMART destination with no category for the event type: the
+    transformer raises a ReferenceDataError and only the routing boundary logs
+    it, for both new events and event updates."""
+    payload = request.getfixturevalue(payload_fixture)
+    mock_gundi_client_v2.get_connection_details.return_value = async_return(
+        connection_v2_traptagger_to_smart
+    )
+    mock_gundi_client_v2.get_integration_details.return_value = async_return(
+        destination_integration_v2_smart
+    )
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient",
+        mocker.MagicMock(return_value=mock_smart_async_client),
+    )
+    mocker.patch(
+        "app.services.transformers.SMARTTransformerV2.resolve_category_path_for_event",
+        return_value=None,  # patching an async def yields an AsyncMock
+    )
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.deduplication._cache_db", mock_deduplication_cache_empty)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    dispatcher_send = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher",
+        dispatcher_send,
+    )
+    activity_cache = mocker.MagicMock()
+    activity_cache.set.return_value = async_return(True)
+    mocker.patch("app.services.activity_logger._cache_db", activity_cache)
+    mocker.patch(
+        "app.services.activity_logger.send_event_to_integration_events_topic",
+        return_value=async_return(None),
+    )
+
+    with caplog.at_level(logging.ERROR):
+        response = api_client.post("/", headers=pubsub_request_headers, json=payload)
+
+    assert response.status_code == 500
+    dispatcher_send.assert_not_called()
+    errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert len(errors) == 1, [r.getMessage() for r in errors]
+    entry = json.loads(_configured_json_formatter().format(errors[0]))
+    assert entry["severity"] == "ERROR"
+    assert entry["inbound_integration_id"] == str(
+        connection_v2_traptagger_to_smart.provider.id
+    )
+    assert entry["outbound_integration_id"] == str(
+        connection_v2_traptagger_to_smart.destinations[0].id
+    )
+    assert "No category found for event_type" in entry["stack_trace"]

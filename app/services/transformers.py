@@ -1313,7 +1313,7 @@ class SMARTTransformerV2(Transformer, ABC):
             event_type=event.event_type
         )
         if not category_path:
-            logger.error(f"No category found for event_type: {event.event_type}")
+            # Logged once at the routing boundary, with the integration ids.
             raise ReferenceDataError(
                 f"No category found for event_type: {event.event_type}"
             )
@@ -1482,7 +1482,7 @@ class SMARTTransformerV2(Transformer, ABC):
             event_type=event_type
         )
         if not category_path:
-            logger.error(f"No category found for event_type: {event_type}")
+            # Logged once at the routing boundary, with the integration ids.
             raise ReferenceDataError(f"No category found for event_type: {event_type}")
         attributes = await self._resolve_attributes_for_event_details(
             event_details=changes.get("event_details")
