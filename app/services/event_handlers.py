@@ -739,21 +739,23 @@ async def _deliver_batch_to_destination(
     *,
     batch,
     connection,
-    provider,
     provider_key,
     route_configuration,
     destination,
     allowed,
-    provider_str,
     current_span,
 ):
     """Deliver a batch's allowed observations to one destination.
 
     Returns the transformer's ReferenceDataError when the destination must be
-    retried (nothing of it was published), or None once its work is done.
-    Setup failures (integration lookup, unsupported broker) raise.
+    retried after its siblings are attempted; nothing of it is published on
+    that attempt. Returns None once its work is done. Setup failures (portal
+    integration lookup, unsupported broker) raise, aborting the envelope
+    before later destinations run, so it is retried whole.
     """
     data_provider_id = str(batch.data_provider_id)
+    provider = connection.provider
+    provider_str = f"'{provider.owner.name} - {provider.name}'({provider.id})"
     destination_integration = await get_integration(integration_id=destination.id)
     if destination_integration is None:
         # get_integration swallows portal errors (timeouts, 5xx) and
@@ -771,13 +773,10 @@ async def _deliver_batch_to_destination(
         f"'{destination.owner.name} - {destination.name}'({destination.id})"
     )
 
-    # Validate the broker once per destination, before any
-    # transform/publish work — same restriction the single-item
-    # path (transform_and_route_observation) and the generic-model
-    # publish path (_publish_gundi_delivery) already enforce per
-    # item. Hoisted here so a batch can't slip an unsupported
-    # broker past this check the way per-item publishing would
-    # have caught it.
+    # Validated once per destination, before any transform/publish
+    # work for it — the same restriction the single-item path
+    # (transform_and_route_observation) and the generic-model publish
+    # path (_publish_gundi_delivery) enforce per item.
     # str() + `or` guard: `additional.broker` can be present but
     # null in portal data; .strip() on None would fail the whole
     # batch before the unsupported-broker check even runs.
@@ -814,6 +813,7 @@ async def _deliver_batch_to_destination(
     # field mappings may override it per item and one ER bulk post
     # allows exactly one provider_key in its URL path.
     groups = {}
+    raw_publishes = []
     discarded, discard_error = [], None
     destination_retry_error = None
     for observation in allowed:
@@ -825,9 +825,9 @@ async def _deliver_batch_to_destination(
                 route_configuration=route_configuration,
             )
         except ReferenceDataError as e:
-            # The whole envelope will be retried, so stop this
-            # destination here: publishing its other items now would
-            # only duplicate them on redelivery.
+            # This destination will be retried, so stop it here:
+            # publishing its other items now would only duplicate them
+            # on redelivery.
             destination_retry_error = e
             break
         except Exception as e:
@@ -870,13 +870,7 @@ async def _deliver_batch_to_destination(
                 gundi_version="v2",
                 provider_key=getattr(transformed, "provider_key", provider_key),
             )
-            await send_message_to_gcp_pubsub_dispatcher(
-                message=build_gcp_pubsub_message(payload=pubsub_message_payload),
-                attributes=attributes,
-                destination=destination,
-                broker_config=broker_config,
-                ordering_key="",
-            )
+            raw_publishes.append((pubsub_message_payload, attributes))
             continue
         effective_key = getattr(transformed, "provider_key", None) or provider_key
         groups.setdefault(effective_key, []).append(
@@ -904,6 +898,14 @@ async def _deliver_batch_to_destination(
         )
         return destination_retry_error
 
+    for pubsub_message_payload, attributes in raw_publishes:
+        await send_message_to_gcp_pubsub_dispatcher(
+            message=build_gcp_pubsub_message(payload=pubsub_message_payload),
+            attributes=attributes,
+            destination=destination,
+            broker_config=broker_config,
+            ordering_key="",
+        )
     for effective_provider_key, items in groups.items():
         await _publish_transformed_batch_group(
             batch=batch,
@@ -964,7 +966,6 @@ async def transform_and_route_observations_batch(batch, *, event_id=None):
             destinations = connection.destinations
             current_span.set_attribute("destinations_qty", len(destinations))
 
-            provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
             for destination in destinations:
                 if await _is_destination_complete(
                     event_id=event_id,
@@ -983,20 +984,19 @@ async def transform_and_route_observations_batch(batch, *, event_id=None):
                     span_event="routing_service.batch_item_discarded_by_source_filter",
                     sink=filtered_events,
                 )
-                if allowed:
-                    destination_retry_error = await _deliver_batch_to_destination(
+                destination_retry_error = (
+                    await _deliver_batch_to_destination(
                         batch=batch,
                         connection=connection,
-                        provider=provider,
                         provider_key=provider_key,
                         route_configuration=route_configuration,
                         destination=destination,
                         allowed=allowed,
-                        provider_str=provider_str,
                         current_span=current_span,
                     )
-                else:
-                    destination_retry_error = None
+                    if allowed
+                    else None
+                )
                 if destination_retry_error is not None:
                     # Filtered drops are skipped too: the retry records them.
                     if retry_error is None:
@@ -1031,10 +1031,12 @@ async def transform_and_route_observations_batch(batch, *, event_id=None):
             )
             current_span.set_attribute("error", str(e))
             raise mark_logged(e)
-        # Raised only after the other destinations are published, so a broken
-        # destination doesn't block them; the ones completed here are marked
-        # and skipped on the retry. Outside the try: it was already logged for
-        # its destination.
+        # A transform ReferenceDataError is raised only after the other
+        # destinations are attempted, so it doesn't block them; the ones
+        # completed here are marked and skipped on the retry. Setup failures
+        # (portal lookup, broker) raise inside the loop instead and retry the
+        # envelope whole. Outside the try: it was already logged for its
+        # destination.
         if retry_error is not None:
             raise retry_error
 

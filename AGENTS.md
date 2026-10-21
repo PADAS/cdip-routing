@@ -130,8 +130,9 @@ which are easy to break:
   `get_integration` (it swallows its own errors and returns in a `finally`, so it never raises — don't grep it
   for a `raise`).
 - **Everything after the transform sits outside that try**, so the invariant above does not cover it:
-  the per-item `send_message_to_gcp_pubsub_dispatcher` for non-ER results, the per-item
-  `_publish_gundi_delivery` for generic-model destinations, `_publish_transformed_batch_group`, and also
+  the `send_message_to_gcp_pubsub_dispatcher` calls for non-ER results (collected during the transform loop
+  and sent after it, so a `ReferenceDataError` on a later item publishes nothing for that destination), the
+  per-item `_publish_gundi_delivery` for generic-model destinations, `_publish_transformed_batch_group`, and also
   `build_transformer_event`, `build_transformed_message_attributes` and the `TransformedERObservationItem`
   construction. A 500-item batch whose item 300 exhausts its `backoff` retries on publish aborts the whole
   batch, and redelivery re-publishes items 1–299. `build_transformer_event` is the sharpest edge: it does
@@ -147,7 +148,9 @@ which are easy to break:
 - `ReferenceDataError` and unexpected exceptions retry the message **only when they escape the handler** —
   raising out of it is the retry signal to GCP.
 - **A `ReferenceDataError` from `transform_observation_v2` retries, but only after every other destination
-  has been attempted** (GUNDI-5844), on both v2 paths. A broken destination never blocks the healthy ones,
+  has been attempted** (GUNDI-5844), on both v2 paths. A destination whose transform fails never blocks the
+  healthy ones (a setup failure — portal lookup returning `None`, unsupported broker — still raises inside
+  the loop and retries the envelope whole; GUNDI-5855 tracks changing that),
   and the retry does not redeliver to them: each destination whose work for the event is finished
   (published, permanently discarded, or dropped by a source filter) gets a Redis marker
   `processed_events.<event_id>.destinations.<destination_id>` (`app/core/deduplication.py`, TTL
@@ -155,9 +158,9 @@ which are easy to break:
   gate and the portal lookup. Keyed on the system `event_id`, never `gundi_id` (an event and its updates
   share one). Only the v2 handlers pass it; a direct call with `event_id=None` neither reads nor writes
   markers. A Redis failure reads as "not complete" (worst case a duplicate) and a failed write is logged and
-  ignored. **Batch caveat**: the marker is per destination, not per provider-key group or per item, so a
-  destination that crashes or retries after publishing some of its groups (or per-item non-ER or
-  generic-model messages) re-publishes those on retry. Both outcomes emit a `transform_observation` activity
+  ignored. **Batch caveat**: the marker is per destination, not per provider-key group or per message, so a
+  destination that crashes partway through its after-loop publishes (ER groups, deferred non-ER messages) or
+  its per-item generic-model publishes re-publishes the ones already sent on retry. Both outcomes emit a `transform_observation` activity
   log for the provider (`will_retry` in its data).
 - Any other transformer error **discards that destination's item** (v2) or dead-letters it (v1) and
   continues — a bad transform for one destination must not block the others.

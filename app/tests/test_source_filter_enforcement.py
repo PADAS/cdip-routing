@@ -13,6 +13,7 @@ import pytest
 
 from app.conftest import async_return
 from app.core import settings
+from app.core.pubsub import SYSTEM_EVENTS_PUBLISH_CHUNK as CHUNK
 from app.services.process_messages import process_observation_event
 from gundi_core.schemas import v2 as schemas_v2
 
@@ -1042,12 +1043,15 @@ async def test_the_shared_publisher_swallows_a_publish_failure_itself(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("count, chunks", [(500, [500]), (501, [500, 1])])
+@pytest.mark.parametrize(
+    "count, chunks",
+    [(CHUNK, [CHUNK]), (CHUNK + 1, [CHUNK, 1])],
+)
 async def test_routing_events_publish_in_chunks_under_the_request_cap(
     mocker, mock_pubsub, count, chunks
 ):
-    # Pub/Sub rejects a publish request over 1000 messages, so a large batch's
-    # drops must be split rather than sent in one request.
+    # A large batch's drops are split into requests of at most CHUNK messages,
+    # which keeps each under Pub/Sub's 1000-message / 10 MB request limit.
     from app.core.pubsub import send_events_to_routing_events_topic
     from gundi_core.events import ObservationFiltered, FilteredObservation
 
