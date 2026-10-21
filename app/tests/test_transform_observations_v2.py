@@ -1096,3 +1096,59 @@ async def test_transform_event_v2_resolves_from_configurable_model_during_ca_out
 
     observation = transformed.waypoint_requests[0].properties.smartAttributes.observationGroups[0].observations[0]
     assert observation.attributes == {"cmonlystate": "Injured"}
+
+
+@pytest.mark.parametrize(
+    "base_url,expected_api",
+    [
+        ("https://smart.example.org", "https://smart.example.org/server"),
+        ("https://smart.example.org/server", "https://smart.example.org/server"),
+        ("https://smart.example.org/server/", "https://smart.example.org/server/"),
+        ("https://smart.example.org:8443", "https://smart.example.org:8443/server"),
+        (
+            "https://smart.example.org:443/server",
+            "https://smart.example.org:443/server",
+        ),
+    ],
+)
+def test_smart_transformer_v2_builds_api_url_from_base_url(
+    mocker,
+    mock_smart_async_client_class,
+    destination_integration_v2_smart,
+    base_url,
+    expected_api,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    destination = destination_integration_v2_smart.copy(update={"base_url": base_url})
+    SmartEventTransformerV2(config=destination)
+    assert mock_smart_async_client_class.call_args.kwargs["api"] == expected_api
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        None,
+        "",
+        "   ",
+        "smart.example.org/server",
+        "https:///server",
+        "ftp://smart.example.org",
+    ],
+)
+def test_smart_transformer_v2_rejects_invalid_base_url(
+    mocker, mock_smart_async_client_class, destination_integration_v2_smart, base_url
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    destination = destination_integration_v2_smart.copy(update={"base_url": base_url})
+    with pytest.raises(ValueError) as excinfo:
+        SmartEventTransformerV2(config=destination)
+    message = str(excinfo.value)
+    assert "base_url" in message
+    assert str(destination.id) in message
+    assert destination.name in message
+    assert not isinstance(excinfo.value, ReferenceDataError)
+    mock_smart_async_client_class.assert_not_called()

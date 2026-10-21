@@ -1076,7 +1076,11 @@ class SMARTTransformerV2(Transformer, ABC):
 
         self._version = self.auth_config.version or "7.5"
         logger.info(f"Using SMART Integration version {self._version}")
-        url_parse = urlparse(self.config.base_url)
+        url_parse = urlparse(self.config.base_url or "")
+        if url_parse.scheme not in ("http", "https") or not url_parse.hostname:
+            raise ValueError(
+                f"Invalid base_url {self.config.base_url!r} for SMART integration '{config.name}' ({str(config.id)}): expected an absolute http(s) URL such as https://smart.example.org/server. Please fix the integration setup in the portal."
+            )
         domain = (
             f"{url_parse.hostname}:{url_parse.port}"
             if url_parse.port
@@ -1084,12 +1088,8 @@ class SMARTTransformerV2(Transformer, ABC):
         )
         path = url_parse.path or "/server"
         path = path.replace("//", "/")
-        api_url = (
-            getattr(auth_config, "endpoint", None)
-            or f"{url_parse.scheme}://{domain}{path}"
-        )
         self.smartconnect_client = AsyncSmartClient(
-            api=api_url,
+            api=f"{url_parse.scheme}://{domain}{path}",
             username=self.auth_config.login,
             password=self.auth_config.password,
             version=self._version,
