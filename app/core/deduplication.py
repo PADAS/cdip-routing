@@ -72,3 +72,55 @@ async def set_event_processing_status(event_id, status: EventProcessingStatus):
 async def is_event_processed(event_id):
     status = await get_event_processing_status(event_id)
     return status == EventProcessingStatus.PROCESSED
+
+
+def get_destination_status_key(event_id, destination_id):
+    return f"processed_events.{event_id}.destinations.{destination_id}"
+
+
+async def is_destination_complete(event_id, destination_id) -> bool:
+    @backoff.on_exception(backoff.expo, redis_exceptions.RedisError, max_time=10)
+    async def read_from_redis(key):
+        return await _cache_db.get(key)
+
+    if not event_id or not destination_id:
+        return False
+
+    key = get_destination_status_key(event_id, destination_id)
+    try:
+        value = await read_from_redis(key) or 0
+        return EventProcessingStatus(int(value)) == EventProcessingStatus.PROCESSED
+    except redis_exceptions.RedisError as e:
+        logger.warning(
+            f"RedisError while reading key '{key}' from Redis:{type(e)} \n {e}",
+        )
+    except Exception as e:
+        logger.warning(
+            f"Unknown Error while reading key '{key}' from Redis:{type(e)} \n {e}",
+        )
+    return False
+
+
+async def set_destination_complete(event_id, destination_id):
+    @backoff.on_exception(backoff.expo, redis_exceptions.RedisError, max_time=10)
+    async def write_to_redis(key, ttl, value):
+        return await _cache_db.setex(key, ttl, value)
+
+    if not event_id or not destination_id:
+        return
+
+    key = get_destination_status_key(event_id, destination_id)
+    try:
+        await write_to_redis(
+            key,
+            settings.EVENT_PROCESSING_STATUS_TTL,
+            EventProcessingStatus.PROCESSED.value,
+        )
+    except redis_exceptions.RedisError as e:
+        logger.warning(
+            f"RedisError while writing status for key '{key}' from Redis:{type(e)} \n {e}",
+        )
+    except Exception as e:
+        logger.warning(
+            f"Unknown Error while writing status for key '{key}' from Redis:{type(e)} \n {e}",
+        )

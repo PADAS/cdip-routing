@@ -31,6 +31,7 @@ from gundi_core.events.transformers import (
 )
 from opentelemetry.trace import SpanKind
 from app.core import settings, tracing
+from app.core.deduplication import is_destination_complete, set_destination_complete
 from app.core.errors import ReferenceDataError
 from app.core.gundi import get_connection, get_route, get_integration
 from app.core.local_logging import ExtraKeys
@@ -42,7 +43,7 @@ from app.core.pubsub import (
     send_events_to_routing_events_topic,
     send_message_to_gcp_pubsub_dispatcher,
 )
-from app.services.activity_logger import log_missing_default_route
+from app.services.activity_logger import log_missing_default_route, log_transform_error
 from app.services.transformers import (
     build_transformed_message_attributes,
     build_gcp_pubsub_message,
@@ -241,6 +242,56 @@ async def _discard_on_missing_default_route(
     )
 
 
+async def _report_transform_error(
+    *,
+    connection,
+    destination,
+    observations,
+    observation_type,
+    exception,
+    will_retry,
+    error_msg,
+    current_span,
+    span_event,
+):
+    # exc_info passed explicitly: the batch path reports after leaving the except block
+    logger.error(error_msg, exc_info=exception)
+    current_span.set_attribute("error", error_msg)
+    if not will_retry:
+        current_span.set_attribute("is_discarded", True)
+    current_span.add_event(name=span_event)
+    await log_transform_error(
+        connection=connection,
+        destination=destination,
+        observation_type=observation_type,
+        gundi_ids=[str(o.gundi_id) for o in observations],
+        exception=exception,
+        will_retry=will_retry,
+    )
+
+
+async def _is_destination_complete(
+    *, event_id, destination, gundi_ids, provider_id, current_span
+):
+    if not event_id or not await is_destination_complete(event_id, str(destination.id)):
+        return False
+    logger.info(
+        f"Event {event_id} already delivered to destination {destination.id}. Skipped.",
+        extra={
+            ExtraKeys.GundiId: gundi_ids[0] if len(gundi_ids) == 1 else gundi_ids,
+            ExtraKeys.InboundIntId: provider_id,
+            ExtraKeys.OutboundIntId: str(destination.id),
+        },
+    )
+    current_span.add_event(name="routing_service.destination_skipped_already_complete")
+    return True
+
+
+async def _mark_destination_complete(event_id, destination_id):
+    if event_id:
+        await set_destination_complete(event_id, str(destination_id))
+
+
 def _external_source_id_for_record(observation):
     # Only for the log line and the drop record. The v2 schemas default an
     # omitted external_source_id to the string "None"/"none", not null; an
@@ -335,7 +386,7 @@ async def _discard_filtered_observation(
         )
 
 
-async def transform_and_route_observation(observation):
+async def transform_and_route_observation(observation, *, event_id=None):
     with tracing.tracer.start_as_current_span(
         "routing_service.transform_and_route_observation", kind=SpanKind.CONSUMER
     ) as current_span:
@@ -389,7 +440,16 @@ async def transform_and_route_observation(observation):
                 )
 
             provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
+            retry_error = None
             for destination in destinations:
+                if await _is_destination_complete(
+                    event_id=event_id,
+                    destination=destination,
+                    gundi_ids=[str(observation.gundi_id)],
+                    provider_id=str(observation.data_provider_id),
+                    current_span=current_span,
+                ):
+                    continue
                 # Policy gate first: a dropped destination needs neither the
                 # portal lookup below nor a transform.
                 if rule := _dropping_source_filter(
@@ -403,6 +463,7 @@ async def transform_and_route_observation(observation):
                         span_event="routing_service.observation_discarded_by_source_filter",
                         set_discarded=True,
                     )
+                    await _mark_destination_complete(event_id, destination.id)
                     continue
                 # Get additional configuration for the destination
                 destination_integration = await get_integration(
@@ -439,6 +500,7 @@ async def transform_and_route_observation(observation):
                         provider_str=provider_str,
                         current_span=current_span,
                     )
+                    await _mark_destination_complete(event_id, destination.id)
                     continue
 
                 # Transform the observation for the destination
@@ -450,14 +512,31 @@ async def transform_and_route_observation(observation):
                         route_configuration=route_configuration,
                     )
                 except Exception as e:
-                    error_msg = f"Error transforming observation {observation.gundi_id} from {provider_str} for destination {destination_str}: {type(e).__name__}: {e}. Discarded."
-                    logger.exception(error_msg)
-                    current_span.set_attribute("error", error_msg)
-                    current_span.set_attribute("is_discarded", True)
-                    current_span.add_event(
-                        name="routing_service.observation_discarded_on_transformer_error"
+                    will_retry = isinstance(e, ReferenceDataError)
+                    outcome = "Will retry." if will_retry else "Discarded."
+                    await _report_transform_error(
+                        connection=connection,
+                        destination=destination,
+                        observations=[observation],
+                        observation_type=observation.observation_type,
+                        exception=e,
+                        will_retry=will_retry,
+                        error_msg=f"Error transforming observation {observation.gundi_id} from {provider_str} for destination {destination_str}: {type(e).__name__}: {e}. {outcome}",
+                        current_span=current_span,
+                        span_event=(
+                            "routing_service.observation_retried_on_transformer_error"
+                            if will_retry
+                            else "routing_service.observation_discarded_on_transformer_error"
+                        ),
                     )
-                    continue  # Skip this destination and try the next one
+                    # Raised only after the other destinations are attempted, so a
+                    # broken destination doesn't block them; the ones completed
+                    # here are marked and skipped on the retry.
+                    if not will_retry:
+                        await _mark_destination_complete(event_id, destination.id)
+                    elif retry_error is None:
+                        retry_error = e
+                    continue
 
                 if not transformed_observation:
                     logger.warning(
@@ -467,6 +546,7 @@ async def transform_and_route_observation(observation):
                     current_span.add_event(
                         name="routing_service.observation_discarded_by_transformer"
                     )
+                    await _mark_destination_complete(event_id, destination.id)
                     continue
 
                 logger.debug(
@@ -526,6 +606,9 @@ async def transform_and_route_observation(observation):
                     f"Observation {observation.gundi_id} transformed and sent to pubsub topic successfully.",
                     extra=attributes,
                 )
+                await _mark_destination_complete(event_id, destination.id)
+            if retry_error is not None:
+                raise retry_error
         except ReferenceDataError as e:
             error_msg = (
                 f"External error occurred obtaining reference data for observation: {e}"
@@ -598,7 +681,7 @@ async def _publish_transformed_batch_group(
     )
 
 
-async def transform_and_route_observations_batch(batch):
+async def transform_and_route_observations_batch(batch, *, event_id=None):
     with tracing.tracer.start_as_current_span(
         "routing_service.transform_and_route_observations_batch", kind=SpanKind.CONSUMER
     ) as current_span:
@@ -638,7 +721,16 @@ async def transform_and_route_observations_batch(batch):
             current_span.set_attribute("destinations_qty", len(destinations))
 
             provider_str = f"'{connection.provider.owner.name} - {connection.provider.name}'({connection.provider.id})"
+            retry_error = None
             for destination in destinations:
+                if await _is_destination_complete(
+                    event_id=event_id,
+                    destination=destination,
+                    gundi_ids=[str(o.gundi_id) for o in batch.observations],
+                    provider_id=data_provider_id,
+                    current_span=current_span,
+                ):
+                    continue
                 # Policy first, before this destination's portal lookup and
                 # broker check: a destination that drops every item must not
                 # be able to retry the envelope - and redeliver the others -
@@ -661,6 +753,7 @@ async def transform_and_route_observations_batch(batch):
                         allowed.append(observation)
                 if not allowed:
                     await send_events_to_routing_events_topic(filtered_events)
+                    await _mark_destination_complete(event_id, destination.id)
                     continue
 
                 destination_integration = await get_integration(
@@ -724,12 +817,15 @@ async def transform_and_route_observations_batch(batch):
                             current_span=current_span,
                         )
                     await send_events_to_routing_events_topic(filtered_events)
+                    await _mark_destination_complete(event_id, destination.id)
                     continue
 
                 # Transform per item; group per effective provider_key because
                 # field mappings may override it per item and one ER bulk post
                 # allows exactly one provider_key in its URL path.
                 groups = {}
+                discarded, discard_error = [], None
+                destination_retry_error = None
                 for observation in allowed:
                     try:
                         transformed = await transform_observation_v2(
@@ -738,16 +834,23 @@ async def transform_and_route_observations_batch(batch):
                             provider=provider,
                             route_configuration=route_configuration,
                         )
+                    except ReferenceDataError as e:
+                        # The whole envelope will be retried, so stop this
+                        # destination here: publishing its other items now would
+                        # only duplicate them on redelivery.
+                        destination_retry_error = e
+                        break
                     except Exception as e:
                         # Shrink the batch, never abort it
-                        error_msg = (
+                        logger.exception(
                             f"Error transforming observation {observation.gundi_id} in batch {batch.batch_id} "
                             f"from {provider_str} for destination {destination_str}: {type(e).__name__}: {e}. Discarded."
                         )
-                        logger.exception(error_msg)
                         current_span.add_event(
                             name="routing_service.batch_item_discarded_on_transformer_error"
                         )
+                        discarded.append(observation)
+                        discard_error = discard_error or e
                         continue
                     if not transformed:
                         current_span.add_event(
@@ -793,6 +896,27 @@ async def transform_and_route_observations_batch(batch):
                         )
                     )
 
+                if destination_retry_error is not None:
+                    # Filtered drops are skipped too: the retry records them.
+                    await _report_transform_error(
+                        connection=connection,
+                        destination=destination,
+                        observations=allowed,
+                        observation_type=batch.observation_type,
+                        exception=destination_retry_error,
+                        will_retry=True,
+                        error_msg=(
+                            f"Error transforming batch {batch.batch_id} from {provider_str} "
+                            f"for destination {destination_str}: "
+                            f"{type(destination_retry_error).__name__}: {destination_retry_error}. Will retry."
+                        ),
+                        current_span=current_span,
+                        span_event="routing_service.batch_retried_on_transformer_error",
+                    )
+                    if retry_error is None:
+                        retry_error = destination_retry_error
+                    continue
+
                 for effective_provider_key, items in groups.items():
                     await _publish_transformed_batch_group(
                         batch=batch,
@@ -802,6 +926,24 @@ async def transform_and_route_observations_batch(batch):
                         broker_config=broker_config,
                     )
                 await send_events_to_routing_events_topic(filtered_events)
+                if discarded:
+                    await log_transform_error(
+                        connection=connection,
+                        destination=destination,
+                        observation_type=batch.observation_type,
+                        gundi_ids=[str(o.gundi_id) for o in discarded],
+                        exception=discard_error,
+                        will_retry=False,
+                    )
+                # Per destination, not per group: a crash between this
+                # destination's group publishes re-publishes the earlier groups
+                # on retry.
+                await _mark_destination_complete(event_id, destination.id)
+            # Raised only after the other destinations are published, so a
+            # broken destination doesn't block them; the ones completed here
+            # are marked and skipped on the retry.
+            if retry_error is not None:
+                raise retry_error
         except ReferenceDataError as e:
             logger.exception(
                 f"External error occurred obtaining reference data for batch {batch.batch_id}: {e}",
@@ -829,7 +971,9 @@ async def handle_observations_batch_received(event: ObservationsBatchReceived):
         "routing_service.handle_observations_batch_received", kind=SpanKind.CONSUMER
     ) as current_span:
         current_span.set_attribute("batch_count", len(event.payload.observations))
-        await transform_and_route_observations_batch(batch=event.payload)
+        await transform_and_route_observations_batch(
+            batch=event.payload, event_id=str(event.event_id)
+        )
 
 
 async def handle_observation_received(event: ObservationReceived):
@@ -838,7 +982,9 @@ async def handle_observation_received(event: ObservationReceived):
         "routing_service.handle_observation_received", kind=SpanKind.CONSUMER
     ) as current_span:
         current_span.set_attribute("payload", repr(event.payload))
-        await transform_and_route_observation(observation=event.payload)
+        await transform_and_route_observation(
+            observation=event.payload, event_id=str(event.event_id)
+        )
 
 
 async def handle_event_received(event: EventReceived):
@@ -846,7 +992,9 @@ async def handle_event_received(event: EventReceived):
         "routing_service.handle_event_received", kind=SpanKind.CONSUMER
     ) as current_span:
         current_span.set_attribute("payload", repr(event.payload))
-        await transform_and_route_observation(observation=event.payload)
+        await transform_and_route_observation(
+            observation=event.payload, event_id=str(event.event_id)
+        )
 
 
 async def handle_event_update(event: EventUpdateReceived):
@@ -856,7 +1004,9 @@ async def handle_event_update(event: EventUpdateReceived):
         event_update = event.payload
         current_span.set_attribute("payload", repr(event.payload))
         current_span.set_attribute("changes", str(event_update.changes))
-        await transform_and_route_observation(observation=event_update)
+        await transform_and_route_observation(
+            observation=event_update, event_id=str(event.event_id)
+        )
 
 
 async def handle_attachment_received(event: AttachmentReceived):
@@ -864,7 +1014,9 @@ async def handle_attachment_received(event: AttachmentReceived):
         "routing_service.handle_attachment_received", kind=SpanKind.CONSUMER
     ) as current_span:
         current_span.set_attribute("payload", repr(event.payload))
-        await transform_and_route_observation(observation=event.payload)
+        await transform_and_route_observation(
+            observation=event.payload, event_id=str(event.event_id)
+        )
 
 
 async def handle_text_message_received(event: TextMessageReceived):
@@ -872,7 +1024,9 @@ async def handle_text_message_received(event: TextMessageReceived):
         "routing_service.handle_text_message_received", kind=SpanKind.CONSUMER
     ) as current_span:
         current_span.set_attribute("payload", repr(event.payload))
-        await transform_and_route_observation(observation=event.payload)
+        await transform_and_route_observation(
+            observation=event.payload, event_id=str(event.event_id)
+        )
 
 
 event_handlers = {
