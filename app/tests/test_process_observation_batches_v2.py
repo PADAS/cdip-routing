@@ -488,6 +488,54 @@ async def test_batch_retry_does_not_republish_to_completed_destinations(
 
 
 @pytest.mark.asyncio
+async def test_batch_retry_publishes_raw_dict_results_only_once(
+    mocker,
+    mock_cache,
+    mock_deduplication_cache_stateful,
+    mock_gundi_client_v2,
+    connection_v2,
+):
+    """A ReferenceDataError on a later item of a raw-dict (non-ER) destination
+    publishes none of its earlier items, so the retry delivers each once."""
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    mocker.patch("app.core.deduplication._cache_db", mock_deduplication_cache_stateful)
+    state = {"fails": True}
+
+    async def transform(*, observation, destination, provider, route_configuration):
+        if state["fails"] and observation.external_source_id == "device-1":
+            raise ReferenceDataError(
+                "No destination_field found in route configuration"
+            )
+        return {"tag_id": observation.external_source_id}
+
+    mocker.patch(
+        "app.services.event_handlers.transform_observation_v2", side_effect=transform
+    )
+    send_mock = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher", send_mock
+    )
+    _patch_activity_log(mocker)
+    event_dict = _make_batch_event_dict(
+        observations_count=2, data_provider_id=str(connection_v2.provider.id)
+    )
+
+    with pytest.raises(ReferenceDataError):
+        await process_observation_event(event_dict, _batch_attributes(2))
+    send_mock.assert_not_called()
+
+    state["fails"] = False
+    await process_observation_event(event_dict, _batch_attributes(2))
+
+    published = [
+        json.loads(c.kwargs["message"].decode("utf-8"))["tag_id"]
+        for c in send_mock.call_args_list
+    ]
+    assert published == ["device-0", "device-1"]
+
+
+@pytest.mark.asyncio
 async def test_batch_direct_call_without_event_id_does_not_touch_destination_markers(
     mocker,
     mock_cache,

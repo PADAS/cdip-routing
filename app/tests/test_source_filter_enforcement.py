@@ -13,6 +13,7 @@ import pytest
 
 from app.conftest import async_return
 from app.core import settings
+from app.core.pubsub import SYSTEM_EVENTS_PUBLISH_CHUNK as CHUNK
 from app.services.process_messages import process_observation_event
 from gundi_core.schemas import v2 as schemas_v2
 
@@ -821,6 +822,88 @@ async def test_an_all_dropped_batch_skips_destination_setup(
 
 
 @pytest.mark.asyncio
+async def test_a_retried_batch_destination_publishes_no_drop_records(
+    mocker,
+    enforcement_mocks,
+    mock_gundi_client_v2,
+    connection_v2,
+    route_v2,
+    destination_integration_v2,
+):
+    # The retry re-partitions the retried destination and records its drops
+    # then; recording them on this attempt too would put every drop on the
+    # trace twice.
+    from app.core.errors import ReferenceDataError
+    from app.services.transformers import transform_observation_v2
+
+    dispatcher, routing_events = enforcement_mocks
+    _enable(mocker)
+    activity_cache = mocker.MagicMock()
+    activity_cache.set.return_value = async_return(True)
+    mocker.patch("app.services.activity_logger._cache_db", activity_cache)
+    mocker.patch(
+        "app.services.activity_logger.send_event_to_integration_events_topic",
+        mocker.AsyncMock(),
+    )
+    provider_id = str(connection_v2.provider.id)
+    healthy = connection_v2.destinations[0]
+    broken_id = str(uuid.uuid4())
+    broken = healthy.copy(update={"id": broken_id, "name": "Broken"})
+    connection = connection_v2.copy(update={"destinations": [broken, healthy]})
+    integrations = {
+        str(healthy.id): destination_integration_v2,
+        broken_id: destination_integration_v2.copy(update={"id": broken_id}),
+    }
+    mock_gundi_client_v2.get_connection_details.return_value = async_return(connection)
+    mock_gundi_client_v2.get_integration_details.side_effect = (
+        lambda integration_id: async_return(integrations[str(integration_id)])
+    )
+    rule = {
+        "type": "list",
+        "mode": "blacklist",
+        "enabled": True,
+        "by_provider": {provider_id: ["device-1"]},
+    }
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        schemas_v2.Route.parse_obj(
+            {
+                **json.loads(route_v2.json()),
+                "filters": {str(healthy.id): rule, broken_id: rule},
+            }
+        )
+    )
+
+    async def transform(*, observation, destination, provider, route_configuration):
+        if str(destination.id) == broken_id:
+            raise ReferenceDataError("route configuration not ready")
+        return await transform_observation_v2(
+            observation=observation,
+            destination=destination,
+            provider=provider,
+            route_configuration=route_configuration,
+        )
+
+    mocker.patch(
+        "app.services.event_handlers.transform_observation_v2", side_effect=transform
+    )
+    attributes = {**_ATTRIBUTES, "batch": "true", "batch_count": "3"}
+
+    with pytest.raises(ReferenceDataError):
+        await process_observation_event(
+            _batch_event_dict(provider_id, ["device-0", "device-1", "device-2"]),
+            attributes,
+        )
+
+    assert dispatcher.call_count == 1
+    assert str(dispatcher.call_args[1]["destination"].id) == str(healthy.id)
+    published = [
+        [str(e.payload.destination_id) for e in c[0][0]]
+        for c in routing_events.call_args_list
+    ]
+    assert published == [[str(healthy.id)]]
+
+
+@pytest.mark.asyncio
 async def test_an_explicit_sentinel_looking_device_id_is_kept_in_the_record(
     mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
 ):
@@ -849,8 +932,8 @@ async def test_an_explicit_sentinel_looking_device_id_is_kept_in_the_record(
 async def test_a_rule_matches_a_non_canonical_destination_id_spelling(
     mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
 ):
-    # Route.filters keys are canonicalized by gundi-core; the lookup must
-    # canonicalize the destination id the same way instead of str()-ing it.
+    # Route.filters keys are canonical UUID strings; the lookup must
+    # canonicalize the destination id too.
     dispatcher, routing_events = enforcement_mocks
     _enable(mocker)
     provider_id = str(connection_v2.provider.id)
@@ -908,7 +991,7 @@ async def test_single_item_drop_marks_the_span_discarded_and_batch_drop_does_not
         )
     )
     # Every `with tracing.tracer.start_as_current_span(...) as span` in the
-    # service now yields this one MagicMock span.
+    # service yields this one MagicMock span.
     tracer = mocker.patch("app.services.event_handlers.tracing.tracer")
     span = tracer.start_as_current_span.return_value.__enter__.return_value
 
@@ -957,3 +1040,42 @@ async def test_the_shared_publisher_swallows_a_publish_failure_itself(
     await send_event_to_integration_events_topic(event)
 
     assert mock_pubsub.PublisherClient.return_value.publish.call_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "count, chunks",
+    [(CHUNK, [CHUNK]), (CHUNK + 1, [CHUNK, 1])],
+)
+async def test_routing_events_publish_in_chunks_under_the_request_cap(
+    mocker, mock_pubsub, count, chunks
+):
+    # A large batch's drops are split into requests of at most CHUNK messages,
+    # which keeps each under Pub/Sub's 1000-message / 10 MB request limit.
+    from app.core.pubsub import send_events_to_routing_events_topic
+    from gundi_core.events import ObservationFiltered, FilteredObservation
+
+    publish = mocker.AsyncMock()
+    mock_pubsub.PublisherClient.return_value.publish = publish
+    mock_pubsub.PubsubMessage.side_effect = lambda data: data
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
+    events = [
+        ObservationFiltered(
+            payload=FilteredObservation(
+                gundi_id=str(uuid.uuid4()),
+                data_provider_id=str(uuid.uuid4()),
+                destination_id=str(uuid.uuid4()),
+            )
+        )
+        for _ in range(count)
+    ]
+
+    await send_events_to_routing_events_topic(events)
+
+    assert [len(c.args[1]) for c in publish.call_args_list] == chunks
+    sent = [
+        json.loads(m.decode("utf-8"))["payload"]["gundi_id"]
+        for c in publish.call_args_list
+        for m in c.args[1]
+    ]
+    assert sent == [str(e.payload.gundi_id) for e in events]
