@@ -2,7 +2,7 @@ import sys
 import logging
 import logging.config
 from enum import Enum
-from app import settings
+from app.core import settings
 
 logging_level = settings.LOGGING_LEVEL
 
@@ -11,8 +11,11 @@ DEFAULT_LOGGING = {
     "disable_existing_loggers": False,
     "formatters": {
         "json": {
+            "()": "pythonjsonlogger.json.JsonFormatter",
             "format": "%(asctime)s %(levelname)s %(processName)s %(thread)d %(name)s %(message)s",
-            "class": "pythonjsonlogger.jsonlogger.JsonFormatter",
+            # Cloud Logging only reads the level from `severity`; Error Reporting
+            # only picks up tracebacks from `stack_trace`.
+            "rename_fields": {"levelname": "severity", "exc_info": "stack_trace"},
         },
     },
     "handlers": {
@@ -28,22 +31,16 @@ DEFAULT_LOGGING = {
             "handlers": ["console"],
             "level": logging_level,
         },
-        # Reduce flood of debug messages from following modules when in debug mode
-        "mode.timers": {
+        # uvicorn installs its own plain-text handlers before importing the app
+        "uvicorn": {
             "handlers": ["console"],
-            "level": "WARNING",
+            "level": logging_level,
+            "propagate": False,
         },
-        "aiokafka.consumer.fetcher": {
+        "uvicorn.access": {
             "handlers": ["console"],
-            "level": "INFO",
-        },
-        "aiokafka.conn": {
-            "handlers": ["console"],
-            "level": "INFO",
-        },
-        "aiokafka.consumer.group_coordinator": {
-            "handlers": ["console"],
-            "level": "INFO",
+            "level": logging_level,
+            "propagate": False,
         },
     },
 }
@@ -60,6 +57,17 @@ def init():
     logging.config.dictConfig(DEFAULT_LOGGING)
 
     is_initialized = True
+
+
+def mark_logged(exc: BaseException) -> BaseException:
+    """Flag an exception as logged with full context at a routing boundary,
+    so the request boundary nacks it without logging it again."""
+    exc.gundi_logged = True
+    return exc
+
+
+def is_logged(exc: BaseException) -> bool:
+    return getattr(exc, "gundi_logged", False)
 
 
 class ExtraKeys(str, Enum):

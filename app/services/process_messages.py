@@ -5,7 +5,7 @@ from opentelemetry.trace import SpanKind
 from gundi_core import schemas
 from app.core.deduplication import set_event_processing_status, EventProcessingStatus
 from app.core.deduplication import is_event_processed
-from app.core.local_logging import ExtraKeys
+from app.core.local_logging import ExtraKeys, mark_logged
 from app.core.utils import Broker
 from app.core.errors import ReferenceDataError
 from app.services.event_handlers import event_handlers, event_schemas
@@ -108,17 +108,17 @@ async def process_observation(raw_observation, attributes, message_id=None):
             }
             logger.info(
                 f"Received unprocessed observation: {observation_logging_extra}",
-                extra=observation_logging_extra,  # FixMe: Extra is ignored by GCP
+                extra=observation_logging_extra,
             )
         except Exception as e:
             logger.exception(
                 f"Exception occurred prior to processing observation: \n{observation_logging_extra} \n error: {e}",
-                extra={  # FixMe: Extra is ignored by GCP
+                extra={
                     ExtraKeys.AttentionNeeded: True,
                     ExtraKeys.Observation: raw_observation,
                 },
             )
-            raise e
+            raise mark_logged(e)
 
         try:
             if observation:
@@ -231,7 +231,7 @@ async def process_observation(raw_observation, attributes, message_id=None):
                 )
         except ReferenceDataError as e:
             error_msg = (
-                f"External error occurred obtaining reference data for observation: {e}",
+                f"External error occurred obtaining reference data for observation: {e}"
             )
             logger.exception(
                 error_msg,
@@ -245,7 +245,8 @@ async def process_observation(raw_observation, attributes, message_id=None):
                 },
             )
             current_span.set_attribute("error", error_msg)
-            raise e  # Raise the exception so the message is retried later by GCP
+            # Raise the exception so the message is retried later by GCP
+            raise mark_logged(e)
         except Exception as e:
             error_msg = (
                 f"Unexpected internal exception occurred processing observation: {e}"
@@ -264,7 +265,8 @@ async def process_observation(raw_observation, attributes, message_id=None):
             )
             # Unexpected internal errors
             current_span.set_attribute("error", error_msg)
-            raise e  # Raise the exception so the message is retried later by GCP
+            # Raise the exception so the message is retried later by GCP
+            raise mark_logged(e)
 
 
 def is_too_old(timestamp):

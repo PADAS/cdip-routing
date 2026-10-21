@@ -348,3 +348,27 @@ async def test_process_event_publishes_smart_event(
 
     assert mock_pubsub.PublisherClient.called
     assert mock_pubsub.PublisherClient.return_value.publish.called
+
+
+@pytest.mark.asyncio
+async def test_reference_data_error_is_retried_with_a_string_error_message(
+    mocker,
+    raw_observation_position,
+    raw_observation_position_attributes,
+):
+    from app.core.errors import ReferenceDataError
+
+    mocker.patch(
+        "app.services.process_messages.update_observation_with_device_configuration",
+        side_effect=ReferenceDataError("portal down"),
+    )
+    mock_logger = mocker.patch("app.services.process_messages.logger")
+
+    with pytest.raises(ReferenceDataError):
+        await process_observation(
+            raw_observation_position, raw_observation_position_attributes
+        )
+
+    error_msg = mock_logger.exception.call_args.args[0]
+    assert isinstance(error_msg, str)
+    assert "portal down" in error_msg
