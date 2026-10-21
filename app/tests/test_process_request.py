@@ -1,4 +1,5 @@
 import unittest.mock
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -7,6 +8,8 @@ from app.conftest import async_return
 from app.core import settings
 from app.core.deduplication import EventProcessingStatus, get_event_status_key
 from app.main import app
+from app.services import process_messages
+from app.services.process_messages import is_too_old
 from app.services.transformers import extract_fields_from_message
 
 api_client = TestClient(app)
@@ -276,3 +279,72 @@ async def test_message_v1_deduplication(
     mocked_topic = mock_pubsub.PublisherClient.return_value.topic_path
     mocked_topic.assert_called_with(settings.GCP_PROJECT_ID, settings.DEAD_LETTER_TOPIC)
     assert mocked_publish.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "age, is_discarded",
+    [(timedelta(hours=25), True), (timedelta(hours=1), False)],
+    ids=["25h-old", "1h-old"],
+)
+@pytest.mark.asyncio
+async def test_message_age_limit(
+    mocker,
+    mock_cache,
+    mock_deduplication_cache_empty,
+    mock_gundi_client_v2,
+    mock_pubsub,
+    pubsub_request_headers,
+    event_v2_request_payload,
+    destination_integration_v2,
+    age,
+    is_discarded,
+):
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.deduplication._cache_db", mock_deduplication_cache_empty)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
+    publish_time = (datetime.now(timezone.utc) - age).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    event_v2_request_payload["message"]["publish_time"] = publish_time
+    event_v2_request_payload["message"]["publishTime"] = publish_time
+    expected_topic = (
+        settings.DEAD_LETTER_TOPIC
+        if is_discarded
+        else destination_integration_v2.additional["topic"]
+    )
+
+    response = api_client.post(
+        "/",
+        headers=pubsub_request_headers,
+        json=event_v2_request_payload,
+    )
+
+    assert response.status_code == 200
+    mocked_topic = mock_pubsub.PublisherClient.return_value.topic_path
+    mocked_topic.assert_called_once_with(settings.GCP_PROJECT_ID, expected_topic)
+
+
+@pytest.mark.parametrize(
+    "timestamp_format",
+    ["%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"],
+)
+@pytest.mark.parametrize(
+    "age_seconds, expected",
+    [
+        (settings.MAX_EVENT_AGE_SECONDS + 3600, True),
+        (settings.MAX_EVENT_AGE_SECONDS + 1, True),
+        (settings.MAX_EVENT_AGE_SECONDS, False),
+        (3600, False),
+    ],
+)
+def test_is_too_old(mocker, timestamp_format, age_seconds, expected):
+    now = datetime(2026, 10, 21, 12, 0, 0, tzinfo=timezone.utc)
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
+
+    mocker.patch.object(process_messages, "datetime", FrozenDatetime)
+    timestamp = (now - timedelta(seconds=age_seconds)).strftime(timestamp_format)
+
+    assert is_too_old(timestamp=timestamp) is expected
