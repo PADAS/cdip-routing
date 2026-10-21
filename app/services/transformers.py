@@ -1,3 +1,4 @@
+import asyncio
 import functools
 import json
 import re
@@ -6,6 +7,7 @@ import logging
 import os
 
 import backoff
+import httpx
 import pytz
 import pathlib
 import uuid
@@ -29,6 +31,7 @@ from gundi_core.schemas.v2 import (
 from pydantic import BaseModel
 from smartconnect import AsyncSmartClient
 from smartconnect.choices import OptionKeyResolutionError, resolve_option_key
+from smartconnect.exceptions import SMARTClientClientError, SMARTClientException
 from gundi_core.schemas.v2.smart import (
     SMARTCONNECT_DATFORMAT,
     SMARTRequest,
@@ -408,11 +411,13 @@ class SMARTTransformer:
                     ]
                 )
             except Exception as e:
-                self._ca_config_datamodel = []
                 logger.exception(
                     f"Error getting config data model for SMART CA: {self.ca_uuid}",
                     extra={ExtraKeys.Error: e},
                 )
+                raise ReferenceDataError(
+                    f"Error getting config data model for SMART CA: {self.ca_uuid}"
+                ) from e
         return self._configurable_models
 
     async def get_ca_datamodel(self):
@@ -428,8 +433,17 @@ class SMARTTransformer:
                 )
                 raise ReferenceDataError(
                     f"Error getting data model for SMART CA: {self.ca_uuid}"
-                )
+                ) from e
         return self._ca_datamodel
+
+    def category_not_found_error(self, event) -> ReferenceDataError:
+        message = (
+            f"No category found for event_type: {event.event_type} "
+            f"(provider integration: {event.integration_id}, "
+            f"destination: {self._config.id}, SMART CA: {self.ca_uuid})"
+        )
+        logger.error(message)
+        return ReferenceDataError(message)
 
     def guess_location_timezone(
         self, *, longitude: Union[float, int] = None, latitude: Union[float, int] = None
@@ -557,10 +571,7 @@ class SMARTTransformer:
         category_path = await self.resolve_category_path_for_event(event=event)
 
         if not category_path:
-            logger.error(f"No category found for event_type: {event.event_type}")
-            raise ReferenceDataError(
-                f"No category found for event_type: {event.event_type}"
-            )
+            raise self.category_not_found_error(event)
 
         attributes = await self._resolve_attributes_for_event(event=event)
 
@@ -738,10 +749,7 @@ class SmartEventTransformer(SMARTTransformer, Transformer):
         category_path = await self.resolve_category_path_for_event(event=geoevent)
 
         if not category_path:
-            logger.error(f"No category found for event_type: {geoevent.event_type}")
-            raise ReferenceDataError(
-                f"No category found for event_type: {geoevent.event_type}"
-            )
+            raise self.category_not_found_error(geoevent)
 
         attributes = await self._resolve_attributes_for_event(event=geoevent)
 
@@ -2015,7 +2023,27 @@ def get_data_provider_id(observation, gundi_version="v1"):
     )
 
 
-@backoff.on_exception(backoff.expo, (Exception,), max_tries=3)
+def is_transient_error(error: BaseException) -> bool:
+    # SMART lookups wrap the client failure in ReferenceDataError, so look through `raise ... from`.
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        if isinstance(error, (httpx.TransportError, asyncio.TimeoutError)):
+            return True
+        if isinstance(error, SMARTClientException) and not isinstance(
+            error, SMARTClientClientError
+        ):
+            return True
+        error = error.__cause__
+    return False
+
+
+@backoff.on_exception(
+    backoff.expo,
+    Exception,
+    max_tries=3,
+    giveup=lambda e: not is_transient_error(e),
+)
 async def transform_observation_to_destination_schema(
     *,
     observation,
