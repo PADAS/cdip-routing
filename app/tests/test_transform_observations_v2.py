@@ -1,5 +1,7 @@
 import os
 from datetime import datetime
+import httpx
+import json
 import pytest
 import pytz
 from smartconnect.models import SMARTCONNECT_DATFORMAT, ConfigurableDataModel
@@ -1185,3 +1187,237 @@ def test_smart_transformer_v2_rejects_invalid_base_url(
     assert destination.name in message
     assert not isinstance(excinfo.value, ReferenceDataError)
     mock_smart_async_client_class.assert_not_called()
+
+
+# SMART client reuse (GUNDI-5846 / GUNDI-5850): one client and login session
+# per destination config instead of one per observation, closed when replaced.
+def _smart_client_factory(mocker, smart_ca_data_model, first_get_data_model=None):
+    created = []
+
+    def build(**kwargs):
+        client = mocker.MagicMock()
+        client.get_data_model = (
+            first_get_data_model
+            if first_get_data_model and not created
+            else mocker.AsyncMock(return_value=smart_ca_data_model)
+        )
+        client.close = mocker.AsyncMock()
+        created.append(client)
+        return client
+
+    client_class = mocker.MagicMock(side_effect=build)
+    client_class.created = created
+    return client_class
+
+
+def _with_auth(destination, **auth_changes):
+    destination = destination.copy(deep=True)
+    for configuration in destination.configurations:
+        if configuration.action.value == "auth":
+            configuration.data.update(auth_changes)
+    return destination
+
+
+@pytest.mark.asyncio
+async def test_smart_transforms_reuse_one_client_per_destination(
+    mocker,
+    smart_ca_data_model,
+    animals_sign_event_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    client_class = _smart_client_factory(mocker, smart_ca_data_model)
+    mocker.patch("app.services.transformers.AsyncSmartClient", client_class)
+
+    for _ in range(3):
+        transformed = await transform_observation_v2(
+            observation=animals_sign_event_v2,
+            destination=destination_integration_v2_smart,
+            provider=connection_v2.provider,
+            route_configuration=None,
+        )
+        assert transformed.waypoint_requests
+
+    assert client_class.call_count == 1
+    assert not client_class.return_value.close.called
+
+
+@pytest.mark.asyncio
+async def test_smart_client_is_replaced_and_closed_when_destination_config_changes(
+    mocker,
+    smart_ca_data_model,
+    animals_sign_event_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    client_class = _smart_client_factory(mocker, smart_ca_data_model)
+    mocker.patch("app.services.transformers.AsyncSmartClient", client_class)
+
+    await transform_observation_v2(
+        observation=animals_sign_event_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    await transform_observation_v2(
+        observation=animals_sign_event_v2,
+        destination=_with_auth(destination_integration_v2_smart, password="rotated"),
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+
+    assert client_class.call_count == 2
+    assert client_class.call_args.kwargs["password"] == "rotated"
+    old_client, new_client = client_class.created
+    old_client.close.assert_awaited_once()
+    assert not new_client.close.called
+
+
+@pytest.mark.asyncio
+async def test_smart_client_is_replaced_and_closed_after_ttl(
+    mocker,
+    smart_ca_data_model,
+    smart_client_pool,
+    animals_sign_event_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    client_class = _smart_client_factory(mocker, smart_ca_data_model)
+    mocker.patch("app.services.transformers.AsyncSmartClient", client_class)
+    clock = mocker.patch(
+        "app.services.smart_clients.time.monotonic", return_value=1000.0
+    )
+
+    await transform_observation_v2(
+        observation=animals_sign_event_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    clock.return_value = 1000.0 + smart_client_pool.ttl
+    await transform_observation_v2(
+        observation=animals_sign_event_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+
+    assert client_class.call_count == 2
+    old_client, new_client = client_class.created
+    old_client.close.assert_awaited_once()
+    assert not new_client.close.called
+
+
+@pytest.mark.asyncio
+async def test_smart_data_model_failure_is_briefly_cached(
+    mocker,
+    smart_ca_data_model,
+    smart_client_pool,
+    animals_sign_event_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    failing = mocker.AsyncMock(
+        side_effect=Exception("Failed to login to SMART Connect")
+    )
+    client_class = _smart_client_factory(
+        mocker, smart_ca_data_model, first_get_data_model=failing
+    )
+    mocker.patch("app.services.transformers.AsyncSmartClient", client_class)
+    clock = mocker.patch(
+        "app.services.smart_clients.time.monotonic", return_value=1000.0
+    )
+
+    for _ in range(5):
+        with pytest.raises(ReferenceDataError):
+            await transform_observation_v2(
+                observation=animals_sign_event_v2,
+                destination=destination_integration_v2_smart,
+                provider=connection_v2.provider,
+                route_configuration=None,
+            )
+
+    # One attempt against SMART, then fail fast; the session that failed is closed.
+    assert failing.await_count == 1
+    failed_client = client_class.created[0]
+    failed_client.close.assert_awaited_once()
+
+    # Once the failure expires, a fresh client tries again.
+    clock.return_value = 1000.0 + smart_client_pool.failure_ttl
+    transformed = await transform_observation_v2(
+        observation=animals_sign_event_v2,
+        destination=destination_integration_v2_smart,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    assert transformed.waypoint_requests
+
+
+@pytest.mark.asyncio
+async def test_smart_client_pool_is_bounded(mocker, smart_ca_data_model):
+    from app.services.smart_clients import SmartClientPool
+
+    pool = SmartClientPool(ttl=60, max_size=2, failure_ttl=30)
+    client_class = _smart_client_factory(mocker, smart_ca_data_model)
+    for destination_id in range(5):
+        client = pool.acquire(
+            client_class,
+            destination_id=destination_id,
+            api="https://smart.example.org/server",
+            username="u",
+            password="p",
+            version="7.5",
+        )
+        await pool.release(client)
+
+    clients = client_class.created
+    assert len(clients) == 5
+    assert sum(1 for c in clients if not c.close.called) == 2
+
+
+@pytest.mark.asyncio
+async def test_smart_transforms_log_in_once_per_destination(
+    mocker,
+    smart_ca_data_model,
+    animals_sign_event_v2,
+    connection_v2,
+    destination_integration_v2_smart,
+):
+    logins = []
+
+    def smart_connect(request):
+        path = request.url.path
+        if path.endswith("/connect/home"):
+            return httpx.Response(
+                200, headers={"set-cookie": "JSESSIONID=preauth; Path=/"}
+            )
+        if path.endswith("/j_security_check"):
+            logins.append(request)
+            return httpx.Response(
+                303, headers={"set-cookie": "JSESSIONID=auth; Path=/"}
+            )
+        return httpx.Response(404)
+
+    mocker.patch(
+        "smartconnect.async_client.httpx.AsyncHTTPTransport",
+        side_effect=lambda **kwargs: httpx.MockTransport(smart_connect),
+    )
+    # The data model is served from smartconnect's Redis cache, as in prod.
+    smart_cache = mocker.MagicMock()
+    smart_cache.cache.get.return_value = json.dumps(
+        smart_ca_data_model.export_as_dict()
+    )
+    mocker.patch("smartconnect.async_client.cache", smart_cache)
+
+    for _ in range(3):
+        transformed = await transform_observation_v2(
+            observation=animals_sign_event_v2,
+            destination=destination_integration_v2_smart,
+            provider=connection_v2.provider,
+            route_configuration=None,
+        )
+        assert transformed.waypoint_requests
+
+    # smartconnect-client <= 1.15 logs in even on a cache hit; >= 1.16 never
+    # needs to here. Either way, at most once per pooled session.
+    assert len(logins) <= 1

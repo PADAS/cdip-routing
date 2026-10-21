@@ -48,6 +48,13 @@ REDIS_DB = env.int("REDIS_DB", 3)
 # N-seconds to cache portal responses for configuration objects.
 PORTAL_CONFIG_OBJECT_CACHE_TTL = env.int("PORTAL_CONFIG_OBJECT_CACHE_TTL", 60)
 
+# SMART Connect clients (and their login sessions) are reused per destination
+# for this long; matches the portal config cache so config edits take effect.
+SMART_CLIENT_TTL = env.int("SMART_CLIENT_TTL", PORTAL_CONFIG_OBJECT_CACHE_TTL)
+SMART_CLIENT_POOL_MAX_SIZE = env.int("SMART_CLIENT_POOL_MAX_SIZE", 100)
+# Skip SMART data model downloads for a destination+CA that just failed.
+SMART_DATAMODEL_FAILURE_TTL = env.int("SMART_DATAMODEL_FAILURE_TTL", 30)
+
 TRACE_ENVIRONMENT = env.str("TRACE_ENVIRONMENT", "dev")
 TRACING_ENABLED = env.bool("TRACING_ENABLED", True)
 

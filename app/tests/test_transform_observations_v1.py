@@ -453,3 +453,50 @@ async def test_smart_transformer_with_er_event_publishes_smart_option_key(
     waypoint = transformed["waypoint_requests"][0]
     observation = waypoint["properties"]["smartAttributes"]["observationGroups"][0]["observations"][0]
     assert observation["attributes"]["causeofdeath"] == "natural.disease"
+
+
+@pytest.mark.asyncio
+async def test_smart_transforms_reuse_one_client_per_outbound_configuration(
+    mocker,
+    mock_smart_async_client,
+    mock_smart_async_client_class,
+    smart_outbound_configuration_gcp_pubsub,
+    raw_observation_er_event,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    event = schemas.models_by_stream_type[
+        raw_observation_er_event["observation_type"]
+    ].parse_obj(raw_observation_er_event)
+
+    for _ in range(3):
+        transformed = await transform_observation(
+            stream_type=event.observation_type,
+            config=smart_outbound_configuration_gcp_pubsub,
+            observation=event,
+        )
+        assert transformed["waypoint_requests"]
+
+    assert mock_smart_async_client_class.call_count == 1
+    assert not mock_smart_async_client.close.called
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_with_bad_rules_does_not_hold_a_client(
+    mocker,
+    mock_smart_async_client_class,
+    smart_client_pool,
+    smart_outbound_configuration_gcp_pubsub,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    config = smart_outbound_configuration_gcp_pubsub.copy(deep=True)
+    config.additional["transformation_rules"] = None
+
+    with pytest.raises(Exception):
+        SmartEventTransformer(config=config, ca_uuid=None)
+
+    assert not mock_smart_async_client_class.called
+    assert not smart_client_pool._leased
