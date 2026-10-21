@@ -843,3 +843,117 @@ async def test_an_explicit_sentinel_looking_device_id_is_kept_in_the_record(
     assert dispatcher.call_count == 0
     assert routing_events.call_count == 1
     assert routing_events.call_args[0][0].payload.external_source_id == "none"
+
+
+@pytest.mark.asyncio
+async def test_a_rule_matches_a_non_canonical_destination_id_spelling(
+    mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
+):
+    # Route.filters keys are canonicalized by gundi-core; the lookup must
+    # canonicalize the destination id the same way instead of str()-ing it.
+    dispatcher, routing_events = enforcement_mocks
+    _enable(mocker)
+    provider_id = str(connection_v2.provider.id)
+    canonical = str(connection_v2.destinations[0].id)
+    connection = connection_v2.copy(deep=True)
+    # .construct() skips validation, so the id stays a plain str in this
+    # spelling instead of being parsed back into a canonical UUID.
+    connection.destinations[0] = type(connection.destinations[0]).construct(
+        **{
+            **connection.destinations[0].__dict__,
+            "id": canonical.upper().replace("-", ""),
+        }
+    )
+    mock_gundi_client_v2.get_connection_details.return_value = async_return(connection)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, canonical, provider_id, mode="blacklist", ids=["collar-001"]
+        )
+    )
+
+    await process_observation_event(
+        _observation_event_dict(provider_id, "collar-001"), _ATTRIBUTES
+    )
+
+    assert dispatcher.call_count == 0
+    assert routing_events.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_publishing_no_routing_events_opens_no_session(mocker, mock_pubsub):
+    from app.core.pubsub import send_events_to_routing_events_topic
+
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
+    session = mocker.patch("app.core.pubsub.aiohttp.ClientSession")
+
+    await send_events_to_routing_events_topic([])
+
+    assert not session.called
+    assert not mock_pubsub.PublisherClient.called
+
+
+@pytest.mark.asyncio
+async def test_single_item_drop_marks_the_span_discarded_and_batch_drop_does_not(
+    mocker, enforcement_mocks, mock_gundi_client_v2, connection_v2, route_v2
+):
+    # The single-item span represents one observation, so a drop discards it;
+    # a batch span represents the envelope, which still delivers the rest.
+    _, routing_events = enforcement_mocks
+    _enable(mocker)
+    provider_id = str(connection_v2.provider.id)
+    destination_id = str(connection_v2.destinations[0].id)
+    mock_gundi_client_v2.get_route_details.return_value = async_return(
+        _route_with_filter(
+            route_v2, destination_id, provider_id, mode="whitelist", ids=["device-0"]
+        )
+    )
+    # Every `with tracing.tracer.start_as_current_span(...) as span` in the
+    # service now yields this one MagicMock span.
+    tracer = mocker.patch("app.services.event_handlers.tracing.tracer")
+    span = tracer.start_as_current_span.return_value.__enter__.return_value
+
+    await process_observation_event(
+        _observation_event_dict(provider_id, "collar-001"), _ATTRIBUTES
+    )
+    span.set_attribute.assert_any_call("is_discarded", True)
+
+    span.reset_mock()
+    await process_observation_event(
+        _batch_event_dict(provider_id, ["device-0", "device-1"]),
+        {**_ATTRIBUTES, "batch": "true", "batch_count": "2"},
+    )
+    assert ("is_discarded", True) not in [
+        c.args for c in span.set_attribute.call_args_list
+    ]
+    assert routing_events.call_count == 2
+    assert isinstance(routing_events.call_args_list[1][0][0], list)
+
+
+@pytest.mark.asyncio
+async def test_the_shared_publisher_swallows_a_publish_failure_itself(
+    mocker, mock_pubsub
+):
+    # The batch path publishes a destination's drops outside any try; if this
+    # ever raised, a routing-events outage would abort the batch and retry the
+    # envelope with duplicate deliveries. Callers' own guards must not be what
+    # makes this safe.
+    from app.core.pubsub import (
+        send_event_to_integration_events_topic,
+        send_events_to_routing_events_topic,
+    )
+    from gundi_core.events import ObservationFiltered, FilteredObservation
+
+    mock_pubsub.PublisherClient.return_value.publish.side_effect = Exception("boom")
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
+    event = ObservationFiltered(
+        payload=FilteredObservation(
+            gundi_id=str(uuid.uuid4()),
+            data_provider_id=str(uuid.uuid4()),
+            destination_id=str(uuid.uuid4()),
+        )
+    )
+
+    await send_events_to_routing_events_topic([event])
+    await send_event_to_integration_events_topic(event)
+
+    assert mock_pubsub.PublisherClient.return_value.publish.call_count == 2
