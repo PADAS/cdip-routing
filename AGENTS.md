@@ -162,6 +162,14 @@ which are easy to break:
 - Any other transformer error **discards that destination's item** (v2) or dead-letters it (v1) and
   continues — a bad transform for one destination must not block the others.
 - `send_observation_to_dead_letter_topic` targets `settings.DEAD_LETTER_TOPIC`.
+- **Log a failure once, where its context is.** Lower layers (transformers, helpers) raise with a
+  descriptive message and `from e` instead of logging a traceback. The handler boundaries log with
+  `inbound_integration_id`/`outbound_integration_id` in `extra` and call `mark_logged(e)`
+  (`app/core/local_logging.py`) before re-raising. `app/main.py` turns any escaping exception into a 500 (the
+  nack), logging it only if nothing marked it, so uvicorn never prints the traceback a second time.
+- Logging is configured once by `local_logging.init()`, called first thing in `app/__init__.py`. Output is
+  one JSON line per record with `severity` and `stack_trace` (Cloud Logging and Error Reporting read those
+  names), and uvicorn's loggers go through the same handler.
 
 ## Modules
 

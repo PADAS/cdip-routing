@@ -448,12 +448,8 @@ class SMARTTransformer:
                 )
             except Exception as e:
                 _drop_smart_client_on(self.smartconnect_client, e)
-                logger.exception(
-                    f"Error getting data model for SMART CA: {self.ca_uuid}",
-                    extra={ExtraKeys.Error: e},
-                )
                 raise ReferenceDataError(
-                    f"Error getting data model for SMART CA: {self.ca_uuid}"
+                    f"Error getting data model for SMART CA: {self.ca_uuid}: {type(e).__name__}: {e}"
                 ) from e
         return self._ca_datamodel
 
@@ -1204,13 +1200,9 @@ class SMARTTransformerV2(Transformer, ABC):
                 # Only cache failures that will repeat; a transient one may succeed on the retry.
                 if not is_transient_error(e):
                     smart_clients.record_failure(self.smartconnect_client, self.ca_uuid)
-                logger.exception(
-                    f"Error getting data model for SMART CA: {self.ca_uuid}",
-                    extra={ExtraKeys.Error: e},
-                )
                 raise ReferenceDataError(
-                    f"Error getting data model for SMART CA: {self.ca_uuid}"
-                )
+                    f"Error getting data model for SMART CA: {self.ca_uuid}: {type(e).__name__}: {e}"
+                ) from e
         return self._ca_datamodel
 
     def guess_location_timezone(
@@ -2032,7 +2024,6 @@ def get_ca_uuid_for_er_patrol(*, patrol: ERPatrol):
     return patrol, ca_uuid
 
 
-
 def get_ca_uuid_for_event(
     *args, event: Union[schemas.EREvent, schemas.GeoEvent, schemas.v2.Event]
 ):
@@ -2190,15 +2181,8 @@ async def transform_observation_v2(
     Transformer = transformers_map.get(stream_type, {}).get(destination_type)
 
     if not Transformer:
-        logger.error(
-            f"No transformer found for stream type '{stream_type}' & destination type '{destination_type}'",
-            extra={
-                ExtraKeys.StreamType: stream_type,
-                ExtraKeys.DestinationType: destination_type,
-            },
-        )
         raise TransformerNotFound(
-            f"No transformer found for {stream_type} dest: {destination_type}"
+            f"No transformer found for stream type '{stream_type}' & destination type '{destination_type}'"
         )
 
     # Check for extra configurations to apply
@@ -2237,14 +2221,12 @@ async def transform_observation_v2(
 
     # Apply the transformer
     transformer = Transformer(config=destination)
+    # Failures are logged once at the routing boundary; the lease must always
+    # be released so the pooled client can be closed when retired.
     try:
         return await transformer.transform(
             message=observation, rules=rules, provider=provider, gundi_version=GUNDI_V2
         )
-    except Exception as e:
-        msg = f"{Transformer.__name__} failed to transform observation {observation.gundi_id}: {type(e).__name__}:{e}"
-        logger.exception(msg)
-        raise e
     finally:
         await transformer.close()
 
