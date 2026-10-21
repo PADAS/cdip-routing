@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 import time
@@ -23,6 +24,10 @@ class SmartClientPool:
     Reusing a client keeps its logged-in session (JSESSIONID) across messages
     instead of logging in to SMART Connect for every observation, and bounds how
     many httpx clients (each with its own connection pool and SSL context) exist.
+
+    `ttl` bounds how long a pooled session is reused before a fresh login; keep it
+    below SMART Connect's session idle timeout so a pooled session isn't expired
+    server-side.
     """
 
     def __init__(self, *, ttl: int, max_size: int, failure_ttl: int):
@@ -33,6 +38,7 @@ class SmartClientPool:
         self._leased: Dict[int, _Entry] = {}
         self._retired: List[_Entry] = []
         self._failures: Dict[Tuple[tuple, str], float] = {}
+        self._closing = set()
 
     @staticmethod
     def _key(destination_id, api, username, password, version) -> tuple:
@@ -46,10 +52,11 @@ class SmartClientPool:
     ):
         key = self._key(destination_id, api, username, password, version)
         now = time.monotonic()
+        for expired in [
+            e for e in self._entries.values() if now - e.created_at >= self.ttl
+        ]:
+            self._retire(expired)
         entry = self._entries.get(key)
-        if entry and now - entry.created_at >= self.ttl:
-            self._retire(entry)
-            entry = None
         if not entry:
             for other in list(self._entries.values()):
                 if other.key[0] == key[0]:
@@ -100,7 +107,19 @@ class SmartClientPool:
 
     def _retire(self, entry: _Entry):
         self._entries.pop(entry.key, None)
-        self._retired.append(entry)
+        if entry.leases > 0:
+            self._retired.append(entry)
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No loop to close on here; the next release() closes it.
+            self._retired.append(entry)
+            return
+        task = loop.create_task(self._close(entry))
+        # The loop only holds tasks weakly; an unreferenced close could be dropped mid-way.
+        self._closing.add(task)
+        task.add_done_callback(self._closing.discard)
 
     async def _close(self, entry: _Entry):
         self._leased.pop(id(entry.client), None)

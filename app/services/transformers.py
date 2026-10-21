@@ -329,6 +329,12 @@ class SmartConnectConfigurationAdditional(BaseModel):
     version: Optional[str]
 
 
+def _drop_smart_client_on(client, error: BaseException):
+    # A failed login leaves a pre-auth JSESSIONID, after which the client never logs in again.
+    if isinstance(error, (SMARTClientException, httpx.HTTPError)):
+        smart_clients.invalidate(client)
+
+
 class SMARTTransformer:
     """
     Transform a single EarthRanger Event into an Independent Incident.
@@ -405,6 +411,7 @@ class SMARTTransformer:
                     ca_uuid=self.ca_uuid
                 )
             except Exception as ex:
+                _drop_smart_client_on(self.smartconnect_client, ex)
                 self.logger.warning(
                     f"Failed to get CA Metadata for endpoint: {config.base_url}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
                 )
@@ -423,6 +430,7 @@ class SMARTTransformer:
                     ]
                 )
             except Exception as e:
+                _drop_smart_client_on(self.smartconnect_client, e)
                 logger.exception(
                     f"Error getting config data model for SMART CA: {self.ca_uuid}",
                     extra={ExtraKeys.Error: e},
@@ -439,6 +447,7 @@ class SMARTTransformer:
                     ca_uuid=self.ca_uuid
                 )
             except Exception as e:
+                _drop_smart_client_on(self.smartconnect_client, e)
                 logger.exception(
                     f"Error getting data model for SMART CA: {self.ca_uuid}",
                     extra={ExtraKeys.Error: e},
@@ -1116,14 +1125,7 @@ class SMARTTransformerV2(Transformer, ABC):
         )
         path = url_parse.path or "/server"
         path = path.replace("//", "/")
-        self.smartconnect_client = smart_clients.acquire(
-            AsyncSmartClient,
-            destination_id=config.id,
-            api=f"{url_parse.scheme}://{domain}{path}",
-            username=self.auth_config.login,
-            password=self.auth_config.password,
-            version=self._version,
-        )
+        api = f"{url_parse.scheme}://{domain}{path}"
 
         # Let the timezone fall-back to configuration.
         try:
@@ -1139,6 +1141,16 @@ class SMARTTransformerV2(Transformer, ABC):
         self._transformation_rules = SMARTTransformationRules.parse_obj(
             transformation_rules_dict
         )
+        # Acquired last: every acquire must be paired with close(), which the
+        # caller can't reach if __init__ raises.
+        self.smartconnect_client = smart_clients.acquire(
+            AsyncSmartClient,
+            destination_id=config.id,
+            api=api,
+            username=self.auth_config.login,
+            password=self.auth_config.password,
+            version=self._version,
+        )
 
     async def close(self):
         await smart_clients.release(self.smartconnect_client)
@@ -1150,6 +1162,7 @@ class SMARTTransformerV2(Transformer, ABC):
                     ca_uuid=self.ca_uuid
                 )
             except Exception as ex:
+                _drop_smart_client_on(self.smartconnect_client, ex)
                 self.logger.warning(
                     f"Failed to get CA Metadata for endpoint: {self.config.base_url}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
                 )
@@ -1168,6 +1181,7 @@ class SMARTTransformerV2(Transformer, ABC):
                     ]
                 )
             except Exception as e:
+                _drop_smart_client_on(self.smartconnect_client, e)
                 self._ca_config_datamodel = []
                 logger.exception(
                     f"Error getting config data model for SMART CA: {self.ca_uuid}",
@@ -1186,7 +1200,10 @@ class SMARTTransformerV2(Transformer, ABC):
                     ca_uuid=self.ca_uuid
                 )
             except Exception as e:
-                smart_clients.record_failure(self.smartconnect_client, self.ca_uuid)
+                _drop_smart_client_on(self.smartconnect_client, e)
+                # Only cache failures that will repeat; a transient one may succeed on the retry.
+                if not is_transient_error(e):
+                    smart_clients.record_failure(self.smartconnect_client, self.ca_uuid)
                 logger.exception(
                     f"Error getting data model for SMART CA: {self.ca_uuid}",
                     extra={ExtraKeys.Error: e},
