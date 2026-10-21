@@ -1376,16 +1376,17 @@ async def test_smart_client_pool_is_bounded(mocker, smart_ca_data_model):
 
 
 @pytest.mark.asyncio
-async def test_smart_transforms_log_in_once_per_destination(
+async def test_smart_transforms_do_not_log_in_on_data_model_cache_hit(
     mocker,
     smart_ca_data_model,
     animals_sign_event_v2,
     connection_v2,
     destination_integration_v2_smart,
 ):
-    logins = []
+    requests, logins = [], []
 
     def smart_connect(request):
+        requests.append(request)
         path = request.url.path
         if path.endswith("/connect/home"):
             return httpx.Response(
@@ -1418,6 +1419,8 @@ async def test_smart_transforms_log_in_once_per_destination(
         )
         assert transformed.waypoint_requests
 
-    # smartconnect-client <= 1.15 logs in even on a cache hit; >= 1.16 never
-    # needs to here. Either way, at most once per pooled session.
-    assert len(logins) <= 1
+    # smartconnect-client >= 1.16 serves a cached data model without logging
+    # in (<= 1.15 logged in once per session first), and the pooled session
+    # means nothing else talks to SMART here either.
+    assert logins == []
+    assert requests == []
