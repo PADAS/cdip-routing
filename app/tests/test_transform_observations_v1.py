@@ -157,6 +157,139 @@ async def test_smart_transformer_with_er_patrol(
     assert smart_attributes.get("patrolUuid") == str(patrol.id)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "start_time",
+    [
+        "2025-11-10T17:57:36.463000Z",
+        "2025-11-10T17:57:36Z",
+        "2025-11-10T17:57:36.463000+00:00",
+        "2025-11-10T11:57:36.463000-06:00",
+    ],
+)
+async def test_smart_transformer_with_er_patrol_utc_start_time(
+    mocker,
+    mock_gundi_client,
+    mock_smart_async_client_class,
+    smart_outbound_configuration_gcp_pubsub,
+    raw_observation_er_patrol,
+    start_time,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient",
+        mock_smart_async_client_class,
+    )
+    mock_gundi_client.get_outbound_integration_list.return_value = async_return(
+        [smart_outbound_configuration_gcp_pubsub]
+    )
+    raw_observation_er_patrol["patrol_segments"][0]["time_range"][
+        "start_time"
+    ] = start_time
+    schema = schemas.models_by_stream_type[
+        raw_observation_er_patrol.get("observation_type")
+    ]
+    patrol = schema.parse_obj(raw_observation_er_patrol)
+
+    transformed_observation = await transform_observation(
+        stream_type=patrol.observation_type,
+        config=smart_outbound_configuration_gcp_pubsub,
+        observation=patrol,
+    )
+
+    patrol_leg = patrol.patrol_segments[0]
+    location_timezone = pytz.timezone(
+        _timezone_finder().timezone_at(
+            lng=patrol_leg.start_location.longitude,
+            lat=patrol_leg.start_location.latitude,
+        )
+    )
+    expected = (
+        datetime(2025, 11, 10, 17, 57, 36, tzinfo=pytz.utc)
+        .astimezone(location_timezone)
+        .replace(tzinfo=None)
+    )
+    patrol_properties = transformed_observation["patrol_requests"][0]["properties"]
+    assert (
+        datetime.fromisoformat(patrol_properties["dateTime"]).replace(microsecond=0)
+        == expected
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "time_range",
+    [{"start_time": None, "end_time": None}, {}, None],
+)
+@pytest.mark.parametrize("patrol_exists_in_smart", [False, True])
+async def test_smart_transformer_skips_er_patrol_leg_without_start_time(
+    mocker,
+    mock_gundi_client,
+    mock_smart_async_client,
+    mock_smart_async_client_class,
+    smart_outbound_configuration_gcp_pubsub,
+    raw_observation_er_patrol,
+    time_range,
+    patrol_exists_in_smart,
+    caplog,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient",
+        mock_smart_async_client_class,
+    )
+    if patrol_exists_in_smart:
+        mock_smart_async_client.get_patrol.return_value = async_return(
+            {"id": raw_observation_er_patrol["id"]}
+        )
+    mock_gundi_client.get_outbound_integration_list.return_value = async_return(
+        [smart_outbound_configuration_gcp_pubsub]
+    )
+    raw_observation_er_patrol["patrol_segments"][0]["time_range"] = time_range
+    schema = schemas.models_by_stream_type[
+        raw_observation_er_patrol.get("observation_type")
+    ]
+    patrol = schema.parse_obj(raw_observation_er_patrol)
+
+    with caplog.at_level("WARNING"):
+        transformed_observation = await transform_observation(
+            stream_type=patrol.observation_type,
+            config=smart_outbound_configuration_gcp_pubsub,
+            observation=patrol,
+        )
+
+    assert transformed_observation is None
+    assert "start time" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_skips_er_patrol_leg_without_start_location(
+    mocker,
+    mock_gundi_client,
+    mock_smart_async_client_class,
+    smart_outbound_configuration_gcp_pubsub,
+    raw_observation_er_patrol,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient",
+        mock_smart_async_client_class,
+    )
+    mock_gundi_client.get_outbound_integration_list.return_value = async_return(
+        [smart_outbound_configuration_gcp_pubsub]
+    )
+    raw_observation_er_patrol["patrol_segments"][0]["start_location"] = None
+    schema = schemas.models_by_stream_type[
+        raw_observation_er_patrol.get("observation_type")
+    ]
+    patrol = schema.parse_obj(raw_observation_er_patrol)
+
+    transformed_observation = await transform_observation(
+        stream_type=patrol.observation_type,
+        config=smart_outbound_configuration_gcp_pubsub,
+        observation=patrol,
+    )
+
+    assert transformed_observation is None
+
+
 
 def test_map_choice_value_exact_key_unchanged():
     assert map_choice_value_to_option_key(
