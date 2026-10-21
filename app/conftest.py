@@ -11,13 +11,28 @@ from pydantic.types import UUID
 from redis import exceptions as redis_exceptions
 from smartconnect import SMARTClientException
 
+from app import settings
 from app.core.deduplication import EventProcessingStatus
+from app.services.smart_clients import SmartClientPool
 
 
 def async_return(result):
     f = asyncio.Future()
     f.set_result(result)
     return f
+
+
+@pytest.fixture(autouse=True)
+def smart_client_pool(mocker):
+    # The pool is process-wide; a fresh one per test keeps SMART clients
+    # (often mocks patched in by a single test) from leaking across tests.
+    pool = SmartClientPool(
+        ttl=settings.SMART_CLIENT_TTL,
+        max_size=settings.SMART_CLIENT_POOL_MAX_SIZE,
+        failure_ttl=settings.SMART_DATAMODEL_FAILURE_TTL,
+    )
+    mocker.patch("app.services.transformers.smart_clients", pool)
+    return pool
 
 
 @pytest.fixture
@@ -141,6 +156,7 @@ def mock_smart_async_client(mocker, smart_ca_data_model, smart_cm_data_models):
     )
     mock_client.get_data_model.return_value = async_return(smart_ca_data_model)
     mock_client.post_smart_request.return_value = async_return({"status": "success"})
+    mock_client.close = mocker.AsyncMock()
     return mock_client
 
 
@@ -156,6 +172,7 @@ def mock_smart_async_client_with_server_error(
     )
     mock_client.get_data_model.return_value = async_return(smart_ca_data_model)
     mock_client.post_smart_request.return_value = async_return({"status": "success"})
+    mock_client.close = mocker.AsyncMock()
     return mock_client
 
 

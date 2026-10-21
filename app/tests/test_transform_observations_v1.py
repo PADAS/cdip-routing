@@ -2,8 +2,10 @@ import pytest
 import pytz
 from datetime import datetime
 from gundi_core import schemas
+from smartconnect.exceptions import SMARTClientServerError
 from smartconnect.models import ConfigurableDataModel
 from app.conftest import async_return
+from app.core.errors import ReferenceDataError
 from app.core.gundi import URN_GUNDI_PREFIX, URN_GUNDI_INTSRC_FORMAT
 from app.services.transformers import (
     SmartEventTransformer,
@@ -453,3 +455,121 @@ async def test_smart_transformer_with_er_event_publishes_smart_option_key(
     waypoint = transformed["waypoint_requests"][0]
     observation = waypoint["properties"]["smartAttributes"]["observationGroups"][0]["observations"][0]
     assert observation["attributes"]["causeofdeath"] == "natural.disease"
+
+
+@pytest.mark.asyncio
+async def test_smart_transforms_reuse_one_client_per_outbound_configuration(
+    mocker,
+    mock_smart_async_client,
+    mock_smart_async_client_class,
+    smart_outbound_configuration_gcp_pubsub,
+    raw_observation_er_event,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    event = schemas.models_by_stream_type[
+        raw_observation_er_event["observation_type"]
+    ].parse_obj(raw_observation_er_event)
+
+    for _ in range(3):
+        transformed = await transform_observation(
+            stream_type=event.observation_type,
+            config=smart_outbound_configuration_gcp_pubsub,
+            observation=event,
+        )
+        assert transformed["waypoint_requests"]
+
+    assert mock_smart_async_client_class.call_count == 1
+    assert not mock_smart_async_client.close.called
+
+
+@pytest.mark.asyncio
+async def test_smart_transformer_with_bad_rules_does_not_hold_a_client(
+    mocker,
+    mock_smart_async_client_class,
+    smart_client_pool,
+    smart_outbound_configuration_gcp_pubsub,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    config = smart_outbound_configuration_gcp_pubsub.copy(deep=True)
+    config.additional["transformation_rules"] = None
+
+    with pytest.raises(Exception):
+        SmartEventTransformer(config=config, ca_uuid=None)
+
+    assert not mock_smart_async_client_class.called
+    assert not smart_client_pool._leased
+
+
+@pytest.mark.asyncio
+async def test_smart_client_is_dropped_after_data_model_failure(
+    mocker,
+    mock_smart_async_client,
+    smart_outbound_configuration_gcp_pubsub,
+    raw_observation_er_event,
+):
+    poisoned = mocker.MagicMock()
+    poisoned.get_data_model = mocker.AsyncMock(
+        side_effect=SMARTClientServerError("Failed to login to SMART Connect")
+    )
+    poisoned.get_incident = mocker.AsyncMock(return_value=None)
+    poisoned.close = mocker.AsyncMock()
+    client_class = mocker.MagicMock(side_effect=[poisoned, mock_smart_async_client])
+    mocker.patch("app.services.transformers.AsyncSmartClient", client_class)
+    event = schemas.models_by_stream_type[
+        raw_observation_er_event["observation_type"]
+    ].parse_obj(raw_observation_er_event)
+
+    with pytest.raises(ReferenceDataError):
+        await transform_observation(
+            stream_type=event.observation_type,
+            config=smart_outbound_configuration_gcp_pubsub,
+            observation=event,
+        )
+    transformed = await transform_observation(
+        stream_type=event.observation_type,
+        config=smart_outbound_configuration_gcp_pubsub,
+        observation=event,
+    )
+
+    assert transformed["waypoint_requests"]
+    assert client_class.call_count == 2
+    poisoned.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("transform_fails", [False, True])
+async def test_smart_transform_releases_its_client(
+    mocker,
+    transform_fails,
+    mock_smart_async_client_class,
+    smart_client_pool,
+    smart_outbound_configuration_gcp_pubsub,
+    raw_observation_er_event,
+):
+    mocker.patch(
+        "app.services.transformers.AsyncSmartClient", mock_smart_async_client_class
+    )
+    if transform_fails:
+        mocker.patch.object(
+            SmartEventTransformer, "transform", side_effect=RuntimeError("boom")
+        )
+    event = schemas.models_by_stream_type[
+        raw_observation_er_event["observation_type"]
+    ].parse_obj(raw_observation_er_event)
+
+    try:
+        await transform_observation(
+            stream_type=event.observation_type,
+            config=smart_outbound_configuration_gcp_pubsub,
+            observation=event,
+        )
+    except RuntimeError:
+        assert transform_fails
+
+    assert mock_smart_async_client_class.call_count == 1
+    assert smart_client_pool._leased
+    assert all(entry.leases == 0 for entry in smart_client_pool._leased.values())

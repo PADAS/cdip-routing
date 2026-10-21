@@ -48,6 +48,14 @@ REDIS_DB = env.int("REDIS_DB", 3)
 # N-seconds to cache portal responses for configuration objects.
 PORTAL_CONFIG_OBJECT_CACHE_TTL = env.int("PORTAL_CONFIG_OBJECT_CACHE_TTL", 60)
 
+# N-seconds a pooled SMART Connect login session is reused before logging in
+# afresh. SMART Connect runs on Tomcat, whose default session idle timeout is
+# 30 minutes; stay below it so a reused session hasn't expired server-side.
+SMART_CLIENT_TTL = env.int("SMART_CLIENT_TTL", 25 * 60)
+SMART_CLIENT_POOL_MAX_SIZE = env.int("SMART_CLIENT_POOL_MAX_SIZE", 100)
+# Skip SMART data model downloads for a destination+CA that just failed.
+SMART_DATAMODEL_FAILURE_TTL = env.int("SMART_DATAMODEL_FAILURE_TTL", 30)
+
 TRACE_ENVIRONMENT = env.str("TRACE_ENVIRONMENT", "dev")
 TRACING_ENABLED = env.bool("TRACING_ENABLED", True)
 

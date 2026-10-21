@@ -49,6 +49,7 @@ from smartconnect.utils import guess_ca_timezone
 from app.core.gundi import GUNDI_V1, GUNDI_V2
 from app.core.local_logging import ExtraKeys
 from app.core.utils import is_uuid
+from app.services.smart_clients import smart_clients
 from app.core.errors import (
     ReferenceDataError,
     ObservationUUIDValueException,
@@ -207,6 +208,9 @@ class Transformer(ABC):
     async def transform(self, message, rules: list = None, **kwargs) -> Any:
         ...
 
+    async def close(self):
+        pass
+
 
 class ERPositionTransformer(Transformer):
     # stream_type: schemas.StreamPrefixEnum = schemas.StreamPrefixEnum.position
@@ -325,6 +329,12 @@ class SmartConnectConfigurationAdditional(BaseModel):
     version: Optional[str]
 
 
+def _drop_smart_client_on(client, error: BaseException):
+    # A failed login leaves a pre-auth JSESSIONID, after which the client never logs in again.
+    if isinstance(error, (SMARTClientException, httpx.HTTPError)):
+        smart_clients.invalidate(client)
+
+
 class SMARTTransformer:
     """
     Transform a single EarthRanger Event into an Independent Incident.
@@ -358,12 +368,6 @@ class SMARTTransformer:
         self._version = self._config.additional.get("version", "7.5")
         logger.info(f"Using SMART Integration version {self._version}")
 
-        self.smartconnect_client = AsyncSmartClient(
-            api=config.endpoint,
-            username=config.login,
-            password=config.password,
-            version=self._version,
-        )
         self._ca_datamodel = None
         self._configurable_models = None
         self.ca = None
@@ -386,6 +390,19 @@ class SMARTTransformer:
         self._transformation_rules = SMARTTransformationRules.parse_obj(
             transformation_rules_dict
         )
+        # Acquired last: every acquire must be paired with close(), which the
+        # caller can't reach if __init__ raises.
+        self.smartconnect_client = smart_clients.acquire(
+            AsyncSmartClient,
+            destination_id=config.id,
+            api=config.endpoint,
+            username=config.login,
+            password=config.password,
+            version=self._version,
+        )
+
+    async def close(self):
+        await smart_clients.release(self.smartconnect_client)
 
     async def get_ca(self, config):
         if not self.ca:
@@ -394,6 +411,7 @@ class SMARTTransformer:
                     ca_uuid=self.ca_uuid
                 )
             except Exception as ex:
+                _drop_smart_client_on(self.smartconnect_client, ex)
                 self.logger.warning(
                     f"Failed to get CA Metadata for endpoint: {config.base_url}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
                 )
@@ -412,6 +430,7 @@ class SMARTTransformer:
                     ]
                 )
             except Exception as e:
+                _drop_smart_client_on(self.smartconnect_client, e)
                 logger.exception(
                     f"Error getting config data model for SMART CA: {self.ca_uuid}",
                     extra={ExtraKeys.Error: e},
@@ -428,6 +447,7 @@ class SMARTTransformer:
                     ca_uuid=self.ca_uuid
                 )
             except Exception as e:
+                _drop_smart_client_on(self.smartconnect_client, e)
                 logger.exception(
                     f"Error getting data model for SMART CA: {self.ca_uuid}",
                     extra={ExtraKeys.Error: e},
@@ -1105,12 +1125,7 @@ class SMARTTransformerV2(Transformer, ABC):
         )
         path = url_parse.path or "/server"
         path = path.replace("//", "/")
-        self.smartconnect_client = AsyncSmartClient(
-            api=f"{url_parse.scheme}://{domain}{path}",
-            username=self.auth_config.login,
-            password=self.auth_config.password,
-            version=self._version,
-        )
+        api = f"{url_parse.scheme}://{domain}{path}"
 
         # Let the timezone fall-back to configuration.
         try:
@@ -1126,6 +1141,19 @@ class SMARTTransformerV2(Transformer, ABC):
         self._transformation_rules = SMARTTransformationRules.parse_obj(
             transformation_rules_dict
         )
+        # Acquired last: every acquire must be paired with close(), which the
+        # caller can't reach if __init__ raises.
+        self.smartconnect_client = smart_clients.acquire(
+            AsyncSmartClient,
+            destination_id=config.id,
+            api=api,
+            username=self.auth_config.login,
+            password=self.auth_config.password,
+            version=self._version,
+        )
+
+    async def close(self):
+        await smart_clients.release(self.smartconnect_client)
 
     async def get_ca(self, config):
         if not self.ca:
@@ -1134,6 +1162,7 @@ class SMARTTransformerV2(Transformer, ABC):
                     ca_uuid=self.ca_uuid
                 )
             except Exception as ex:
+                _drop_smart_client_on(self.smartconnect_client, ex)
                 self.logger.warning(
                     f"Failed to get CA Metadata for endpoint: {self.config.base_url}, username: {config.login}, CA-UUID: {self.ca_uuid}. Exception: {ex}."
                 )
@@ -1152,6 +1181,7 @@ class SMARTTransformerV2(Transformer, ABC):
                     ]
                 )
             except Exception as e:
+                _drop_smart_client_on(self.smartconnect_client, e)
                 self._ca_config_datamodel = []
                 logger.exception(
                     f"Error getting config data model for SMART CA: {self.ca_uuid}",
@@ -1161,11 +1191,19 @@ class SMARTTransformerV2(Transformer, ABC):
 
     async def get_ca_datamodel(self):
         if not self._ca_datamodel:
+            if smart_clients.recent_failure(self.smartconnect_client, self.ca_uuid):
+                raise ReferenceDataError(
+                    f"Error getting data model for SMART CA: {self.ca_uuid} (failed within the last {smart_clients.failure_ttl}s; not retrying yet)"
+                )
             try:
                 self._ca_datamodel = await self.smartconnect_client.get_data_model(
                     ca_uuid=self.ca_uuid
                 )
             except Exception as e:
+                _drop_smart_client_on(self.smartconnect_client, e)
+                # Only cache failures that will repeat; a transient one may succeed on the retry.
+                if not is_transient_error(e):
+                    smart_clients.record_failure(self.smartconnect_client, self.ca_uuid)
                 logger.exception(
                     f"Error getting data model for SMART CA: {self.ca_uuid}",
                     extra={ExtraKeys.Error: e},
@@ -1948,7 +1986,10 @@ async def transform_observation(
         observation, ca_uuid = get_ca_uuid_for_er_patrol(patrol=observation)
         transformer = SmartERPatrolTransformer(config=config, ca_uuid=ca_uuid)
     if transformer:
-        return await transformer.transform(observation, **additional_info)
+        try:
+            return await transformer.transform(observation, **additional_info)
+        finally:
+            await transformer.close()
     else:
         logger.error(
             "No transformer found for stream type",
@@ -2204,6 +2245,8 @@ async def transform_observation_v2(
         msg = f"{Transformer.__name__} failed to transform observation {observation.gundi_id}: {type(e).__name__}:{e}"
         logger.exception(msg)
         raise e
+    finally:
+        await transformer.close()
 
 
 # Map to get the right transformer for the observation type and destination
