@@ -164,8 +164,19 @@ async def process_observation(raw_observation, attributes, message_id=None):
                             )
                         )
                     except Exception as e:
-                        error_msg = f"Error transforming observation. Sending to dead-letter. {type(e)}: {e}"
-                        logger.exception(error_msg)
+                        error_msg = (
+                            f"Error transforming observation from provider integration {observation.integration_id} "
+                            f"({destination.inbound_type_slug}) for destination {destination.id} "
+                            f"({destination.type_slug}). Sending to dead-letter. {type(e)}: {e}"
+                        )
+                        logger.exception(
+                            error_msg,
+                            extra={
+                                **observation_logging_extra,
+                                ExtraKeys.OutboundIntId: str(destination.id),
+                                ExtraKeys.DeadLetter: True,
+                            },
+                        )
                         await send_observation_to_dead_letter_topic(
                             raw_observation, attributes
                         )

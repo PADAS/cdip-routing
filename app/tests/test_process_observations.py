@@ -1,4 +1,11 @@
+import httpx
 import pytest
+from smartconnect.exceptions import (
+    SMARTClientException,
+    SMARTClientServerError,
+    SMARTClientUnauthorizedError,
+)
+
 from app.conftest import async_return
 from app.services.process_messages import process_observation
 
@@ -348,3 +355,201 @@ async def test_process_event_publishes_smart_event(
 
     assert mock_pubsub.PublisherClient.called
     assert mock_pubsub.PublisherClient.return_value.publish.called
+
+
+def _route_to_smart_destination(
+    mocker,
+    mock_cache,
+    mock_gundi_client,
+    mock_smart_client_class,
+    mock_send_observation_to_dead_letter_topic,
+    smart_destination,
+):
+    mock_gundi_client.get_outbound_integration.return_value = async_return(
+        smart_destination
+    )
+    mock_gundi_client.get_outbound_integration_list.return_value = async_return(
+        [smart_destination]
+    )
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi._portal", mock_gundi_client)
+    mocker.patch("app.services.transformers.AsyncSmartClient", mock_smart_client_class)
+    mocker.patch(
+        "app.services.process_messages.send_observation_to_dead_letter_topic",
+        mock_send_observation_to_dead_letter_topic,
+    )
+
+
+_smart_request = httpx.Request("GET", "https://fakesmartconnectsite.org/server")
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        SMARTClientException("Failed to get Conservation Areas"),
+        SMARTClientServerError("Failed to login to SMART Connect. Status code: 503"),
+        httpx.ConnectTimeout("timed out", request=_smart_request),
+        httpx.ConnectError("connection refused", request=_smart_request),
+    ],
+    ids=lambda e: type(e).__name__,
+)
+@pytest.mark.asyncio
+async def test_retry_smart_transform_on_transient_error_then_dead_letter(
+    mocker,
+    mock_cache,
+    mock_gundi_client,
+    mock_smart_async_client,
+    mock_smart_async_client_class,
+    mock_send_observation_to_dead_letter_topic,
+    raw_observation_geoevent_with_valid_uuid,
+    raw_observation_geoevent_attributes,
+    smart_outbound_configuration_gcp_pubsub,
+    error,
+):
+    mock_smart_async_client.get_incident.side_effect = error
+    _route_to_smart_destination(
+        mocker,
+        mock_cache,
+        mock_gundi_client,
+        mock_smart_async_client_class,
+        mock_send_observation_to_dead_letter_topic,
+        smart_outbound_configuration_gcp_pubsub,
+    )
+
+    await process_observation(
+        raw_observation_geoevent_with_valid_uuid, raw_observation_geoevent_attributes
+    )
+
+    assert mock_smart_async_client.get_incident.call_count == 3
+    assert mock_send_observation_to_dead_letter_topic.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        SMARTClientUnauthorizedError("Failed to login. Status code: 401"),
+        ValueError("Invalid isoformat string: 'not-a-date'"),
+        TypeError("'NoneType' object is not subscriptable"),
+    ],
+    ids=lambda e: type(e).__name__,
+)
+@pytest.mark.asyncio
+async def test_smart_transform_permanent_error_goes_to_dead_letter_without_retry(
+    mocker,
+    mock_cache,
+    mock_gundi_client,
+    mock_smart_async_client,
+    mock_smart_async_client_class,
+    mock_send_observation_to_dead_letter_topic,
+    raw_observation_geoevent_with_valid_uuid,
+    raw_observation_geoevent_attributes,
+    smart_outbound_configuration_gcp_pubsub,
+    error,
+):
+    mock_smart_async_client.get_incident.side_effect = error
+    _route_to_smart_destination(
+        mocker,
+        mock_cache,
+        mock_gundi_client,
+        mock_smart_async_client_class,
+        mock_send_observation_to_dead_letter_topic,
+        smart_outbound_configuration_gcp_pubsub,
+    )
+
+    await process_observation(
+        raw_observation_geoevent_with_valid_uuid, raw_observation_geoevent_attributes
+    )
+
+    assert mock_smart_async_client.get_incident.call_count == 1
+    assert mock_send_observation_to_dead_letter_topic.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_smart_event_type_without_category_goes_to_dead_letter_without_retry(
+    mocker,
+    caplog,
+    mock_cache,
+    mock_gundi_client,
+    mock_pubsub,
+    mock_smart_async_client,
+    mock_smart_async_client_class,
+    mock_send_observation_to_dead_letter_topic,
+    raw_observation_geoevent_with_valid_uuid,
+    raw_observation_geoevent_attributes,
+    smart_outbound_configuration_gcp_pubsub,
+):
+    raw_observation_geoevent_with_valid_uuid["event_type"] = "cameratrap_rep"
+    _route_to_smart_destination(
+        mocker,
+        mock_cache,
+        mock_gundi_client,
+        mock_smart_async_client_class,
+        mock_send_observation_to_dead_letter_topic,
+        smart_outbound_configuration_gcp_pubsub,
+    )
+    mocker.patch("app.core.pubsub.pubsub", mock_pubsub)
+
+    with caplog.at_level("ERROR"):
+        await process_observation(
+            raw_observation_geoevent_with_valid_uuid,
+            raw_observation_geoevent_attributes,
+        )
+
+    assert mock_smart_async_client.get_incident.call_count == 1
+    assert mock_send_observation_to_dead_letter_topic.call_count == 1
+    assert not mock_pubsub.PublisherClient.return_value.publish.called
+    dead_letter_logs = [
+        r.getMessage() for r in caplog.records if "dead-letter" in r.getMessage()
+    ]
+    assert len(dead_letter_logs) == 1
+    for expected in (
+        "No category found for event_type: cameratrap_rep",
+        raw_observation_geoevent_with_valid_uuid["integration_id"],
+        str(smart_outbound_configuration_gcp_pubsub.id),
+    ):
+        assert expected in dead_letter_logs[0]
+
+
+@pytest.mark.parametrize(
+    "failing_method",
+    ["get_data_model", "get_configurable_data_model"],
+)
+@pytest.mark.asyncio
+async def test_retry_smart_transform_when_data_model_download_fails(
+    mocker,
+    mock_cache,
+    mock_gundi_client,
+    mock_smart_async_client,
+    mock_smart_async_client_class,
+    mock_send_observation_to_dead_letter_topic,
+    raw_observation_geoevent_with_valid_uuid,
+    raw_observation_geoevent_attributes,
+    smart_outbound_configuration_gcp_pubsub,
+    failing_method,
+):
+    # an unknown category makes the transformer consult the configurable models too
+    raw_observation_geoevent_with_valid_uuid["event_type"] = "cameratrap_rep"
+    smart_outbound_configuration_gcp_pubsub.additional[
+        "configurable_models_enabled"
+    ] = ["b0ec1e4a-08bb-4d4d-9a3e-7dbf0e4d4b0c"]
+    mock_smart_async_client.get_configurable_data_model.return_value = async_return(
+        None
+    )
+    getattr(mock_smart_async_client, failing_method).side_effect = SMARTClientException(
+        "Failed downloading SMART Datamodel"
+    )
+    _route_to_smart_destination(
+        mocker,
+        mock_cache,
+        mock_gundi_client,
+        mock_smart_async_client_class,
+        mock_send_observation_to_dead_letter_topic,
+        smart_outbound_configuration_gcp_pubsub,
+    )
+
+    await process_observation(
+        raw_observation_geoevent_with_valid_uuid, raw_observation_geoevent_attributes
+    )
+
+    assert getattr(mock_smart_async_client, failing_method).call_count == 3
+    assert mock_send_observation_to_dead_letter_topic.call_count == 1
