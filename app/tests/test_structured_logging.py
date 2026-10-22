@@ -163,8 +163,9 @@ async def test_missing_category_logs_one_error_entry(
     payload_fixture,
 ):
     """A SMART destination with no category for the event type: the
-    transformer raises a ReferenceDataError and only the routing boundary logs
-    it, for both new events and event updates."""
+    transformer raises a ReferenceDataError that no redelivery can fix, so the
+    item is discarded (acked) and only the routing boundary logs it, for both
+    new events and event updates."""
     payload = request.getfixturevalue(payload_fixture)
     mock_gundi_client_v2.get_connection_details.return_value = async_return(
         connection_v2_traptagger_to_smart
@@ -199,7 +200,7 @@ async def test_missing_category_logs_one_error_entry(
     with caplog.at_level(logging.ERROR):
         response = api_client.post("/", headers=pubsub_request_headers, json=payload)
 
-    assert response.status_code == 500
+    assert response.status_code == 200
     dispatcher_send.assert_not_called()
     errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert len(errors) == 1, [r.getMessage() for r in errors]
