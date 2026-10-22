@@ -9,6 +9,7 @@ import copy
 import json
 import uuid
 
+import httpx
 import pytest
 
 from app.conftest import async_return
@@ -62,6 +63,13 @@ def _patch_activity_log(mocker):
         "app.services.activity_logger.send_event_to_integration_events_topic",
         return_value=async_return(None),
     )
+
+
+def _transient_reference_data_error():
+    # The retry case: a ReferenceDataError wrapping a network failure.
+    error = ReferenceDataError("Error getting data model for SMART CA: abc")
+    error.__cause__ = httpx.ConnectError("connection refused")
+    return error
 
 
 def _decode_published_payload(send_mock, call_index=0):
@@ -354,9 +362,7 @@ async def test_batch_is_retried_when_transformer_raises_reference_data_error(
 
     async def transform(*, observation, destination, provider, route_configuration):
         if str(destination.id) == broken_id:
-            raise ReferenceDataError(
-                "No destination_field found in route configuration"
-            )
+            raise _transient_reference_data_error()
         return await transform_observation_v2(
             observation=observation,
             destination=destination,
@@ -397,6 +403,59 @@ async def test_batch_is_retried_when_transformer_raises_reference_data_error(
 
 
 @pytest.mark.asyncio
+async def test_batch_discards_item_on_permanent_reference_data_error(
+    mocker,
+    mock_cache,
+    mock_gundi_client_v2,
+    destination_integration_v2,
+    connection_v2,
+):
+    """A ReferenceDataError that wraps no transient failure (no SMART category
+    for the event type) is a permanent transform error: the item is dropped and
+    reported, the rest of the batch publishes, and nothing is retried."""
+    from gundi_core.schemas.v2 import ERObservation
+
+    mocker.patch("app.core.gundi._cache_db", mock_cache)
+    mocker.patch("app.core.gundi.portal_v2", mock_gundi_client_v2)
+    send_mock = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher", send_mock
+    )
+    ok_obs = ERObservation(
+        manufacturer_id="device-ok",
+        recorded_at="2026-07-22 11:51:05+00:00",
+        location={"lon": -72.7, "lat": -51.6},
+    )
+    mocker.patch(
+        "app.services.event_handlers.transform_observation_v2",
+        side_effect=[
+            ok_obs,
+            ReferenceDataError("No category found for event_type: gfwgladalert"),
+            ok_obs,
+        ],
+    )
+    activity_publish = _patch_activity_log(mocker)
+    event_dict = _make_batch_event_dict(
+        observations_count=3, data_provider_id=str(connection_v2.provider.id)
+    )
+
+    await process_observation_event(event_dict, _batch_attributes(3))
+
+    assert send_mock.call_count == 1
+    payload, _ = _decode_published_payload(send_mock)
+    assert len(payload["payload"]["items"]) == 2
+    activity_publish.assert_called_once()
+    log = activity_publish.call_args.args[0].payload
+    assert log.data["destination_id"] == str(connection_v2.destinations[0].id)
+    assert log.data["error_type"] == "ReferenceDataError"
+    assert log.data["will_retry"] is False
+    assert log.data["discarded_count"] == 1
+    assert log.data["gundi_ids"] == [
+        event_dict["payload"]["observations"][1]["gundi_id"]
+    ]
+
+
+@pytest.mark.asyncio
 async def test_batch_retry_does_not_republish_to_completed_destinations(
     mocker,
     mock_cache,
@@ -430,9 +489,7 @@ async def test_batch_retry_does_not_republish_to_completed_destinations(
 
     async def transform(*, observation, destination, provider, route_configuration):
         if str(destination.id) == broken_id and broken_state["fails"]:
-            raise ReferenceDataError(
-                "No destination_field found in route configuration"
-            )
+            raise _transient_reference_data_error()
         return await transform_observation_v2(
             observation=observation,
             destination=destination,
@@ -504,9 +561,7 @@ async def test_batch_retry_publishes_raw_dict_results_only_once(
 
     async def transform(*, observation, destination, provider, route_configuration):
         if state["fails"] and observation.external_source_id == "device-1":
-            raise ReferenceDataError(
-                "No destination_field found in route configuration"
-            )
+            raise _transient_reference_data_error()
         return {"tag_id": observation.external_source_id}
 
     mocker.patch(

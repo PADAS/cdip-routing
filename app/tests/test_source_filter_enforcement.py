@@ -9,6 +9,7 @@ import json
 import logging
 import uuid
 
+import httpx
 import pytest
 
 from app.conftest import async_return
@@ -875,7 +876,10 @@ async def test_a_retried_batch_destination_publishes_no_drop_records(
 
     async def transform(*, observation, destination, provider, route_configuration):
         if str(destination.id) == broken_id:
-            raise ReferenceDataError("route configuration not ready")
+            # the retry case: a ReferenceDataError wrapping a network failure
+            error = ReferenceDataError("Error getting data model for SMART CA: abc")
+            error.__cause__ = httpx.ConnectError("connection refused")
+            raise error
         return await transform_observation_v2(
             observation=observation,
             destination=destination,

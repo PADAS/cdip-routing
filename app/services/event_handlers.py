@@ -49,6 +49,7 @@ from app.services.transformers import (
     build_gcp_pubsub_message,
     get_source_id,
     get_data_provider_id,
+    is_transient_error,
     transform_observation_v2,
 )
 
@@ -561,7 +562,12 @@ async def transform_and_route_observation(observation, *, event_id=None):
                         route_configuration=route_configuration,
                     )
                 except Exception as e:
-                    will_retry = isinstance(e, ReferenceDataError)
+                    # Retry only what a redelivery can fix: a ReferenceDataError
+                    # wrapping a network or SMART server failure. A missing SMART
+                    # category or route field raises the same type but never heals.
+                    will_retry = isinstance(
+                        e, ReferenceDataError
+                    ) and is_transient_error(e)
                     outcome = "Will retry." if will_retry else "Discarded."
                     await _report_transform_error(
                         connection=connection,
@@ -824,13 +830,14 @@ async def _deliver_batch_to_destination(
                 provider=provider,
                 route_configuration=route_configuration,
             )
-        except ReferenceDataError as e:
-            # This destination will be retried, so stop it here:
-            # publishing its other items now would only duplicate them
-            # on redelivery.
-            destination_retry_error = e
-            break
         except Exception as e:
+            if isinstance(e, ReferenceDataError) and is_transient_error(e):
+                # This destination will be retried, so stop it here:
+                # publishing its other items now would only duplicate them
+                # on redelivery. Only a transient cause (network, SMART 5xx)
+                # retries; a missing SMART category is dropped like any error.
+                destination_retry_error = e
+                break
             # Shrink the batch, never abort it
             logger.exception(
                 f"Error transforming observation {observation.gundi_id} in batch {batch.batch_id} "

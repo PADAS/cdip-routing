@@ -1,3 +1,4 @@
+import httpx
 import pytest
 
 from app.conftest import async_return
@@ -291,14 +292,19 @@ def _two_destination_setup(
     connection_v2,
     destination_integration_v2,
     broken_state=None,
+    error=None,
 ):
     """connection_v2 with a second destination; transform_observation_v2 raises
-    a ReferenceDataError for that one (while broken_state["fails"]) and runs for
-    real for the other."""
+    `error` for that one (while broken_state["fails"]) and runs for real for the
+    other. The default error is the retry case: a ReferenceDataError wrapping a
+    transient network failure."""
     from app.core.errors import ReferenceDataError
     from app.services.transformers import transform_observation_v2
 
     broken_state = broken_state if broken_state is not None else {"fails": True}
+    if error is None:
+        error = ReferenceDataError("Error getting data model for SMART CA: abc")
+        error.__cause__ = httpx.ConnectError("connection refused")
 
     healthy = connection_v2.destinations[0]
     broken = healthy.copy(update={"id": BROKEN_DESTINATION_ID, "name": "Broken"})
@@ -316,7 +322,7 @@ def _two_destination_setup(
 
     async def transform(*, observation, destination, provider, route_configuration):
         if str(destination.id) == BROKEN_DESTINATION_ID and broken_state["fails"]:
-            raise ReferenceDataError("Error getting data model for SMART CA: abc")
+            raise error
         return await transform_observation_v2(
             observation=observation,
             destination=destination,
@@ -386,6 +392,57 @@ async def test_event_is_retried_when_transformer_raises_reference_data_error(
     assert payload.data["error_type"] == "ReferenceDataError"
     assert payload.data["will_retry"] is True
     assert payload.data["gundi_ids"] == [raw_event_v2["payload"]["gundi_id"]]
+
+
+@pytest.mark.asyncio
+async def test_event_is_discarded_when_transformer_raises_permanent_reference_data_error(
+    mocker,
+    mock_cache,
+    mock_deduplication_cache_stateful,
+    mock_gundi_client_v2,
+    connection_v2,
+    destination_integration_v2,
+    raw_event_v2,
+    raw_event_v2_attributes,
+):
+    """A ReferenceDataError that wraps no transient failure (no SMART category
+    for the event type, a field mapping with no target) can't be fixed by a
+    redelivery: the destination's item is discarded and reported, the other
+    destination is delivered, and the event is marked processed."""
+    from app.core.deduplication import EventProcessingStatus, get_event_status_key
+    from app.core.errors import ReferenceDataError
+
+    _, healthy, _ = _two_destination_setup(
+        mocker,
+        mock_cache,
+        mock_gundi_client_v2,
+        connection_v2,
+        destination_integration_v2,
+        error=ReferenceDataError("No category found for event_type: gfwgladalert"),
+    )
+    mocker.patch("app.core.deduplication._cache_db", mock_deduplication_cache_stateful)
+    dispatcher_send = mocker.AsyncMock()
+    mocker.patch(
+        "app.services.event_handlers.send_message_to_gcp_pubsub_dispatcher",
+        dispatcher_send,
+    )
+    activity_publish = _patch_activity_log(mocker)
+
+    await process_observation_event(raw_event_v2, raw_event_v2_attributes)
+
+    assert [
+        str(c.kwargs["destination"].id) for c in dispatcher_send.call_args_list
+    ] == [str(healthy.id)]
+    activity_publish.assert_called_once()
+    payload = activity_publish.call_args.args[0].payload
+    assert payload.data["destination_id"] == BROKEN_DESTINATION_ID
+    assert payload.data["error_type"] == "ReferenceDataError"
+    assert payload.data["will_retry"] is False
+    assert payload.data["discarded_count"] == 1
+    status_key = get_event_status_key(raw_event_v2["event_id"])
+    assert mock_deduplication_cache_stateful.store[status_key] == str(
+        EventProcessingStatus.PROCESSED.value
+    )
 
 
 @pytest.mark.asyncio

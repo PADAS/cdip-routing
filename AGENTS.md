@@ -123,7 +123,7 @@ which are easy to break:
   that portal record.
 - A failing **transform** is dropped, never aborts the batch ("shrink the batch, never abort it"), and the
   drops are reported once per destination with a `transform_observation` activity log. The exception is a
-  `ReferenceDataError` from the transform: it stops that destination (nothing of it is published), the other
+  *transient* `ReferenceDataError` (see the error handling contract) from the transform: it stops that destination (nothing of it is published), the other
   destinations still publish, and then it is re-raised so the whole envelope is retried. The per-item `try`
   wraps `transform_observation_v2` and nothing else. Everything else propagates and retries the whole
   envelope immediately: the connection and route lookups, broker validation, and a `None` from
@@ -147,8 +147,13 @@ which are easy to break:
 
 - `ReferenceDataError` and unexpected exceptions retry the message **only when they escape the handler** —
   raising out of it is the retry signal to GCP.
-- **A `ReferenceDataError` from `transform_observation_v2` retries, but only after every other destination
-  has been attempted** (GUNDI-5844), on both v2 paths. A destination whose transform fails never blocks the
+- **A `ReferenceDataError` from `transform_observation_v2` retries only when it wraps a transient failure,
+  and only after every other destination has been attempted** (GUNDI-5844), on both v2 paths. Transient means
+  `is_transient_error` (`app/services/transformers.py`, shared with the v1 path since GUNDI-5849) finds a
+  network/timeout error or a non-4xx SMART client error in the `__cause__` chain — so SMART lookups must
+  `raise ReferenceDataError(...) from e`. A `ReferenceDataError` with no such cause (no SMART category for the
+  event type, a field mapping with no `destination_field`) is deterministic: it is discarded and reported
+  like any other transformer error, never retried. A destination whose transform fails never blocks the
   healthy ones (a setup failure — portal lookup returning `None`, unsupported broker — still raises inside
   the loop and retries the envelope whole; GUNDI-5855 tracks changing that),
   and the retry does not redeliver to them: each destination whose work for the event is finished
