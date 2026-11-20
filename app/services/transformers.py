@@ -1666,6 +1666,10 @@ class EREventTransformer(Transformer):
             geometry=message.geometry,
             state=message.status,
         )
+        # Sent only when the provider set one: an explicit null would override
+        # the ER event type's default priority instead of leaving it in place.
+        if message.priority is not None:
+            transformed_event_fields["priority"] = message.priority
         if message.location:
             transformed_event_fields["location"] = {
                 "longitude": message.location.lon,

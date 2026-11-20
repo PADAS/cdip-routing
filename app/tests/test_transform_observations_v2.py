@@ -200,6 +200,66 @@ async def test_transform_events_with_status_for_earthranger(
     assert transformed_observation.state == animals_sign_event_with_status.status
 
 
+def _as_posted_to_er(er_event):
+    # The ER dispatcher's own serialization of an EREvent before post_report.
+    return json.loads(er_event.json(exclude_none=True, exclude_unset=True))
+
+
+@pytest.mark.asyncio
+async def test_transform_events_with_priority_for_earthranger(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub,
+    animals_sign_event_with_priority,
+    destination_integration_v2_er,
+    connection_v2,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_with_priority,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    assert _as_posted_to_er(transformed_observation)["priority"] == 300
+
+
+@pytest.mark.asyncio
+async def test_transform_events_with_zero_priority_for_earthranger(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub,
+    animals_sign_event_with_priority,
+    destination_integration_v2_er,
+    connection_v2,
+):
+    animals_sign_event_with_priority.priority = 0
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_with_priority,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    assert _as_posted_to_er(transformed_observation)["priority"] == 0
+
+
+@pytest.mark.asyncio
+async def test_transform_events_without_priority_leaves_it_out_for_earthranger(
+    mock_cache,
+    mock_gundi_client_v2,
+    mock_pubsub,
+    animals_sign_event_v2,
+    destination_integration_v2_er,
+    connection_v2,
+):
+    transformed_observation = await transform_observation_v2(
+        observation=animals_sign_event_v2,
+        destination=destination_integration_v2_er,
+        provider=connection_v2.provider,
+        route_configuration=None,
+    )
+    assert "priority" not in _as_posted_to_er(transformed_observation)
+
+
 @pytest.mark.asyncio
 async def test_transform_event_with_null_location_for_earthranger(
     mock_cache,
